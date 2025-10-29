@@ -300,4 +300,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 ## 📬 Contact
 
 **Email:** [ashworks1706@gmail.com](mailto:ashworks1706@gmail.com)
-**GitHub:** [https://github.com/ashworks1706/KaelumAI](https://github.com/ashworks1706/KaelumAI)
+**GitHub:** [https://github.com/ashworks1706/KaelumAI](https://github.com/ashworks1706/Kaelum)
