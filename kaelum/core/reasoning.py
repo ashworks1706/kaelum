@@ -3,8 +3,7 @@
 import os
 from typing import Any, Dict, List, Optional
 
-from anthropic import Anthropic
-from openai import OpenAI
+import google.generativeai as genai
 from pydantic import BaseModel, Field
 
 from kaelum.core.config import LLMConfig
@@ -30,7 +29,7 @@ class ReasoningResult(BaseModel):
 
 
 class LLMClient:
-    """Abstraction for LLM clients supporting OpenAI and Anthropic."""
+    """Abstraction for LLM clients supporting Google Gemini."""
 
     def __init__(self, config: LLMConfig):
         """Initialize LLM client with configuration."""
@@ -40,56 +39,50 @@ class LLMClient:
 
     def _init_client(self) -> None:
         """Initialize the appropriate LLM client."""
-        api_key = self.config.api_key or os.getenv(
-            f"{self.config.provider.upper()}_API_KEY"
-        )
+        api_key = self.config.api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY environment variable must be set")
 
-        if self.config.provider == "openai":
-            self._client = OpenAI(api_key=api_key)
-        elif self.config.provider == "anthropic":
-            self._client = Anthropic(api_key=api_key)
+        if self.config.provider == "gemini":
+            genai.configure(api_key=api_key)
+            self._client = genai.GenerativeModel(self.config.model)
         else:
             raise ValueError(f"Unsupported provider: {self.config.provider}")
 
     def generate(self, messages: List[Message]) -> str:
         """Generate a response from the LLM."""
-        if self.config.provider == "openai":
-            return self._generate_openai(messages)
-        elif self.config.provider == "anthropic":
-            return self._generate_anthropic(messages)
+        if self.config.provider == "gemini":
+            return self._generate_gemini(messages)
         else:
             raise ValueError(f"Unsupported provider: {self.config.provider}")
 
-    def _generate_openai(self, messages: List[Message]) -> str:
-        """Generate response using OpenAI API."""
-        response = self._client.chat.completions.create(
-            model=self.config.model,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-        )
-        return response.choices[0].message.content or ""
-
-    def _generate_anthropic(self, messages: List[Message]) -> str:
-        """Generate response using Anthropic API."""
-        # Separate system messages from conversation
-        system_msg = ""
-        conv_messages = []
-
+    def _generate_gemini(self, messages: List[Message]) -> str:
+        """Generate response using Google Gemini API."""
+        # Combine messages into a single prompt
+        # Gemini handles system messages as part of the prompt context
+        full_prompt = ""
+        
         for msg in messages:
             if msg.role == "system":
-                system_msg += msg.content + "\n"
-            else:
-                conv_messages.append({"role": msg.role, "content": msg.content})
-
-        response = self._client.messages.create(
-            model=self.config.model,
-            messages=conv_messages,
-            system=system_msg.strip() if system_msg else None,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-        )
-        return response.content[0].text if response.content else ""
+                full_prompt += f"{msg.content}\n\n"
+            elif msg.role == "user":
+                full_prompt += f"User: {msg.content}\n"
+            elif msg.role == "assistant":
+                full_prompt += f"Assistant: {msg.content}\n"
+        
+        try:
+            response = self._client.generate_content(
+                full_prompt,
+                generation_config={
+                    "temperature": self.config.temperature,
+                    "max_output_tokens": self.config.max_tokens,
+                }
+            )
+            return response.text if response.text else ""
+        except Exception as e:
+            # Handle potential content filtering or other errors
+            return f"Error generating response: {str(e)}"
 
 
 class ReasoningGenerator:

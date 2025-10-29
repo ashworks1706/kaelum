@@ -8,8 +8,8 @@ This directory contains example scripts demonstrating various usage patterns for
 # Install dependencies
 pip install -r ../requirements.txt
 
-# Set your OpenAI API key
-export OPENAI_API_KEY="your-api-key-here"
+# Set your Gemini API key
+export GEMINI_API_KEY="your-api-key-here"
 ```
 
 ## Examples
@@ -39,7 +39,7 @@ python example_custom_config.py
 Shows integration with LangChain agents (requires LangChain installation).
 
 ```bash
-pip install langchain langchain-openai
+pip install langchain langchain-google-genai
 python example_langchain.py
 ```
 
@@ -59,13 +59,13 @@ python example_api.py
 
 ## API Keys
 
-All examples require API keys for the LLM providers:
+All examples require API keys for the LLM provider:
 
-- **OpenAI**: Set `OPENAI_API_KEY` environment variable
-- **Anthropic** (optional): Set `ANTHROPIC_API_KEY` environment variable
+- **Google Gemini**: Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable
 
 ## Notes
 
-- Most examples use GPT-4o-mini by default for cost efficiency
+- All examples use Gemini 1.5 Flash by default for cost efficiency
+- You can use Gemini 1.5 Pro for more complex reasoning tasks
 - You can modify the model configurations in each example
 - The examples demonstrate both verified and unverified modes

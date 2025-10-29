@@ -5,21 +5,25 @@ This test verifies the API works without requiring actual API keys.
 """
 
 import sys
+import os
 from unittest.mock import Mock, patch
 
-# Mock the LLM clients before importing app
-mock_openai = Mock()
-mock_anthropic = Mock()
+# Set environment variable before anything else
+os.environ["GEMINI_API_KEY"] = "test-key-for-testing"
 
-sys.modules['openai'] = mock_openai
-sys.modules['anthropic'] = mock_anthropic
+# Mock the LLM clients before importing app
+mock_genai = Mock()
+
+sys.modules['google.generativeai'] = mock_genai
+sys.modules['google'] = Mock()
 
 # Create mock response
+mock_model = Mock()
 mock_response = Mock()
-mock_response.choices = [Mock()]
-mock_response.choices[0].message.content = "The answer is x = 2"
-mock_openai.OpenAI.return_value.chat.completions.create.return_value = mock_response
-mock_openai.OpenAI = Mock(return_value=Mock(chat=Mock(completions=Mock(create=Mock(return_value=mock_response)))))
+mock_response.text = "The answer is x = 2"
+mock_model.generate_content.return_value = mock_response
+mock_genai.GenerativeModel.return_value = mock_model
+mock_genai.configure = Mock()
 
 # Now we can import and test
 from fastapi.testclient import TestClient

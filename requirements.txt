@@ -5,13 +5,12 @@ pydantic==2.6.0
 pydantic-settings==2.1.0
 
 # LLM clients
-openai==1.12.0
-anthropic==0.18.0
+google-generativeai==0.3.2
 
 # LangChain integration
 langchain==0.1.6
 langchain-core==0.1.23
-langchain-openai==0.0.5
+langchain-google-genai==0.0.6
 
 # Symbolic verification
 sympy==1.12

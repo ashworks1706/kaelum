@@ -7,21 +7,21 @@ from kaelum.core.config import LLMConfig, MCPConfig
 def test_llm_config_defaults():
     """Test LLMConfig default values."""
     config = LLMConfig()
-    assert config.model == "gpt-4o-mini"
+    assert config.model == "gemini-1.5-flash"
     assert config.temperature == 0.7
     assert config.max_tokens == 2048
-    assert config.provider == "openai"
+    assert config.provider == "gemini"
 
 
 def test_llm_config_custom():
     """Test LLMConfig with custom values."""
     config = LLMConfig(
-        model="gpt-4", temperature=0.5, max_tokens=1024, provider="anthropic"
+        model="gemini-1.5-pro", temperature=0.5, max_tokens=1024, provider="gemini"
     )
-    assert config.model == "gpt-4"
+    assert config.model == "gemini-1.5-pro"
     assert config.temperature == 0.5
     assert config.max_tokens == 1024
-    assert config.provider == "anthropic"
+    assert config.provider == "gemini"
 
 
 def test_mcp_config_defaults():
@@ -38,19 +38,19 @@ def test_mcp_config_defaults():
 
     # Check that LLM configs are initialized
     assert config.llm is not None
-    assert config.llm.model == "gpt-4o-mini"
+    assert config.llm.model == "gemini-1.5-flash"
     assert config.verifier_llm is not None
-    assert config.verifier_llm.model == "gpt-3.5-turbo"
+    assert config.verifier_llm.model == "gemini-1.5-flash"
     assert config.reflector_llm is not None
-    assert config.reflector_llm.model == "gpt-3.5-turbo"
+    assert config.reflector_llm.model == "gemini-1.5-flash"
 
 
 def test_mcp_config_custom_llm():
     """Test MCPConfig with custom LLM configurations."""
-    llm_config = LLMConfig(model="gpt-4", temperature=0.8)
+    llm_config = LLMConfig(model="gemini-1.5-pro", temperature=0.8)
     config = MCPConfig(llm=llm_config)
 
-    assert config.llm.model == "gpt-4"
+    assert config.llm.model == "gemini-1.5-pro"
     assert config.llm.temperature == 0.8
 
 

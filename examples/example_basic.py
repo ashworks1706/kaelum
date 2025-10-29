@@ -8,7 +8,7 @@ import os
 from kaelum import MCP, MCPConfig
 
 # Set API key (or use environment variable)
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"
+os.environ["GEMINI_API_KEY"] = "your-api-key-here"
 
 # Create MCP instance with default configuration
 mcp = MCP(MCPConfig())

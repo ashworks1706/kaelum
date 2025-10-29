@@ -8,10 +8,10 @@ import os
 from kaelum import ModelRuntime, LLMClient, LLMConfig, ReasoningMCPTool, MCPConfig
 
 # Set API key
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"
+os.environ["GEMINI_API_KEY"] = "your-api-key-here"
 
 # Create LLM client
-llm = LLMClient(LLMConfig(model="gpt-4o-mini"))
+llm = LLMClient(LLMConfig(model="gemini-1.5-flash"))
 
 # Create MCP tool
 mcp_tool = ReasoningMCPTool(MCPConfig())

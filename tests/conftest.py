@@ -8,10 +8,8 @@ import pytest
 def setup_test_env():
     """Set up test environment variables."""
     # Set dummy API keys for testing if not already set
-    if "OPENAI_API_KEY" not in os.environ:
-        os.environ["OPENAI_API_KEY"] = "test-key-not-real"
-    if "ANTHROPIC_API_KEY" not in os.environ:
-        os.environ["ANTHROPIC_API_KEY"] = "test-key-not-real"
+    if "GEMINI_API_KEY" not in os.environ and "GOOGLE_API_KEY" not in os.environ:
+        os.environ["GEMINI_API_KEY"] = "test-key-not-real"
 
 
 @pytest.fixture

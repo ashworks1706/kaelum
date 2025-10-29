@@ -8,13 +8,13 @@ import os
 from kaelum import MCP, MCPConfig, LLMConfig
 
 # Set API keys
-os.environ["OPENAI_API_KEY"] = "your-api-key-here"
+os.environ["GEMINI_API_KEY"] = "your-api-key-here"
 
 # Create custom configuration
 config = MCPConfig(
-    llm=LLMConfig(model="gpt-4o", temperature=0.7),
-    verifier_llm=LLMConfig(model="gpt-3.5-turbo", temperature=0.3),
-    reflector_llm=LLMConfig(model="gpt-4o-mini", temperature=0.5),
+    llm=LLMConfig(model="gemini-1.5-pro", temperature=0.7),
+    verifier_llm=LLMConfig(model="gemini-1.5-flash", temperature=0.3),
+    reflector_llm=LLMConfig(model="gemini-1.5-flash", temperature=0.5),
     use_symbolic=True,
     use_rag=False,
     confidence_threshold=0.8,
