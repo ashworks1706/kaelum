@@ -1,6 +1,7 @@
 """Runtime orchestration and pipeline execution."""
 
 import time
+import hashlib
 from typing import Dict, List, Optional
 
 from kaelum.core.config import LLMConfig, MCPConfig
@@ -9,42 +10,116 @@ from kaelum.core.reasoning import LLMClient, Message, ReasoningGenerator, Reason
 from kaelum.core.reflection import Reflector, ReflectionEngine, Verifier
 from kaelum.core.scoring import ConfidenceScorer, QualityMetrics
 from kaelum.core.verification import VerificationEngine
+from kaelum.core.cache import ReasoningCache
 
 
 class MCP:
-    """Main MCP reasoning pipeline orchestrator."""
+    """MCP Runtime Orchestrator - Streamlined reasoning acceleration."""
+
+from typing import Dict, List, Optional
+
+from kaelum.core.config import MCPConfig
+from kaelum.core.reasoning import LLMClient, ReasoningGenerator
+from kaelum.core.reflection import ReflectionEngine
+from kaelum.core.scoring import ConfidenceScorer
+from kaelum.core.verification import VerificationEngine
+from kaelum.core.cache import ReasoningCache
+
+
+class MCP:
+    """Modular Cognitive Processor - Accelerates LLM reasoning."""
 
     def __init__(self, config: MCPConfig):
         """Initialize MCP with configuration."""
         self.config = config
 
-        # Initialize LLM clients
-        self.main_llm = LLMClient(config.llm)
-        self.verifier_llm = LLMClient(config.verifier_llm)
-        self.reflector_llm = LLMClient(config.reflector_llm)
-
-        # Initialize pipeline components
-        self.reasoning_generator = ReasoningGenerator(self.main_llm)
-        self.verification_engine = VerificationEngine(
-            use_symbolic=config.use_symbolic, use_rag=config.use_rag
+        # Single LLM for all reasoning tasks (cost-efficient)
+        self.llm = LLMClient(config.llm)
+        
+        # Core components
+        self.generator = ReasoningGenerator(self.llm)
+        self.reflection = ReflectionEngine(self.llm, max_iterations=config.max_reflection_iterations)
+        self.verification = VerificationEngine(
+            symbolic_enabled=config.use_symbolic_verification,
+            factual_enabled=True,  # Lightweight pattern matching
         )
-        self.verifier = Verifier(self.verifier_llm)
-        self.reflector = Reflector(self.reflector_llm)
-        self.reflection_engine = ReflectionEngine(
-            self.verifier, self.reflector, max_iterations=config.max_reflection_iterations
+        self.scorer = ConfidenceScorer(
+            symbolic_weight=0.3,
+            factual_weight=0.3,
+            verifier_weight=0.4,
         )
-        self.confidence_scorer = ConfidenceScorer()
-        self.quality_metrics = QualityMetrics()
+        self.cache = ReasoningCache()
 
-        # Initialize policy controller
-        self.policy_controller = (
-            PolicyController(enable_learning=True)
-            if config.enable_policy_controller
-            else None
+    def infer(self, query: str, use_cache: bool = True) -> Dict:
+        """
+        Run reasoning acceleration pipeline.
+
+        Args:
+            query: Input query
+            use_cache: Whether to use caching (default: True)
+
+        Returns:
+            Enhanced reasoning with confidence score
+        """
+        # Check cache
+        if use_cache:
+            cached = self.cache.get(query, str(self.config))
+            if cached:
+                cached["cache_hit"] = True
+                return cached
+
+        # Generate initial reasoning with CoT
+        initial = self.generator.generate_reasoning(query)
+
+        # Enhance through reflection cycles
+        reflection = self.reflection.enhance_reasoning(query, initial["trace"])
+
+        # Verify final trace
+        verification = self.verification.verify(query, reflection["final_trace"])
+
+        # Compute confidence
+        confidence = self.scorer.compute_confidence(
+            symbolic_score=verification.get("symbolic_score", 0.5),
+            factual_score=verification.get("factual_score", 0.5),
+            verifier_confidence=reflection["final_verification"]["confidence"],
         )
 
-        # Trace storage
-        self.traces = []
+        result = {
+            "query": query,
+            "trace": reflection["final_trace"],
+            "confidence": confidence,
+            "verification": verification,
+            "iterations": len(reflection["iterations"]),
+            "improved": reflection["improved"],
+            "cache_hit": False,
+        }
+        
+        # Cache high-confidence results
+        if use_cache and confidence >= self.config.confidence_threshold:
+            self.cache.set(query, str(self.config), result)
+
+        return result
+
+
+class ModelRuntime:
+    """Runtime wrapper for MCP integration with agent frameworks."""
+
+    def __init__(self, mcp: MCP):
+        """Initialize runtime with MCP instance."""
+        self.mcp = mcp
+
+    def __call__(self, query: str) -> str:
+        """Execute MCP and return formatted result."""
+        result = self.mcp.infer(query)
+
+        trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(result["trace"]))
+
+        return f"""Reasoning:
+{trace_text}
+
+Confidence: {result['confidence']:.2f}
+Iterations: {result['iterations']}
+"""
 
     def infer(self, query: str, context: Optional[str] = None) -> ReasoningResult:
         """
@@ -58,6 +133,15 @@ class MCP:
             ReasoningResult with verified reasoning
         """
         start_time = time.time()
+
+        # Check cache first
+        cached = self.cache.get(query, self.config_hash)
+        if cached:
+            print(f"Cache hit for query (latency: {(time.time() - start_time)*1000:.0f}ms)")
+            result = ReasoningResult(**cached)
+            result.diagnostics["cached"] = True
+            result.diagnostics["latency"] = time.time() - start_time
+            return result
 
         # Get policy for this query
         policy = (
@@ -105,8 +189,12 @@ class MCP:
                 "confidence": confidence,
                 "policy": policy,
                 "latency": time.time() - start_time,
+                "cached": False,
             },
         )
+
+        # Cache result
+        self.cache.set(query, result.model_dump(), self.config_hash)
 
         # Log trace if enabled
         if self.config.log_traces:
@@ -128,6 +216,11 @@ class MCP:
             self.policy_controller.update_policy(result.model_dump())
 
         return result
+    
+    def _generate_config_hash(self) -> str:
+        """Generate a hash of the config for cache keys."""
+        config_str = f"{self.config.llm.model}_{self.config.llm.temperature}_{self.config.confidence_threshold}"
+        return hashlib.md5(config_str.encode()).hexdigest()[:8]
 
     def get_metrics(self) -> Dict:
         """Get quality metrics."""
@@ -135,6 +228,9 @@ class MCP:
 
         if self.policy_controller:
             metrics["policy_state"] = self.policy_controller.get_state()
+        
+        # Add cache stats
+        metrics["cache_stats"] = self.cache.get_stats()
 
         return metrics
 

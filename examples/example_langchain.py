@@ -7,7 +7,7 @@ This example demonstrates using KaelumAI with LangChain.
 import os
 
 # Uncomment when LangChain is installed
-"""
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import initialize_agent, AgentType
 from kaelum import MCPConfig
@@ -39,7 +39,7 @@ print("=" * 60)
 print("AGENT RESPONSE:")
 print(response)
 print("=" * 60)
-"""
+
 
 # Demo placeholder
 print("LangChain Integration Example")

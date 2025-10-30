@@ -1,40 +1,23 @@
-# Core dependencies
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.6.0
-pydantic-settings==2.1.0
+# Core API
+fastapi
+uvicorn[standard]
+pydantic>=2.0.0
 
-# LLM clients
-google-generativeai==0.3.2
-
-# LangChain integration
-langchain==0.1.6
-langchain-core==0.1.23
-langchain-google-genai==0.0.6
+# LLM - OpenAI-compatible (Ollama, vLLM, OpenAI)
+openai>=1.0.0
 
 # Symbolic verification
-sympy==1.12
+sympy
 
-# Vector stores and RAG
-faiss-cpu==1.7.4
-chromadb==0.4.22
-sentence-transformers==2.3.1
+# Caching (optional)
+redis>=5.0.0
 
-# Data handling
-numpy==1.26.3
-pandas==2.2.0
+# Minimal dependencies
+numpy
+python-dotenv
 
-# Utilities
-python-dotenv==1.0.1
-tenacity==8.2.3
-httpx==0.26.0
-
-# Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
-pytest-cov==4.1.0
-
-# Development
-black==24.1.1
-ruff==0.2.1
-mypy==1.8.0
+# Dev tools
+pytest
+pytest-asyncio
+black
+ruff

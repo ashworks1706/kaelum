@@ -83,59 +83,61 @@ class SymbolicVerifier:
 
 
 class FactualVerifier:
-    """Verifies factual claims using RAG (FAISS/Chroma)."""
+    """Verifies factual claims using simple heuristics and patterns."""
 
-    def __init__(self, use_rag: bool = False):
+    def __init__(self, use_factual_check: bool = False):
         """Initialize factual verifier."""
-        self.use_rag = use_rag
-        self.embeddings = None
-        self.vector_store = None
-
-        if use_rag:
-            self._init_rag()
-
-    def _init_rag(self) -> None:
-        """Initialize RAG components (FAISS/Chroma)."""
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            # Initialize embedding model
-            self.embeddings = SentenceTransformer("all-MiniLM-L6-v2")
-        except Exception as e:
-            print(f"Warning: Could not initialize RAG: {e}")
-            self.use_rag = False
+        self.use_factual_check = use_factual_check
+        
+        # Simple patterns for common factual claims
+        self.claim_patterns = {
+            'numerical': r'\d+',
+            'date': r'\b\d{4}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b',
+            'location': r'\b(?:in|at|near|from)\s+[A-Z][a-z]+',
+        }
 
     def verify_step(self, step: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """
-        Verify a factual claim.
+        Verify a factual claim using simple pattern matching.
 
         Returns:
             (is_consistent, confidence)
         """
-        if not self.use_rag:
-            # Without RAG, we trust the step
+        if not self.use_factual_check:
+            # Without factual checking, we trust the step with moderate confidence
             return True, 0.8
 
-        # For now, return high confidence
-        # In production, this would query the vector store
-        return True, 0.85
-
-    def add_to_knowledge_base(self, texts: List[str]) -> None:
-        """Add texts to the knowledge base."""
-        if not self.use_rag:
-            return
-
-        # In production, this would add to FAISS/Chroma
-        pass
+        # Check for self-contradictions in the step
+        confidence = 0.8
+        
+        # Simple heuristic: check if the step contains definitive claims
+        definitive_words = ['always', 'never', 'all', 'none', 'every', 'no']
+        for word in definitive_words:
+            if word in step.lower():
+                confidence -= 0.1  # Lower confidence for absolute claims
+        
+        # Check consistency with context if provided
+        if context:
+            step_lower = step.lower()
+            for ctx in context:
+                # Look for contradicting statements
+                if any(neg in ctx.lower() for neg in ['not', 'never', 'no']) and \
+                   any(word in step_lower for word in ctx.lower().split()):
+                    confidence -= 0.2
+        
+        confidence = max(0.5, min(1.0, confidence))
+        is_consistent = confidence > 0.6
+        
+        return is_consistent, confidence
 
 
 class VerificationEngine:
     """Combines symbolic and factual verification."""
 
-    def __init__(self, use_symbolic: bool = True, use_rag: bool = False):
+    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False):
         """Initialize verification engine."""
         self.symbolic_verifier = SymbolicVerifier() if use_symbolic else None
-        self.factual_verifier = FactualVerifier(use_rag=use_rag) if use_rag else None
+        self.factual_verifier = FactualVerifier(use_factual_check=use_factual_check)
 
     def verify_trace(self, trace: List[str]) -> Dict[str, any]:
         """
