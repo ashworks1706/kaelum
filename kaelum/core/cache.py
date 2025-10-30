@@ -2,6 +2,131 @@
 
 import hashlib
 import json
+from functools import lru_cache
+from typing import Any, Dict, Optional
+
+# Try Redis, fallback to in-memory
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+
+
+class ReasoningCache:
+    """Cache for reasoning results with Redis fallback to LRU."""
+
+    def __init__(self, redis_url: Optional[str] = None, ttl: int = 3600, max_size: int = 1000):
+        """
+        Initialize cache.
+
+        Args:
+            redis_url: Redis connection URL (None = in-memory only)
+            ttl: Time-to-live in seconds (default: 1 hour)
+            max_size: Max LRU cache size for in-memory fallback
+        """
+        self.ttl = ttl
+        self.max_size = max_size
+        self.redis_client = None
+        self._memory_cache: Dict[str, Any] = {}
+
+        # Try Redis
+        if redis_url and REDIS_AVAILABLE:
+            try:
+                self.redis_client = redis.from_url(redis_url)
+                self.redis_client.ping()
+            except Exception:
+                self.redis_client = None
+        
+        # Use LRU cache as primary for speed
+        self._lru_get = lru_cache(maxsize=max_size)(self._get_from_memory)
+
+    def get(self, query: str, config: str) -> Optional[Dict]:
+        """
+        Get cached result.
+
+        Args:
+            query: User query
+            config: Configuration string
+
+        Returns:
+            Cached result or None
+        """
+        key = self._make_key(query, config)
+        
+        # Try LRU cache first (fastest)
+        try:
+            result = self._lru_get(key)
+            if result is not None:
+                return result
+        except TypeError:
+            # Unhashable key, skip LRU
+            pass
+
+        # Try Redis
+        if self.redis_client:
+            try:
+                data = self.redis_client.get(key)
+                if data:
+                    result = json.loads(data)
+                    # Warm up LRU cache
+                    self._memory_cache[key] = result
+                    return result
+            except Exception:
+                pass
+
+        return None
+
+    def set(self, query: str, config: str, result: Dict) -> None:
+        """
+        Cache a result.
+
+        Args:
+            query: User query
+            config: Configuration string
+            result: Result to cache
+        """
+        key = self._make_key(query, config)
+
+        # Store in memory (LRU)
+        self._memory_cache[key] = result
+        
+        # Clear LRU cache to refresh
+        self._lru_get.cache_clear()
+
+        # Store in Redis
+        if self.redis_client:
+            try:
+                self.redis_client.setex(
+                    key,
+                    self.ttl,
+                    json.dumps(result, default=str)
+                )
+            except Exception:
+                pass
+
+    def clear(self) -> None:
+        """Clear all caches."""
+        self._memory_cache.clear()
+        self._lru_get.cache_clear()
+        
+        if self.redis_client:
+            try:
+                self.redis_client.flushdb()
+            except Exception:
+                pass
+
+    def _make_key(self, query: str, config: str) -> str:
+        """Generate cache key."""
+        content = f"{query}:{config}"
+        return f"kaelum:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+    
+    def _get_from_memory(self, key: str) -> Optional[Dict]:
+        """LRU-cached memory lookup."""
+        return self._memory_cache.get(key)
+
+import hashlib
+import json
 from typing import Optional
 
 try:

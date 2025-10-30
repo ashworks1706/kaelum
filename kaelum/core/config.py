@@ -24,7 +24,7 @@ class LLMConfig(BaseModel):
         default="llama3.2:3b",
         description="Model name (e.g., llama3.2:3b, gpt-4o-mini, qwen2.5:7b)"
     )
-    api_base: Optional[str] = Field(
+    base_url: Optional[str] = Field(
         default="http://localhost:11434/v1",
         description="API base URL (None for OpenAI default)"
     )
