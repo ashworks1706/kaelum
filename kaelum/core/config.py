@@ -1,14 +1,6 @@
 """Core configuration models for KaelumAI."""
 
-from typing import List, Literal, Optional, Tuple
-
-from pydantic import BaseModel, Field
-
-
-class LLMConfig(BaseModel):
-    """Configuration for KaelumAI reasoning acceleration."""
-
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -51,35 +43,12 @@ class MCPConfig(BaseModel):
         default=True,
         description="Enable SymPy-based math verification"
     )
-
-
-class ReasoningConfig(BaseModel):
-    """Configuration for reasoning enhancement."""
-
-    # Single LLM config (can use different temps for different roles)
-    llm: Optional[LLMConfig] = Field(default=None, description="Main LLM configuration")
-    
-    # Fallback models for smart routing
-    fallback_models: List[Tuple[str, float]] = Field(
-        default_factory=list,
-        description="List of (model_name, cost) for routing. Tries cheaper first."
+    use_factual_verification: bool = Field(
+        default=False,
+        description="Enable factual verification (requires RAG adapter)"
     )
     
-    # Enhancement features
-    use_symbolic: bool = Field(default=True, description="Enable symbolic verification")
-    use_reflection: bool = Field(default=True, description="Enable self-reflection")
-    use_caching: bool = Field(default=True, description="Enable response caching")
-    use_routing: bool = Field(default=False, description="Enable smart model routing")
-    
-    # Quality thresholds
-    confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0, description="Min confidence")
-    max_reflection_iterations: int = Field(default=2, ge=1, le=5, description="Max reflection cycles")
-    
-    # Performance
-    enable_parallel: bool = Field(default=True, description="Parallel verification")
-    log_traces: bool = Field(default=True, description="Log reasoning traces")
+    # RAG adapter (not serialized by Pydantic)
+    class Config:
+        arbitrary_types_allowed = True
 
-    def model_post_init(self, __context) -> None:
-        """Initialize default config if not provided."""
-        if self.llm is None:
-            self.llm = LLMConfig(model="qwen2.5:7b", provider="ollama")

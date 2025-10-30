@@ -22,6 +22,8 @@ def enhance(
     cache: bool = True,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
+    rag_adapter = None,
+    use_factual_verification: bool = False,
 ) -> Union[str, Iterator[str]]:
     """
     Make any LLM reason better. One function.
@@ -33,8 +35,10 @@ def enhance(
         stream: Stream reasoning steps in real-time
         max_iterations: Max reflection cycles (1-3)
         cache: Use caching for faster repeated queries
-        api_base: Custom API endpoint
+        base_url: Custom API endpoint
         api_key: API key (not needed for Ollama)
+        rag_adapter: Optional RAG adapter for factual verification
+        use_factual_verification: Enable factual verification with RAG
     
     Returns:
         Enhanced reasoning as string (or iterator if stream=True)
@@ -43,9 +47,12 @@ def enhance(
         >>> from kaelum import enhance
         >>> print(enhance("What is 15% of 240?"))
         >>> 
-        >>> # With streaming
-        >>> for step in enhance("Solve x^2 + 5x + 6 = 0", stream=True):
-        ...     print(step)
+        >>> # With RAG verification
+        >>> from kaelum.core.rag_adapter import ChromaAdapter
+        >>> adapter = ChromaAdapter(my_chroma_collection)
+        >>> result = enhance("Paris is the capital of France", 
+        ...                  rag_adapter=adapter, 
+        ...                  use_factual_verification=True)
     """
     global _default_mcp
     
@@ -71,11 +78,12 @@ def enhance(
                 api_key=api_key,
             ),
             max_reflection_iterations=max_iterations,
+            use_factual_verification=use_factual_verification,
         )
         if cache and _default_mcp is None:
-            _default_mcp = MCP(config)
+            _default_mcp = MCP(config, rag_adapter=rag_adapter)
         else:
-            mcp = MCP(config)
+            mcp = MCP(config, rag_adapter=rag_adapter)
     else:
         mcp = _default_mcp
     
@@ -91,48 +99,56 @@ def enhance(
 
 
 def _detect_model() -> str:
-    """Auto-detect best available model."""
-    # Try Ollama first
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        if result.returncode == 0 and result.stdout:
-            # Prefer these models in order
-            for model in ["qwen2.5:7b", "llama3.2:3b", "llama3:8b", "mistral:7b"]:
-                if model in result.stdout:
-                    return model
-            # Use first available model
-            lines = result.stdout.strip().split("\n")[1:]  # Skip header
-            if lines:
-                return lines[0].split()[0]
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    """Auto-detect best available model. Fails if Ollama not found."""
+    import subprocess
     
-    # Default to common model
-    return "qwen2.5:7b"
+    result = subprocess.run(
+        ["ollama", "list"],
+        capture_output=True,
+        text=True,
+        timeout=5
+    )
+    
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Ollama not found or not running. Install Ollama from https://ollama.ai "
+            "or explicitly specify model and base_url in LLMConfig."
+        )
+    
+    if not result.stdout.strip():
+        raise RuntimeError(
+            "No Ollama models found. Run 'ollama pull qwen2.5:7b' or specify model explicitly."
+        )
+    
+    # Prefer these models in order
+    for model in ["qwen2.5:7b", "llama3.2:3b", "llama3:8b", "mistral:7b"]:
+        if model in result.stdout:
+            return model
+    
+    # Use first available model
+    lines = result.stdout.strip().split("\n")[1:]  # Skip header
+    if lines:
+        return lines[0].split()[0]
+    
+    raise RuntimeError("Could not parse Ollama model list")
 
 
 def _detect_api_base() -> str:
-    """Auto-detect API base URL."""
-    # Check environment
+    """Auto-detect API base URL. Fails if Ollama not accessible."""
+    # Check environment first
     if base := os.getenv("OPENAI_API_BASE"):
         return base
     
-    # Try Ollama
-    try:
-        import httpx
-        response = httpx.get("http://localhost:11434/api/tags", timeout=1)
-        if response.status_code == 200:
-            return "http://localhost:11434/v1"
-    except:
-        pass
+    # Check if Ollama is running
+    import httpx
+    response = httpx.get("http://localhost:11434/api/tags", timeout=2)
     
-    # Default to Ollama
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Ollama not accessible at http://localhost:11434. "
+            "Make sure Ollama is running or set OPENAI_API_BASE environment variable."
+        )
+    
     return "http://localhost:11434/v1"
 
 
@@ -191,3 +207,7 @@ def _stream_reasoning(mcp: MCP, query: str) -> Iterator[str]:
 
 # Export simple API
 __all__ = ["enhance", "MCP", "LLMConfig", "MCPConfig"]
+
+# Export RAG adapters for convenience
+from kaelum.core import rag_adapter
+__all__.extend(["rag_adapter"])

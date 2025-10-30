@@ -131,9 +131,8 @@ Provide an improved reasoning trace as a numbered list."""
                 if issues_str.lower() not in ["none", "no issues"]:
                     result["issues"].append(issues_str)
             elif line.startswith("CONFIDENCE:"):
-                try:
-                    result["confidence"] = float(line.split(":", 1)[1].strip())
-                except ValueError:
-                    pass
+                # Parse confidence - fail if malformed
+                conf_str = line.split(":", 1)[1].strip()
+                result["confidence"] = float(conf_str)
         
         return result

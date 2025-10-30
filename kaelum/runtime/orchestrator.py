@@ -14,13 +14,23 @@ from kaelum.core.cache import ReasoningCache
 class MCP:
     """Modular Cognitive Processor - Accelerates LLM reasoning."""
 
-    def __init__(self, config: MCPConfig):
-        """Initialize MCP with configuration."""
+    def __init__(self, config: MCPConfig, rag_adapter=None):
+        """
+        Initialize MCP with configuration.
+        
+        Args:
+            config: MCP configuration
+            rag_adapter: Optional RAG adapter for factual verification
+        """
         self.config = config
         self.llm = LLMClient(config.llm)
         self.generator = ReasoningGenerator(self.llm)
         self.reflection = ReflectionEngine(self.llm, max_iterations=config.max_reflection_iterations)
-        self.verification = VerificationEngine(use_symbolic=config.use_symbolic_verification, use_factual_check=True)
+        self.verification = VerificationEngine(
+            use_symbolic=config.use_symbolic_verification,
+            use_factual_check=config.use_factual_verification,
+            rag_adapter=rag_adapter
+        )
         self.scorer = ConfidenceScorer(symbolic_weight=0.3, factual_weight=0.3, verifier_weight=0.4)
         self.cache = ReasoningCache()
 

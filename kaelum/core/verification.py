@@ -35,14 +35,10 @@ class SymbolicVerifier:
             return True, None
 
         for eq in equations:
-            try:
-                # Try to parse and verify the equation
-                result = self._verify_equation(eq)
-                if not result:
-                    return False, f"Mathematical inconsistency detected in: {eq}"
-            except Exception as e:
-                # If we can't parse, assume it's not verifiable symbolically
-                continue
+            # Parse and verify - fail loudly if there's an issue
+            result = self._verify_equation(eq)
+            if not result:
+                return False, f"Mathematical inconsistency detected in: {eq}"
 
         return True, None
 
@@ -62,32 +58,36 @@ class SymbolicVerifier:
         return equations
 
     def _verify_equation(self, equation: str) -> bool:
-        """Verify a single equation."""
+        """Verify a single equation. Fails loudly on parse errors."""
         # Remove $ signs (LaTeX)
         equation = equation.replace("$", "").strip()
 
-        # Try to parse both sides
+        # Parse both sides - no fallback
         if "=" in equation:
             left, right = equation.split("=", 1)
-            try:
-                left_expr = sympy.sympify(left.strip())
-                right_expr = sympy.sympify(right.strip())
+            left_expr = sympy.sympify(left.strip())
+            right_expr = sympy.sympify(right.strip())
 
-                # Check if they're equivalent
-                diff = sympy.simplify(left_expr - right_expr)
-                return diff == 0
-            except:
-                return True  # Can't verify, assume correct
+            # Check if they're equivalent
+            diff = sympy.simplify(left_expr - right_expr)
+            return diff == 0
 
         return True
 
 
 class FactualVerifier:
-    """Verifies factual claims using simple heuristics and patterns."""
+    """Verifies factual claims using simple heuristics, patterns, or RAG."""
 
-    def __init__(self, use_factual_check: bool = False):
-        """Initialize factual verifier."""
+    def __init__(self, use_factual_check: bool = False, rag_adapter=None):
+        """
+        Initialize factual verifier.
+        
+        Args:
+            use_factual_check: Enable factual verification
+            rag_adapter: Optional RAG adapter (ChromaAdapter, QdrantAdapter, etc.)
+        """
         self.use_factual_check = use_factual_check
+        self.rag_adapter = rag_adapter
         
         # Simple patterns for common factual claims
         self.claim_patterns = {
@@ -98,46 +98,41 @@ class FactualVerifier:
 
     def verify_step(self, step: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """
-        Verify a factual claim using simple pattern matching.
+        Verify a factual claim using RAG adapter. No fallbacks.
 
         Returns:
             (is_consistent, confidence)
         """
         if not self.use_factual_check:
-            # Without factual checking, we trust the step with moderate confidence
-            return True, 0.8
+            # Skip verification if not enabled
+            return True, 1.0
 
-        # Check for self-contradictions in the step
-        confidence = 0.8
-        
-        # Simple heuristic: check if the step contains definitive claims
-        definitive_words = ['always', 'never', 'all', 'none', 'every', 'no']
-        for word in definitive_words:
-            if word in step.lower():
-                confidence -= 0.1  # Lower confidence for absolute claims
-        
-        # Check consistency with context if provided
-        if context:
-            step_lower = step.lower()
-            for ctx in context:
-                # Look for contradicting statements
-                if any(neg in ctx.lower() for neg in ['not', 'never', 'no']) and \
-                   any(word in step_lower for word in ctx.lower().split()):
-                    confidence -= 0.2
-        
-        confidence = max(0.5, min(1.0, confidence))
-        is_consistent = confidence > 0.6
-        
-        return is_consistent, confidence
+        # RAG adapter is REQUIRED if factual checking is enabled
+        if not self.rag_adapter:
+            raise ValueError(
+                "Factual verification is enabled but no RAG adapter provided. "
+                "Pass a RAG adapter (ChromaAdapter, QdrantAdapter, etc.) or disable factual verification."
+            )
+
+        # Use RAG adapter - fail loudly if it fails
+        is_verified, confidence = self.rag_adapter.verify_claim(step, context)
+        return is_verified, confidence
 
 
 class VerificationEngine:
     """Combines symbolic and factual verification."""
 
-    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False):
-        """Initialize verification engine."""
+    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False, rag_adapter=None):
+        """
+        Initialize verification engine.
+        
+        Args:
+            use_symbolic: Enable symbolic verification
+            use_factual_check: Enable factual verification
+            rag_adapter: Optional RAG adapter for factual verification
+        """
         self.symbolic_verifier = SymbolicVerifier() if use_symbolic else None
-        self.factual_verifier = FactualVerifier(use_factual_check=use_factual_check)
+        self.factual_verifier = FactualVerifier(use_factual_check=use_factual_check, rag_adapter=rag_adapter)
 
     def verify_trace(self, trace: List[str]) -> Dict[str, any]:
         """

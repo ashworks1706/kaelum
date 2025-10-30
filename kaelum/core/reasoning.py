@@ -99,20 +99,21 @@ class LLMClient:
             raise ValueError(f"Unsupported provider: {self.config.provider}")
 
     def _generate_openai_compatible(self, messages: List[Message]) -> str:
-        """Generate response using OpenAI-compatible API (Ollama, vLLM, OpenAI)."""
-        try:
-            response = self._client.chat.completions.create(
-                model=self.config.model,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-            )
-            return response.choices[0].message.content or ""
-        except Exception as e:
-            return f"Error generating response: {str(e)}"
+        """Generate response using OpenAI-compatible API (Ollama, vLLM, OpenAI). Fails loudly."""
+        response = self._client.chat.completions.create(
+            model=self.config.model,
+            messages=[{"role": m.role, "content": m.content} for m in messages],
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+        )
+        
+        if not response.choices or not response.choices[0].message.content:
+            raise RuntimeError("LLM returned empty response")
+        
+        return response.choices[0].message.content
 
     def _generate_gemini(self, messages: List[Message]) -> str:
-        """Generate response using Google Gemini API."""
+        """Generate response using Google Gemini API. Fails loudly."""
         # Combine messages into a single prompt
         # Gemini handles system messages as part of the prompt context
         full_prompt = ""
@@ -125,18 +126,18 @@ class LLMClient:
             elif msg.role == "assistant":
                 full_prompt += f"Assistant: {msg.content}\n"
         
-        try:
-            response = self._client.generate_content(
-                full_prompt,
-                generation_config={
-                    "temperature": self.config.temperature,
-                    "max_output_tokens": self.config.max_tokens,
-                }
-            )
-            return response.text if response.text else ""
-        except Exception as e:
-            # Handle potential content filtering or other errors
-            return f"Error generating response: {str(e)}"
+        response = self._client.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": self.config.temperature,
+                "max_output_tokens": self.config.max_tokens,
+            }
+        )
+        
+        if not response.text:
+            raise RuntimeError("Gemini returned empty response (possibly content filtered)")
+        
+        return response.text
 
 
 class ReasoningGenerator:
