@@ -1,226 +1,139 @@
-
 # KaelumAI 🧠
 
-**Reasoning Acceleration Layer for Lightweight LLMs**
-
-> *Make cheap models reason better through verification, not training.*
+**Reasoning acceleration layer for lightweight LLMs**
 
 ---
 
-## 🎯 The Problem
+## The Problem
 
-Companies using lightweight LLMs (Llama 8B, Mistral 7B, Gemini Flash, Claude Haiku) face:
+Cheap LLMs (Llama 8B, Mistral 7B, Gemini Flash) struggle with:
 
-- ❌ Poor reasoning quality (logical errors, inconsistencies)
-- ❌ Hallucinations (making up facts)
-- ❌ Wrong tool selection
-- ❌ Math errors (multi-step calculations)
-- ❌ Bad agent orchestration
+- Poor reasoning & logical errors
+- Hallucinations
+- Wrong tool selection
+- Math errors
+- Bad agent orchestration
 
-**Traditional solutions** (fine-tuning, RLHF) are expensive and not plug-and-play.
+Fine-tuning/RLHF is too expensive and slow.
 
 ---
 
-## 💡 The Solution
+## Our Solution
 
-Lightweight reasoning layer with:
-- ✅ Symbolic verification (SymPy for math)
-- ✅ Factual verification (pluggable RAG)
-- ✅ Adaptive reflection (self-correction)
-- ✅ Confidence scoring
-- ✅ Cost optimization (single-LLM design)
+Add reasoning verification at inference time:
+
+- **Symbolic verification** - Math checking with SymPy
+- **Factual verification** - RAG-based fact checking
+- **Self-correction** - Adaptive reflection
+- **Confidence scoring** - Reliability metrics
 
 **Goals:**
+
 - 🚀 Fast (<500ms overhead)
-- 💰 Cheap (single LLM, no multi-model overhead)
-- 🔌 Simple (one line to enable)
-- 🎯 Precise (no fallbacks, fails loudly)
-
-| Priority | Metric | Target |
-|----------|--------|--------|
-| **Speed** | Latency overhead | <500ms |
-| **Hallucination** | Detection rate | >90% |
-| **Tool Selection** | Accuracy | >85% |
-| **Math** | Answer correctness | >95% |
-| **Orchestration** | Agent accuracy | >80% |
-| **Cost** | $/1K queries | <$0.10 |
-
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────┐
-│          User Query                 │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│        enhance() - Public API       │
-│  • Mode detection (auto/math/code)  │
-│  • Config setup                     │
-│  • Cache check                      │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│     MCP Orchestrator (Single LLM)   │
-├─────────────────────────────────────┤
-│  1. ReasoningGenerator              │
-│     └─> Generate reasoning trace    │
-│                                     │
-│  2. VerificationEngine              │
-│     ├─> SymbolicVerifier (SymPy)   │
-│     └─> FactualVerifier (RAG)      │
-│                                     │
-│  3. ReflectionEngine                │
-│     └─> Self-correction loop        │
-│                                     │
-│  4. ConfidenceScorer                │
-│     └─> Calculate reliability       │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│      Enhanced Response + Metadata   │
-│  • Final answer                     │
-│  • Confidence score                 │
-│  • Reasoning trace                  │
-│  • Verification results             │
-└─────────────────────────────────────┘
-```
-
-**Key Design Principles:**
-- **Single LLM** - Same model for all tasks (cost-efficient)
-- **No fallbacks** - Fails loudly for proper debugging
-- **Stateless** - Easy to scale horizontally
-- **Modular** - Swap verification backends easily
+- 💰 Cheap (single LLM, smart caching)
+- 🎯 Accurate (>90% improvement on benchmarks)
 
 ---
 
-
-
-### Mode Templates
-
-KaelumAI automatically adjusts prompts based on mode:
-
-| Mode | Best For | Template |
-|------|----------|----------|
-| `auto` | General queries | Adaptive reasoning |
-| `math` | Calculations, equations | Step-by-step math solving |
-| `code` | Programming logic | Code-focused reasoning |
-| `logic` | Formal reasoning | Logical deduction |
-| `creative` | Open-ended tasks | Creative problem-solving |
-
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull qwen2.5:7b
-
-# Clone & Install
+# Setup
 git clone https://github.com/ashworks1706/KaelumAI.git
 cd KaelumAI
 pip install -r requirements.txt
-```
 
-### Usage
+# Run Ollama locally
+ollama pull qwen2.5:7b
+```
 
 ```python
 from kaelum import enhance
 
-# Simple
+# Simple usage
 result = enhance("What is 25% of 80?")
 
-# With mode
+# Math mode
 result = enhance("Solve: 3x + 5 = 20", mode="math")
-
-# With RAG verification
-from kaelum.core.rag_adapter import ChromaAdapter
-adapter = ChromaAdapter(collection=my_db)
-result = enhance(
-    "What is the speed of light?",
-    rag_adapter=adapter,
-    use_factual_verification=True
-)
-
-# CLI
-kaelum "What is 15% of 240?"
 ```
 
 ---
 
-## 📊 Benchmarks
+## What We're Building
 
-```bash
-# Run all benchmarks
-kaelum-benchmark all
+### Sprint 1: Core MVP
 
-# Run specific
-kaelum-benchmark speed
-kaelum-benchmark hallucination
-kaelum-benchmark math
+- [ ] LLM client (Ollama, OpenAI, vLLM)
+- [ ] Reasoning trace generation
+- [ ] Symbolic verification (SymPy)
+- [ ] Basic confidence scoring
+- [ ] One-line API
 
-# Compare models
-kaelum-benchmark all --models llama-3.2-3b qwen2.5:7b
-```
+### Sprint 2: Verification
 
-**5 Priority Areas:**
-1. Speed (latency overhead)
-2. Hallucination detection
-3. Tool selection accuracy
-4. Math reasoning
-5. Agent orchestration
+- [ ] RAG adapters (ChromaDB, Qdrant)
+- [ ] Factual verification layer
+- [ ] Self-reflection loop
+- [ ] Adaptive stopping
 
-See `benchmarks/BENCHMARK_GUIDE.md` for details.
+### Sprint 3: Optimization
 
----
+- [ ] LRU + Redis caching
+- [ ] Tool selection guardrails
+- [ ] Agent orchestration
+- [ ] Prompt optimization
 
+### Sprint 4: Benchmarks
 
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-```bash
-# Optional: Set default API base
-export OPENAI_API_BASE=http://localhost:11434/v1
-
-# Optional: Set API key (not needed for Ollama)
-export OPENAI_API_KEY=your-key-here
-```
-
-### Performance Tuning
-
-```python
-config = MCPConfig(
-    llm=LLMConfig(
-        temperature=0.3,      # Lower = more deterministic
-        max_tokens=2048,      # Increase for longer reasoning
-    ),
-    max_reflection_iterations=3,  # More iterations = better quality
-    confidence_threshold=0.80,    # Higher = more strict
-)
-```
+- [ ] Speed benchmarks
+- [ ] Hallucination detection tests
+- [ ] Tool selection accuracy
+- [ ] Math reasoning tests
+- [ ] Agent orchestration tests
 
 ---
 
+## Research to Implement
 
-### Adding New Features
+**Week 1-2:** Pick 3 techniques each and implement:
 
-1. **New Verification Backend**
-   - Extend `VerificationEngine` in `kaelum/core/verification.py`
-   - Add tests in `tests/test_verification.py`
+- Chain-of-Verification (CoVe) - Meta
+- Self-Consistency - Google
+- ReAct - Princeton/Google
+- Tree-of-Thoughts (ToT) - Princeton
+- Program-Aided Language Models (PAL) - CMU
+- Verify-and-Edit - OpenAI
 
-2. **New RAG Adapter**
-   - Implement `RAGAdapter` interface in `kaelum/core/rag_adapter.py`
-   - Add example in `examples/`
-
-3. **New Benchmark**
-   - Add test cases in `benchmarks/test_cases.py`
-   - Extend `BenchmarkSuite` in `benchmarks/benchmark_suite.py`
+**Week 3:** Run benchmarks and compare
+**Week 4:** Combine best techniques
 
 ---
 
+## Target Metrics
+
+| Priority                 | Metric                | Target |
+| ------------------------ | --------------------- | ------ |
+| **Speed**          | Latency overhead      | <500ms |
+| **Hallucination**  | Detection rate        | >90%   |
+| **Tool Selection** | Accuracy              | >85%   |
+| **Math**           | Correctness           | >95%   |
+| **Orchestration**  | Agent accuracy        | >80%   |
+| **Cost**           | $/1K queries | <$0.10 |        |
+
+---
+
+## Current Status
+
+**Version:** 0.1.0-alpha
+
+**What works:**
+
+- Basic LLM integration
+- Symbolic verification
+- Simple reflection
+
+**In progress:**
+
+- RAG verification
+- Benchmarking suite
+- Documentation

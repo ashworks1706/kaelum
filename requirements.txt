@@ -1,23 +1,13 @@
-# Core API
-fastapi
-uvicorn[standard]
+# Core
 pydantic>=2.0.0
-
-# LLM - OpenAI-compatible (Ollama, vLLM, OpenAI)
 openai>=1.0.0
-
-# Symbolic verification
 sympy
+httpx
 
-# Caching (optional)
-redis>=5.0.0
-
-# Minimal dependencies
-numpy
+# Optional
 python-dotenv
 
-# Dev tools
+# Dev
 pytest
-pytest-asyncio
 black
-ruff
+
