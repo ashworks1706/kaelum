@@ -171,35 +171,39 @@ def _format_result(result: dict) -> str:
     trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(result["trace"]))
     
     output = f"💭 Reasoning:\n{trace_text}\n"
+    output += f"\n📝 Answer: {result['final']}\n"
     
-    if result.get("confidence", 0) >= 0.8:
-        output += f"\n✅ Confidence: {result['confidence']:.0%}"
+    confidence = result.get("diagnostics", {}).get("confidence", 0)
+    if confidence >= 0.8:
+        output += f"\n✅ Confidence: {confidence:.0%}"
     else:
-        output += f"\n⚠️  Confidence: {result['confidence']:.0%}"
+        output += f"\n⚠️  Confidence: {confidence:.0%}"
     
-    if result.get("cache_hit"):
-        output += " (cached)"
+    iterations = result.get("diagnostics", {}).get("iterations", 0)
+    if iterations > 0:
+        output += f" (after {iterations} reflection{'s' if iterations > 1 else ''})"
     
     return output
 
 
 def _stream_reasoning(mcp: MCP, query: str) -> Iterator[str]:
     """Stream reasoning steps in real-time."""
-    # Generate initial reasoning
-    initial = mcp.generator.generate_reasoning(query)
+    # Generate initial reasoning trace
+    trace = mcp.generator.generate_reasoning(query)
     
     yield "💭 Initial reasoning:\n"
-    for i, step in enumerate(initial["trace"], 1):
+    for i, step in enumerate(trace, 1):
         yield f"{i}. {step}\n"
     
     # Reflection
     if mcp.config.max_reflection_iterations > 0:
         yield "\n🔄 Reflecting...\n"
-        reflection = mcp.reflection.enhance_reasoning(query, initial["trace"])
+        reflection = mcp.reflection.enhance_reasoning(query, trace)
         
-        if reflection["improved"]:
+        if reflection.get("improved"):
             yield "\n✨ Improved reasoning:\n"
             for i, step in enumerate(reflection["final_trace"], 1):
+                yield f"{i}. {step}\n"
                 yield f"{i}. {step}\n"
         else:
             yield "✅ No improvements needed\n"
