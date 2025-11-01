@@ -3,7 +3,7 @@
 
 **Reasoning Acceleration Layer for Lightweight LLMs**
 
-> 🧪 **Testing:** Use `test_notebooks/kaelum_testing.ipynb` for experiments - all configs in one place!
+> 🧪 **Testing:** 6 comprehensive notebooks in `test_notebooks/` - covers LLM selection, benchmarks, verification, reflection, performance, and integration testing
 
 ---
 
