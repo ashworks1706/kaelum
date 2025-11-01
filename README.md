@@ -3,7 +3,7 @@
 
 **Reasoning Acceleration Layer for Lightweight LLMs**
 
-> 🧪 **Testing:** 6 comprehensive notebooks in `test_notebooks/` - covers LLM selection, benchmarks, verification, reflection, performance, and integration testing
+> 🧪 **Testing:** One comprehensive notebook in `test_notebooks/testing.ipynb` - covers LLM selection, benchmarks, verification, reflection, performance, and integration testing
 
 ---
 
@@ -79,12 +79,13 @@ result = enhance(
 
 **🧪 For Testing & Experiments:**
 
-Open `test_notebooks/kaelum_testing.ipynb` in Jupyter:
+Open `test_notebooks/testing.ipynb` in Jupyter:
+- All-in-one testing suite with 8 organized sections
 - Pre-configured test cells for different scenarios
 - Speed vs Quality mode comparisons
 - Model benchmarking (llama3.2:3b vs qwen2.5:7b)
 - Document findings inline with markdown
-- Tweak all parameters in one place
+- Sequential testing workflow for fast iteration
 
 **⚡ Quick Demo:**
 ```bash
@@ -132,8 +133,13 @@ kaelum/
 └── runtime/
     └── orchestrator.py    # MCP pipeline coordinator
 
-test_notebooks/
-└── kaelum_testing.ipynb   # Interactive testing notebook
+test_notebooks/              # 🧪 Complete testing suite
+├── 01_llm_selection.ipynb         # Choose best LLM
+├── 02_benchmark_testing.ipynb     # GSM8K, TruthfulQA, ToolBench
+├── 03_verification_testing.ipynb  # SymPy + RAG testing
+├── 04_reflection_testing.ipynb    # Self-improvement testing
+├── 05_performance_optimization.ipynb  # Speed optimization
+└── 06_integration_edge_cases.ipynb    # Real-world scenarios
 ```
 
 **Key Files:**
@@ -141,7 +147,7 @@ test_notebooks/
 - `reasoning.py` → Handles LLM calls & reasoning trace generation
 - `verification.py` → Verifies math/logic using SymPy
 - `orchestrator.py` → Runs verification → reflection loop
-- `test_notebooks/kaelum_testing.ipynb` → Test all configs here
+- `test_notebooks/` → **Start here for testing and development**
 - `example.py` → Quick demo (single query)
 
 ---

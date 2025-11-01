@@ -1,7 +1,7 @@
 """RAG adapter for pluggable vector database support."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class RAGAdapter(ABC):
@@ -23,7 +23,7 @@ class RAGAdapter(ABC):
         pass
 
     @abstractmethod
-    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> tuple[bool, float]:
+    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """
         Verify a factual claim against the knowledge base.
 
@@ -69,7 +69,7 @@ class ChromaAdapter(RAGAdapter):
 
         return documents
 
-    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> tuple[bool, float]:
+    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """Verify claim against ChromaDB."""
         results = self.search(claim, top_k=3)
         
@@ -127,7 +127,7 @@ class QdrantAdapter(RAGAdapter):
 
         return documents
 
-    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> tuple[bool, float]:
+    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """Verify claim against Qdrant."""
         results = self.search(claim, top_k=3)
         
@@ -177,7 +177,7 @@ class WeaviateAdapter(RAGAdapter):
 
         return documents
 
-    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> tuple[bool, float]:
+    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """Verify claim against Weaviate."""
         results = self.search(claim, top_k=3)
         
@@ -217,7 +217,7 @@ class CustomRAGAdapter(RAGAdapter):
         """Use custom search function."""
         return self.search_function(query, top_k)
 
-    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> tuple[bool, float]:
+    def verify_claim(self, claim: str, context: Optional[List[str]] = None) -> Tuple[bool, float]:
         """Use custom verify function or default implementation."""
         if self.verify_function:
             return self.verify_function(claim, context)
