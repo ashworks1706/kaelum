@@ -1,22 +1,26 @@
 """
-Simple demo of KaelumAI - For serious testing, use test_notebooks/kaelum_testing.ipynb
+KaelumAI Demo - Reasoning enhancement using YOUR local model
 """
 
-from kaelum import enhance
+from kaelum import enhance, set_reasoning_model
 
-print("🧠 KaelumAI - Quick Demo")
+print("🧠 KaelumAI Demo")
 print("=" * 60)
-print("For customizable testing, open: test_notebooks/kaelum_testing.ipynb")
-print("=" * 60)
-print()
 
-# Simple test
+# Set YOUR reasoning model (optional - defaults to Ollama llama3.2:3b)
+set_reasoning_model(
+    provider="ollama",
+    model="llama3.2:3b",
+)
+
+print("✓ Reasoning model: llama3.2:3b (Ollama)")
+print("=" * 60)
+
+# User query
 query = "What is 25% of 80?"
-print(f"Query: {query}")
-print()
+print(f"\nQuery: {query}\n")
 
+# Get enhanced answer
 result = enhance(query)
 print(result)
-print()
-print("✅ Demo complete! Check test_notebooks/ for detailed experiments.")
 

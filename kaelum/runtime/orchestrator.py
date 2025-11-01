@@ -8,13 +8,17 @@ from kaelum.core.verification import VerificationEngine
 
 
 class MCP:
-    """Modular Cognitive Processor."""
+    """Modular Cognitive Processor - uses YOUR reasoning model for all operations."""
 
     def __init__(self, config: MCPConfig, rag_adapter=None):
         self.config = config
-        self.llm = LLMClient(config.llm)
-        self.generator = ReasoningGenerator(self.llm)
-        self.reflection = ReflectionEngine(self.llm, max_iterations=config.max_reflection_iterations)
+        
+        # YOUR reasoning LLM does all the work
+        self.reasoning_llm = LLMClient(config.reasoning_llm)
+        
+        # All components use YOUR reasoning model
+        self.generator = ReasoningGenerator(self.reasoning_llm)
+        self.reflection = ReflectionEngine(self.reasoning_llm, max_iterations=config.max_reflection_iterations)
         self.verification = VerificationEngine(
             use_symbolic=config.use_symbolic_verification,
             use_factual_check=config.use_factual_verification,
@@ -22,7 +26,7 @@ class MCP:
         )
 
     def infer(self, query: str) -> Dict:
-        """Run reasoning pipeline."""
+        """Run reasoning pipeline using YOUR reasoning model."""
         trace = self.generator.generate_reasoning(query)
         answer = self.generator.generate_answer(query, trace)
         

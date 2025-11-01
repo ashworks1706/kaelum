@@ -8,13 +8,13 @@ from pydantic import BaseModel, Field
 class LLMConfig(BaseModel):
     """LLM provider configuration."""
     
-    provider: Literal["openai", "ollama", "vllm", "openrouter"] = Field(
+    provider: Literal["openai", "ollama", "vllm", "openrouter", "custom"] = Field(
         default="ollama",
-        description="LLM provider (ollama for local, openai/vllm for API)"
+        description="LLM provider (ollama/vllm for local, custom for your own model)"
     )
     model: str = Field(
         default="llama3.2:3b",
-        description="Model name (e.g., llama3.2:3b, gpt-4o-mini, qwen2.5:7b)"
+        description="Model name (e.g., llama3.2:3b, gpt-4o-mini, qwen2.5:7b, or your custom model)"
     )
     base_url: Optional[str] = Field(
         default="http://localhost:11434/v1",
@@ -31,8 +31,8 @@ class LLMConfig(BaseModel):
 class MCPConfig(BaseModel):
     """Main KaelumAI configuration."""
     
-    # Single LLM for all reasoning (cost-efficient)
-    llm: LLMConfig = Field(default_factory=LLMConfig)
+    # YOUR reasoning LLM (does all the reasoning work)
+    reasoning_llm: LLMConfig = Field(default_factory=LLMConfig)
     
     # Reflection settings
     max_reflection_iterations: int = Field(default=2, ge=1, le=5)

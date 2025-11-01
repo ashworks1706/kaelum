@@ -51,20 +51,29 @@ class LLMClient:
 
     def _init_client(self) -> None:
         """Initialize the appropriate LLM client."""
-        if self.config.provider in ["ollama", "vllm", "openai"]:
+        if self.config.provider in ["ollama", "vllm", "openai", "custom"]:
             if not OPENAI_AVAILABLE:
                 raise ImportError(
-                    "OpenAI library required for ollama/vllm/openai providers. "
+                    "OpenAI library required for ollama/vllm/openai/custom providers. "
                     "Install with: pip install openai"
                 )
             
-            # Ollama and vLLM use OpenAI-compatible API
+            # Ollama, vLLM, and custom models use OpenAI-compatible API
             if self.config.provider == "ollama":
                 base_url = self.config.base_url or "http://localhost:11434/v1"
                 api_key = "ollama"  # Ollama doesn't need a real key
             elif self.config.provider == "vllm":
                 base_url = self.config.base_url or "http://localhost:8000/v1"
                 api_key = self.config.api_key or "vllm"
+            elif self.config.provider == "custom":
+                # Custom local model - you provide base_url and optional api_key
+                base_url = self.config.base_url
+                if not base_url:
+                    raise ValueError(
+                        "base_url must be provided for custom provider. "
+                        "Point it to your model's OpenAI-compatible endpoint."
+                    )
+                api_key = self.config.api_key or "custom-model"
             else:  # openai
                 base_url = self.config.base_url
                 api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
@@ -91,7 +100,7 @@ class LLMClient:
 
     def generate(self, messages: List[Message]) -> str:
         """Generate a response from the LLM."""
-        if self.config.provider in ["ollama", "vllm", "openai"]:
+        if self.config.provider in ["ollama", "vllm", "openai", "custom"]:
             return self._generate_openai_compatible(messages)
         elif self.config.provider == "gemini":
             return self._generate_gemini(messages)
@@ -190,7 +199,7 @@ Respond in JSON format with this structure:
             result = json.loads(response.choices[0].message.content)
             return result.get("steps", [])
         except Exception:
-            # If JSON mode not supported, fall back
+            # If JSON mode not supported (e.g., some custom models), fall back to text parsing
             raise
     
     def _generate_text_reasoning(self, query: str, context: Optional[str] = None) -> List[str]:
