@@ -3,7 +3,7 @@
 
 **Reasoning Acceleration Layer for Lightweight LLMs**
 
-> 🎛️ **Quick Customization:** All parameters can be tweaked in `example.py` - no need to modify core classes!
+> 🧪 **Testing:** Use `test_notebooks/kaelum_testing.ipynb` for experiments - all configs in one place!
 
 ---
 
@@ -64,18 +64,34 @@ ollama pull qwen2.5:7b
 ```python
 from kaelum import enhance
 
-# Simple reasoning enhancement
+# Simple usage
 result = enhance("What is 25% of 80?")
 
-# Customize parameters for speed vs quality
+# Customize parameters
 result = enhance(
     "Explain quantum entanglement",
     model="qwen2.5:7b",
-    temperature=0.7,        # 0.0-1.0 (lower=focused, higher=creative)
-    max_tokens=2048,        # Max response length
-    max_iterations=2,       # Reflection loops (1=fast, 2-3=quality)
+    temperature=0.7,
+    max_tokens=2048,
+    max_iterations=2,
 )
 ```
+
+**🧪 For Testing & Experiments:**
+
+Open `test_notebooks/kaelum_testing.ipynb` in Jupyter:
+- Pre-configured test cells for different scenarios
+- Speed vs Quality mode comparisons
+- Model benchmarking (llama3.2:3b vs qwen2.5:7b)
+- Document findings inline with markdown
+- Tweak all parameters in one place
+
+**⚡ Quick Demo:**
+```bash
+python example.py  # Simple one-shot demo
+```
+
+---
 
 **⚡ Speed vs Quality Trade-offs:**
 
@@ -87,11 +103,17 @@ result = enhance(
 
 **🎯 Quick Start:**
 ```bash
-# Edit example.py to customize (SPEED_MODE/BALANCED_MODE/QUALITY_MODE)
+# Default (llama3.2:3b, speed mode)
 python example.py
 
-# Or use different model
+# Specify model
 python example.py qwen2.5:7b
+
+# Specify model + mode
+python example.py llama3.2:3b balanced
+python example.py qwen2.5:7b quality
+
+# Or edit presets directly in example.py
 ```
 
 ---
@@ -109,6 +131,9 @@ kaelum/
 │   └── rag_adapter.py     # RAG connectors (ChromaDB, Qdrant)
 └── runtime/
     └── orchestrator.py    # MCP pipeline coordinator
+
+test_notebooks/
+└── kaelum_testing.ipynb   # Interactive testing notebook
 ```
 
 **Key Files:**
@@ -116,7 +141,8 @@ kaelum/
 - `reasoning.py` → Handles LLM calls & reasoning trace generation
 - `verification.py` → Verifies math/logic using SymPy
 - `orchestrator.py` → Runs verification → reflection loop
-- `example.py` → Demo usage
+- `test_notebooks/kaelum_testing.ipynb` → Test all configs here
+- `example.py` → Quick demo (single query)
 
 ---
 
