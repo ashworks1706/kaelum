@@ -24,6 +24,8 @@ def enhance(
     api_key: Optional[str] = None,
     rag_adapter = None,
     use_factual_verification: bool = False,
+    temperature: float = 0.3,  # Lower = faster & more deterministic
+    max_tokens: int = 512,  # Reduced for speed
 ) -> Union[str, Iterator[str]]:
     """
     Make any LLM reason better. One function.
@@ -33,26 +35,26 @@ def enhance(
         mode: Reasoning mode (auto/math/code/logic/creative)
         model: Model name (auto-detects Ollama if None)
         stream: Stream reasoning steps in real-time
-        max_iterations: Max reflection cycles (1-3)
+        max_iterations: Max reflection cycles (1-3, default=1 for speed)
         cache: Use caching for faster repeated queries
         base_url: Custom API endpoint
         api_key: API key (not needed for Ollama)
         rag_adapter: Optional RAG adapter for factual verification
         use_factual_verification: Enable factual verification with RAG
+        temperature: LLM temperature (0.0-1.0, lower=faster/focused)
+        max_tokens: Max response length (lower=faster)
     
     Returns:
         Enhanced reasoning as string (or iterator if stream=True)
     
     Examples:
         >>> from kaelum import enhance
+        >>> # Fast mode (default)
         >>> print(enhance("What is 15% of 240?"))
         >>> 
-        >>> # With RAG verification
-        >>> from kaelum.core.rag_adapter import ChromaAdapter
-        >>> adapter = ChromaAdapter(my_chroma_collection)
-        >>> result = enhance("Paris is the capital of France", 
-        ...                  rag_adapter=adapter, 
-        ...                  use_factual_verification=True)
+        >>> # Quality mode
+        >>> print(enhance("Explain relativity", model="qwen2.5:7b", 
+        ...               max_iterations=2, max_tokens=1024))
     """
     global _default_mcp
     
@@ -77,6 +79,8 @@ def enhance(
                 model=model,
                 base_url=base_url,
                 api_key=api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
             ),
             max_reflection_iterations=max_iterations,
             use_factual_verification=use_factual_verification,

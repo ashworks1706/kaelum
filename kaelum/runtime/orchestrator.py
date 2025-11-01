@@ -69,14 +69,27 @@ class MCP:
         return result
     
     def _quick_confidence_check(self, trace: List[str]) -> float:
-        """Quick heuristic confidence check."""
+        """Quick heuristic confidence check - optimized to skip reflection by default."""
         if not trace:
             return 0.0
-        confidence = 0.7
-        if len(trace) >= 3:
-            confidence += 0.1
-        if any(char in "".join(trace) for char in ["=", "+", "-", "×", "÷", "%"]):
-            confidence += 0.1
+        
+        # Start high to avoid unnecessary reflection (speed optimization)
+        confidence = 0.85
+        
+        # Boost for structured reasoning
+        if len(trace) >= 2:
+            confidence += 0.05
+        
+        # Boost for math/logic indicators
+        trace_text = "".join(trace).lower()
+        if any(char in trace_text for char in ["=", "+", "-", "×", "÷", "%"]):
+            confidence += 0.05
+        
+        # Only reduce if we see uncertainty markers
+        uncertainty_markers = ["maybe", "might", "unsure", "not sure", "unclear", "probably"]
+        if any(marker in trace_text for marker in uncertainty_markers):
+            confidence -= 0.15
+        
         return min(confidence, 1.0)
 
 

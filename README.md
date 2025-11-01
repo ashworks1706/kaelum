@@ -3,6 +3,8 @@
 
 **Reasoning Acceleration Layer for Lightweight LLMs**
 
+> 🎛️ **Quick Customization:** All parameters can be tweaked in `example.py` - no need to modify core classes!
+
 ---
 
 ## 🌍 Overview
@@ -65,8 +67,31 @@ from kaelum import enhance
 # Simple reasoning enhancement
 result = enhance("What is 25% of 80?")
 
-# Math verification mode
-result = enhance("Solve: 3x + 5 = 20", mode="math")
+# Customize parameters for speed vs quality
+result = enhance(
+    "Explain quantum entanglement",
+    model="qwen2.5:7b",
+    temperature=0.7,        # 0.0-1.0 (lower=focused, higher=creative)
+    max_tokens=2048,        # Max response length
+    max_iterations=2,       # Reflection loops (1=fast, 2-3=quality)
+)
+```
+
+**⚡ Speed vs Quality Trade-offs:**
+
+| Mode | temperature | max_tokens | max_iterations | Speed | Quality |
+|------|-------------|------------|----------------|-------|---------|
+| **Speed** | 0.3 | 512 | 1 | ⚡⚡⚡ Fast (2-3s) | ⭐⭐ Good |
+| **Balanced** | 0.5 | 1024 | 1 | ⚡⚡ Medium (4-6s) | ⭐⭐⭐ Better |
+| **Quality** | 0.7 | 2048 | 2 | ⚡ Slow (8-12s) | ⭐⭐⭐⭐ Best |
+
+**🎯 Quick Start:**
+```bash
+# Edit example.py to customize (SPEED_MODE/BALANCED_MODE/QUALITY_MODE)
+python example.py
+
+# Or use different model
+python example.py qwen2.5:7b
 ```
 
 ---
