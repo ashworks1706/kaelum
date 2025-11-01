@@ -69,6 +69,7 @@ def enhance(
         api_key = os.getenv("OPENAI_API_KEY", "ollama")
     
     # Create or reuse MCP instance
+    mcp = None
     if _default_mcp is None or not cache:
         config = MCPConfig(
             llm=LLMConfig(
@@ -82,6 +83,7 @@ def enhance(
         )
         if cache and _default_mcp is None:
             _default_mcp = MCP(config, rag_adapter=rag_adapter)
+            mcp = _default_mcp
         else:
             mcp = MCP(config, rag_adapter=rag_adapter)
     else:
@@ -92,9 +94,9 @@ def enhance(
     
     # Run inference
     if stream:
-        return _stream_reasoning(mcp or _default_mcp, enhanced_query)
+        return _stream_reasoning(mcp, enhanced_query)
     else:
-        result = (mcp or _default_mcp).infer(enhanced_query, use_cache=cache)
+        result = mcp.infer(enhanced_query)
         return _format_result(result)
 
 
