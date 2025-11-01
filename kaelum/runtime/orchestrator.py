@@ -32,17 +32,19 @@ class MCP:
 
     def infer(self, query: str) -> Dict:
         """Run reasoning acceleration pipeline."""
-        # Generate initial reasoning
-        initial = self.generator.generate_reasoning(query)
-        initial_confidence = self._quick_confidence_check(initial["trace"])
+        # Generate initial reasoning trace
+        trace = self.generator.generate_reasoning(query)
+        initial_confidence = self._quick_confidence_check(trace)
         
         # Skip reflection if confidence is high
         if initial_confidence > 0.85:
-            verification = self.verification.verify_trace(initial["trace"])
+            verification = self.verification.verify_trace(trace)
+            # Generate final answer from trace
+            answer = self.generator.generate_answer(query, trace)
             result = {
                 "query": query,
-                "final": initial["answer"],
-                "trace": initial["trace"],
+                "final": answer,
+                "trace": trace,
                 "diagnostics": {
                     "confidence": initial_confidence,
                     "verification": verification,
@@ -51,7 +53,7 @@ class MCP:
             }
         else:
             # Run reflection to improve reasoning
-            reflection = self.reflection.enhance_reasoning(query, initial["trace"])
+            reflection = self.reflection.enhance_reasoning(query, trace)
             verification = self.verification.verify_trace(reflection["final_trace"])
             result = {
                 "query": query,
