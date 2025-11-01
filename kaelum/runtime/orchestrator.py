@@ -8,26 +8,32 @@ from kaelum.core.verification import VerificationEngine
 
 
 class MCP:
-    """Modular Cognitive Processor - uses YOUR reasoning model for all operations."""
+    """Modular Cognitive Processor."""
 
     def __init__(self, config: MCPConfig, rag_adapter=None):
         self.config = config
-        
-        # YOUR reasoning LLM does all the work
-        self.reasoning_llm = LLMClient(config.reasoning_llm)
-        
-        # All components use YOUR reasoning model
-        self.generator = ReasoningGenerator(self.reasoning_llm)
-        self.reflection = ReflectionEngine(self.reasoning_llm, max_iterations=config.max_reflection_iterations)
+        self.llm = LLMClient(config.reasoning_llm)
+        self.generator = ReasoningGenerator(self.llm)
+        self.reflection = ReflectionEngine(self.llm, max_iterations=config.max_reflection_iterations)
         self.verification = VerificationEngine(
             use_symbolic=config.use_symbolic_verification,
             use_factual_check=config.use_factual_verification,
             rag_adapter=rag_adapter
         )
 
-    def infer(self, query: str) -> Dict:
-        """Run reasoning pipeline using YOUR reasoning model."""
+    def infer(self, query: str) -> Dict[str, any]:
+        """Run reasoning pipeline: generate → verify → reflect → answer."""
+        # Generate initial reasoning trace
         trace = self.generator.generate_reasoning(query)
+        
+        # Verify trace
+        errors = self.verification.verify_trace(trace)
+        
+        # Reflect and improve if needed
+        if errors or self.config.max_reflection_iterations > 0:
+            trace = self.reflection.enhance_reasoning(query, trace)
+        
+        # Generate final answer
         answer = self.generator.generate_answer(query, trace)
         
         return {
