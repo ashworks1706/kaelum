@@ -44,8 +44,20 @@ class ReflectionEngine:
         # Final verification
         final_verification = self._verify_trace(query, current_trace)
         
+        # Generate final answer from improved trace
+        trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(current_trace))
+        answer_prompt = f"""Based on this reasoning trace for the query: "{query}"
+
+{trace_text}
+
+Provide a concise final answer."""
+        
+        messages = [Message(role="user", content=answer_prompt)]
+        final_answer = self.llm.generate(messages)
+        
         return {
             "final_trace": current_trace,
+            "final_answer": final_answer.strip(),
             "iterations": iterations,
             "final_verification": final_verification,
             "improved": len(iterations) > 1,
