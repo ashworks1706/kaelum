@@ -71,6 +71,30 @@ result = enhance("Solve: 3x + 5 = 20", mode="math")
 
 ---
 
+## 📁 Project Structure
+
+```
+kaelum/
+├── __init__.py             # Public API: enhance() function
+├── core/
+│   ├── config.py          # Settings & environment config
+│   ├── reasoning.py       # LLM client & trace generation
+│   ├── verification.py    # SymPy symbolic math verifier
+│   ├── reflection.py      # Self-reflection loop
+│   └── rag_adapter.py     # RAG connectors (ChromaDB, Qdrant)
+└── runtime/
+    └── orchestrator.py    # MCP pipeline coordinator
+```
+
+**Key Files:**
+- `kaelum/__init__.py` → Main API entry point
+- `reasoning.py` → Handles LLM calls & reasoning trace generation
+- `verification.py` → Verifies math/logic using SymPy
+- `orchestrator.py` → Runs verification → reflection loop
+- `example.py` → Demo usage
+
+---
+
 ## 🧩 Architecture
 
 ```
