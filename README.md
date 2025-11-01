@@ -93,47 +93,70 @@ result = enhance("Solve: 3x + 5 = 20", mode="math")
 
 ---
 
-## Research to Implement
+## Benchmark Decision Matrix
 
-**Week 1-2:** Pick 3 techniques each and implement:
+**Which benchmark to run for your use case:**
 
-- Chain-of-Verification (CoVe) - Meta
-- Self-Consistency - Google
-- ReAct - Princeton/Google
-- Tree-of-Thoughts (ToT) - Princeton
-- Program-Aided Language Models (PAL) - CMU
-- Verify-and-Edit - OpenAI
+| Use Case | Recommended Benchmarks | Why |
+|----------|----------------------|-----|
+| **Production API** | Speed, Cost Analysis | Need fast responses at scale |
+| **Customer Support Bot** | Hallucination Detection, Tool Selection | Must avoid false info & pick right tools |
+| **Math Tutoring** | Math Reasoning (GSM8K), Hallucination Detection | Correct answers & no made-up facts |
+| **Research Assistant** | Hallucination Detection (TruthfulQA), Tool Selection | Factual accuracy & proper tool usage |
+| **Code Assistant** | Tool Selection (ToolBench), Math Reasoning | Correct logic & algorithm reasoning |
+| **Multi-Agent System** | Agent Orchestration, Tool Selection | Agent coordination & task routing |
+| **General Purpose** | All 5 Benchmarks | Comprehensive evaluation |
 
-**Week 3:** Run benchmarks and compare
-**Week 4:** Combine best techniques
+**Available Benchmarks:**
+- **Speed** - Latency overhead measurement (25 queries)
+- **Hallucination Detection** - TruthfulQA-style (20 cases)
+- **Tool Selection** - ToolBench-inspired (25 scenarios)
+- **Math Reasoning** - GSM8K-style (20 problems)
+- **Agent Orchestration** - Custom workflow tests (10 scenarios)
+
+---
+
+## LLMs Decision Matrix
+
+**Open-source models to test based on your constraints:**
+
+| Constraint | Recommended Models | Notes |
+|------------|-------------------|-------|
+| **Local/Privacy** | Qwen 2.5 7B, Llama 3.2 3B, Mistral 7B | Run on Ollama, fully local |
+| **Best Quality** | Qwen 2.5 7B, Llama 3.1 8B | Top open-source performers |
+| **Fastest** | Llama 3.2 3B, Phi-3 Mini | Sub-second inference |
+| **Math-Heavy** | Qwen 2.5 7B, DeepSeek Math | Better symbolic reasoning |
+| **Long Context** | Llama 3.2 3B (128K), Qwen 2.5 7B | Extended context windows |
+| **Low VRAM** | Llama 3.2 3B, Phi-3 Mini | Run on 8GB GPU |
+| **Balanced** | Qwen 2.5 7B, Llama 3.2 3B | Good quality/speed tradeoff |
+
+**Model Specs Reference:**
+
+| Model | Size | Context | VRAM (4-bit) | Speed | Notes |
+|-------|------|---------|--------------|-------|-------|
+| Llama 3.2 3B | 3B | 128K | ~2.5GB | ⚡⚡⚡ | Best for speed |
+| Llama 3.1 8B | 8B | 128K | ~5GB | ⚡⚡ | Balanced quality |
+| Qwen 2.5 7B | 7B | 32K | ~4.5GB | ⚡⚡ | Best for math |
+| Mistral 7B | 7B | 32K | ~4.5GB | ⚡⚡ | General purpose |
+| Phi-3 Mini | 3.8B | 128K | ~2.8GB | ⚡⚡⚡ | Microsoft, fast |
+| DeepSeek Math | 7B | 16K | ~4.5GB | ⚡⚡ | Math specialist |
+| Gemma 2 9B | 9B | 8K | ~5.5GB | ⚡ | Google, high quality |
+
+*Note: VRAM for quantized (4-bit). ⚡⚡⚡ = fastest*
 
 ---
 
 ## Target Metrics
 
-| Priority                 | Metric                | Target |
-| ------------------------ | --------------------- | ------ |
-| **Speed**          | Latency overhead      | <500ms |
-| **Hallucination**  | Detection rate        | >90%   |
-| **Tool Selection** | Accuracy              | >85%   |
-| **Math**           | Correctness           | >95%   |
-| **Orchestration**  | Agent accuracy        | >80%   |
-| **Cost**           | $/1K queries | <$0.10 |        |
+| Priority | Metric | Target |
+|----------|--------|--------|
+| **Speed** | Latency overhead | <500ms |
+| **Hallucination** | Detection rate | >90% |
+| **Tool Selection** | Accuracy | >85% |
+| **Math** | Correctness | >95% |
+| **Orchestration** | Agent accuracy | >80% |
+| **Cost** | $/1K queries | <$0.10 |
 
 ---
 
-## Current Status
-
-**Version:** 0.1.0-alpha
-
-**What works:**
-
-- Basic LLM integration
-- Symbolic verification
-- Simple reflection
-
-**In progress:**
-
-- RAG verification
-- Benchmarking suite
-- Documentation
+## Research to Implement
