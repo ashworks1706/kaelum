@@ -1,19 +1,16 @@
-"""
-LangChain integration for KaelumAI
-Provides a custom tool class for easy integration
-"""
+"""LangChain integration for KaelumAI"""
 
 from typing import Optional, Type
+from pydantic import BaseModel, Field
 from kaelum import kaelum_enhance_reasoning
 
 try:
     from langchain.tools import BaseTool
     from langchain.callbacks.manager import CallbackManagerForToolRun
-    from pydantic import BaseModel, Field
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
-    BaseTool = object  # Fallback for type hints
+    BaseTool = object
 
 
 class KaelumReasoningInput(BaseModel):

@@ -51,7 +51,7 @@ kaelum_tool = genai.protos.Tool(
     ]
 )
 
-model = genai.GenerativeModel(model_name="gemini-2.0-flash", tools=[kaelum_tool])
+model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest", tools=[kaelum_tool])
 
 query = "If a train travels at 60 mph for 2.5 hours, then speeds up to 80 mph for another 1.5 hours, what's the total distance?"
 print(f"\n💬 Question: {query}\n")

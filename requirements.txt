@@ -3,14 +3,13 @@ pydantic>=2.0.0
 httpx
 sympy
 
-# Optional - Commercial LLM Integrations
+# Commercial LLM Integration
 python-dotenv
-google-generativeai  # For Gemini integration (run_gemini.py)
+google-generativeai
 
-# Optional - LangChain Integration
-langchain>=0.1.0  # For LangChain integration (run_langchain.py)
-langchain-google-genai  # For Gemini models in LangChain
-langchain-community  # For open-source models (Ollama, etc.)
+# LangChain Integration (Open Source)
+langchain>=0.1.0
+langchain-community
 
 # Dev
 pytest
