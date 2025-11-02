@@ -1,13 +1,17 @@
 # Core
 pydantic>=2.0.0
-openai>=1.0.0
-sympy
 httpx
+sympy
 
-# Optional
+# Optional - Commercial LLM Integrations
 python-dotenv
+google-generativeai  # For Gemini integration (run_gemini.py)
+
+# Optional - LangChain Integration
+langchain>=0.1.0  # For LangChain integration (run_langchain.py)
+langchain-google-genai  # For Gemini models in LangChain
+langchain-community  # For open-source models (Ollama, etc.)
 
 # Dev
 pytest
 black
-

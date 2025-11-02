@@ -2,97 +2,193 @@
 
 # 🧠 KaelumAI
 
-**Fast, verifiable reasoning for small local language models**
+**Make any LLM reason better - Function calling tool for commercial LLMs**
 
 ---
 
 ## 🧩 Overview
 
-KaelumAI is a reasoning-verification runtime that enables small, inexpensive language models (3–8B parameters) to reason accurately and reliably in real time.
-Instead of fine-tuning or retraining models, Kaelum adds a lightweight inference-time verification layer that checks, corrects, and stabilizes reasoning as the model runs.
+KaelumAI is a reasoning enhancement tool that makes **any LLM** (GPT-4, Gemini, Claude, etc.) reason better by providing them with a specialized reasoning function. 
 
-At its core, Kaelum transforms how reasoning works during inference:
+**Key Innovation:** Instead of making commercial LLMs do all the work, Kaelum acts as a **reasoning middleware** - when your commercial LLM faces a complex problem, it can call Kaelum, which uses a lightweight local model to generate step-by-step reasoning traces. Your LLM then uses these verified reasoning steps to produce a better final answer.
 
-It forces LLMs to externalize their thought process through structured reasoning traces.
+### How It Works
 
-It verifies these traces using symbolic computation (for math/logic) and factual retrieval (for claims).
+```
+User Question → Commercial LLM (Gemini/GPT-4/Claude)
+                      ↓ (recognizes complex reasoning needed)
+                Calls Kaelum Tool
+                      ↓
+            Kaelum (Local 3-8B Model)
+                      ↓
+    Generates Verified Reasoning Steps
+                      ↓
+          Returns to Commercial LLM
+                      ↓
+    LLM Uses Steps for Better Answer
+```
 
-It reflects and self-corrects dynamically if confidence is low — all within strict latency budgets.
+### Why This Architecture?
 
+1. **💰 Cost Effective**: Heavy reasoning runs on your local model, not expensive API calls
+2. **⚡ Fast**: Small local models (3-8B) are extremely fast for reasoning generation
+3. **🔒 Private**: Reasoning computation happens locally, not sent to external APIs
+4. **🎯 Accurate**: Verified reasoning steps reduce hallucinations and errors
+5. **🔧 Flexible**: Works with ANY commercial LLM that supports function calling
 
 ---
 
-## ⚙️ How It Works
+## 🚀 Quick Start
 
-```
-User Query
-   ↓
-Reasoning  →  Verification  →  Reflection  →  Confidence-Scored Answer
-```
-
-At runtime Kaelum:
-
-1. Produces a compact **reasoning trace** from the base LLM (step-tagged).
-2. **Verifies** the trace:
-
-   * **Symbolic** (e.g., SymPy) for math/logic,
-   * **Factual** (RAG) for knowledge claims,
-   * **Consistency** across steps/variants.
-3. If confidence < threshold, triggers a **bounded self-reflection** pass to correct the answer (0–2 iters).
-4. Returns **answer + confidence + provenance**, and logs the structured trace (for debugging and future controller training).
-
----
-
-## 🚀 Usage
-
-```python
-from kaelum import enhance, set_reasoning_model
-
-# Configure your reasoning model
-set_reasoning_model(
-    provider="ollama",
-    model="llama3.2:3b",
-    temperature=0.7,
-    max_tokens=2048,
-    max_reflection_iterations=2,
-    use_symbolic_verification=True,   # math/logic checks
-    use_factual_verification=False,   # enable when RAG adapter set
-    confidence_threshold=0.7,
-)
-
-result = enhance("What is 15% of 200?")
-print(result.answer, result.confidence)
-print(result.verified_by)     # ['sympy', 'self_reflection'] (example)
-print(result.trace_id)        # for logs/telemetry
-```
-
-**Return schema (Pythonic):**
-
-```python
-class KaelumResult(TypedDict):
-    answer: str
-    confidence: float           # 0.0 - 1.0
-    verified_by: list[str]      # e.g. ["sympy","rag","self_reflection"]
-    trace_id: str               # correlates logs
-    trace: dict                 # optional, can be toggled off for prod
-```
-
----
-
-## 🧰 Install
+### Installation
 
 ```bash
 git clone https://github.com/ashworks1706/KaelumAI.git
 cd KaelumAI
 pip install -e .
 
-# Example local model
-ollama pull llama3.2:3b && ollama serve
+# Install local model (for reasoning generation)
+ollama pull qwen2.5:7b && ollama serve
+
+# Install your commercial LLM SDK
+pip install google-generativeai  # for Gemini
+# OR
+pip install openai               # for GPT-4/Claude
+```
+
+### Use with Gemini
+
+```python
+import google.generativeai as genai
+from kaelum import set_reasoning_model, kaelum_enhance_reasoning, get_function_schema
+
+# 1. Set up Kaelum's local reasoning model
+set_reasoning_model(
+    provider="ollama",
+    model="qwen2.5:7b",
+    temperature=0.3,
+)
+
+# 2. Configure Gemini with Kaelum as a tool
+genai.configure(api_key="your-api-key")
+
+kaelum_tool = genai.protos.Tool(
+    function_declarations=[
+        genai.protos.FunctionDeclaration(
+            name="kaelum_enhance_reasoning",
+            description="Enhances reasoning for complex math, logic, or multi-step problems",
+            parameters=get_function_schema(format="gemini")
+        )
+    ]
+)
+
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    tools=[kaelum_tool]
+)
+
+# 3. Ask Gemini a complex question
+chat = model.start_chat()
+response = chat.send_message("If a train travels at 60 mph for 2.5 hours, then 80 mph for 1.5 hours, what's the total distance?")
+
+# 4. If Gemini calls Kaelum tool, execute it
+if response.candidates[0].content.parts[0].function_call:
+    function_call = response.candidates[0].content.parts[0].function_call
+    
+    # Execute Kaelum reasoning
+    result = kaelum_enhance_reasoning(
+        query=function_call.args["query"],
+        domain=function_call.args.get("domain", "general")
+    )
+    
+    # Send reasoning back to Gemini
+    function_response = genai.protos.Part(
+        function_response=genai.protos.FunctionResponse(
+            name="kaelum_enhance_reasoning",
+            response={"result": result}
+        )
+    )
+    
+    # Get Gemini's enhanced answer
+    final_response = chat.send_message(function_response)
+    print(final_response.text)
+```
+
+### Use with OpenAI/GPT-4
+
+```python
+from openai import OpenAI
+from kaelum import set_reasoning_model, kaelum_enhance_reasoning, get_function_schema
+
+# Set up Kaelum
+set_reasoning_model(provider="ollama", model="qwen2.5:7b")
+
+# Set up OpenAI
+client = OpenAI(api_key="your-api-key")
+
+# Define Kaelum as a tool
+tools = [{
+    "type": "function",
+    "function": get_function_schema(format="openai")
+}]
+
+# Chat with GPT-4
+messages = [
+    {"role": "system", "content": "Use kaelum_enhance_reasoning for complex problems."},
+    {"role": "user", "content": "Your complex question here"}
+]
+
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=messages,
+    tools=tools
+)
+
+# Handle tool calls (similar to Gemini example)
+```
+
+### Standalone Use (No Commercial LLM)
+
+You can also use Kaelum directly for quick reasoning:
+
+```python
+from kaelum import enhance_stream, set_reasoning_model
+
+set_reasoning_model(provider="ollama", model="qwen2.5:7b")
+
+# Stream reasoning output
+for chunk in enhance_stream("What is 25% of 80?"):
+    print(chunk, end='', flush=True)
 ```
 
 ---
 
-## 🔧 Tweakable Parameters
+## 💡 Use Cases
+
+### 1. Math & Computation
+```python
+query = "Calculate compound interest: $5000 at 3.5% annually for 10 years"
+# Kaelum generates verified step-by-step calculation
+# Your LLM uses it to explain the answer clearly
+```
+
+### 2. Logical Reasoning
+```python
+query = "If all A are B, and some B are C, can we conclude all A are C?"
+# Kaelum breaks down logical steps
+# Your LLM formats a complete explanation
+```
+
+### 3. Multi-Step Problems
+```python
+query = "Plan a 3-day trip with budget $500, considering transport, food, and lodging"
+# Kaelum structures the reasoning steps
+# Your LLM adds creativity and personalization
+```
+
+---
+
+## ⚙️ Configuration
 
 ### Model Settings
 

@@ -1,8 +1,9 @@
 """KaelumAI - Make any LLM reason better."""
 
-from typing import Optional
+from typing import Optional, Dict, Any
 from kaelum.core.config import LLMConfig, MCPConfig
 from kaelum.runtime.orchestrator import MCP
+from kaelum.core.tools import get_kaelum_function_schema, get_gemini_function_schema
 
 # YOUR reasoning model
 _mcp: Optional[MCP] = None
@@ -101,4 +102,55 @@ def enhance_stream(query: str):
         yield chunk
 
 
-__all__ = ["enhance", "enhance_stream", "set_reasoning_model"]
+def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, Any]:
+    """
+    Function for commercial LLMs to call for reasoning enhancement.
+    This is designed to be used as a tool/function by LLMs like Gemini, GPT-4, Claude, etc.
+    
+    Args:
+        query: The question or problem that needs reasoning enhancement
+        domain: Optional domain hint (math, logic, code, science, general)
+    
+    Returns:
+        Dictionary with reasoning trace and suggested answer structure
+    """
+    global _mcp
+    
+    if _mcp is None:
+        set_reasoning_model()
+    
+    result = _mcp.infer(query, stream=False)
+    
+    # Format for function calling response
+    return {
+        "reasoning_steps": result["trace"],
+        "reasoning_count": len(result["trace"]),
+        "suggested_approach": result["final"],
+        "domain": domain,
+        "note": "Use these reasoning steps to formulate your comprehensive answer"
+    }
+
+
+# Export function schemas for LLM integration
+def get_function_schema(format: str = "openai") -> Dict[str, Any]:
+    """
+    Get the function schema for integrating Kaelum with commercial LLMs.
+    
+    Args:
+        format: "openai" (default, works for GPT-4, Claude) or "gemini"
+    
+    Returns:
+        Function schema that can be passed to the LLM
+    """
+    if format.lower() == "gemini":
+        return get_gemini_function_schema()
+    return get_kaelum_function_schema()
+
+
+__all__ = [
+    "enhance", 
+    "enhance_stream", 
+    "set_reasoning_model",
+    "kaelum_enhance_reasoning",
+    "get_function_schema"
+]

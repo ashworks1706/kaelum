@@ -22,57 +22,49 @@ class MCP:
         )
 
     def infer(self, query: str, stream: bool = False):
-        """Run reasoning pipeline: generate → verify → reflect → answer.
-        
-        Args:
-            query: User query
-            stream: If True, yields response chunks for streaming output
-        """
+        """Run reasoning pipeline."""
         if stream:
-            # Streaming mode: yield chunks as they come
-            yield "🧠 Generating reasoning trace...\n\n"
-            
-            # Generate reasoning trace (streamed)
-            trace_text = ""
-            for chunk in self.generator.generate_reasoning(query, stream=True):
-                trace_text += chunk
-                yield chunk
-            
-            yield "\n\n✓ Reasoning complete. Generating answer...\n\n"
-            
-            # Parse trace for verification
-            trace = []
-            for line in trace_text.strip().split("\n"):
-                line = line.strip()
-                if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
-                    step = line.lstrip("0123456789.-•) ").strip()
-                    if step:
-                        trace.append(step)
-            
-            if not trace:
-                trace = [trace_text.strip()]
-            
-            # Generate final answer (streamed)
-            for chunk in self.generator.generate_answer(query, trace, stream=True):
-                yield chunk
-            
+            return self._infer_stream(query)
         else:
-            # Non-streaming mode (original behavior)
-            # Generate initial reasoning trace
-            trace = self.generator.generate_reasoning(query)
-            
-            # Verify trace
-            errors = self.verification.verify_trace(trace)
-            
-            # Reflect and improve if needed
-            if errors or self.config.max_reflection_iterations > 0:
-                trace = self.reflection.enhance_reasoning(query, trace)
-            
-            # Generate final answer
-            answer = self.generator.generate_answer(query, trace)
-            
-            return {
-                "query": query,
-                "final": answer,
-                "trace": trace,
-            }
+            return self._infer_sync(query)
+    
+    def _infer_sync(self, query: str) -> Dict:
+        """Non-streaming inference."""
+        trace = self.generator.generate_reasoning(query)
+        errors = self.verification.verify_trace(trace)
+        
+        if errors or self.config.max_reflection_iterations > 0:
+            trace = self.reflection.enhance_reasoning(query, trace)
+        
+        answer = self.generator.generate_answer(query, trace)
+        
+        return {
+            "query": query,
+            "final": answer,
+            "trace": trace,
+        }
+    
+    def _infer_stream(self, query: str):
+        """Streaming inference."""
+        yield "🧠 Generating reasoning trace...\n\n"
+        
+        trace_text = ""
+        for chunk in self.generator.generate_reasoning(query, stream=True):
+            trace_text += chunk
+            yield chunk
+        
+        yield "\n\n✓ Reasoning complete. Generating answer...\n\n"
+        
+        trace = []
+        for line in trace_text.strip().split("\n"):
+            line = line.strip()
+            if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
+                step = line.lstrip("0123456789.-•) ").strip()
+                if step:
+                    trace.append(step)
+        
+        if not trace:
+            trace = [trace_text.strip()]
+        
+        for chunk in self.generator.generate_answer(query, trace, stream=True):
+            yield chunk
