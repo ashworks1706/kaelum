@@ -10,8 +10,8 @@ _mcp: Optional[MCP] = None
 
 
 def set_reasoning_model(
-    base_url: str = "http://localhost:11434/v1",
-    model: str = "qwen2.5:7b",
+    base_url: str = "http://localhost:8000/v1",
+    model: str = "TinyLlama/TinyLlama-1.1B-Chat-v0.3",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 2048,
@@ -24,13 +24,12 @@ def set_reasoning_model(
     Configure reasoning model with any OpenAI-compatible endpoint.
     
     Args:
-        base_url: API endpoint (default: Ollama at localhost:11434/v1)
+        base_url: API endpoint (default: vLLM at localhost:8000/v1)
                   Examples:
-                  - Ollama: "http://localhost:11434/v1"
                   - vLLM: "http://localhost:8000/v1"
                   - LM Studio: "http://localhost:1234/v1"
                   - Any OpenAI-compatible server
-        model: Model name
+        model: Model name (full HuggingFace path for vLLM)
         api_key: API key if required (optional for local servers)
         temperature: Sampling temperature (0.0-2.0)
         max_tokens: Max tokens to generate (1-128000)

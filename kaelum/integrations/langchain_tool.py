@@ -6,8 +6,6 @@ from kaelum import kaelum_enhance_reasoning
 from langchain.tools import BaseTool
 from langchain.callbacks.manager import CallbackManagerForToolRun
 
-LANGCHAIN_AVAILABLE = True
-
 class KaelumReasoningInput(BaseModel):
     """Input schema for Kaelum reasoning tool."""
     query: str = Field(description="The question or problem that needs reasoning enhancement")
@@ -26,7 +24,10 @@ class KaelumReasoningTool(BaseTool):
         from kaelum import set_reasoning_model
         
         # Configure Kaelum
-        set_reasoning_model(provider="ollama", model="qwen2.5:7b")
+        set_reasoning_model(
+            base_url="http://localhost:8000/v1",
+            model="TinyLlama/TinyLlama-1.1B-Chat-v0.3"
+        )
         
         # Create tool
         kaelum_tool = KaelumReasoningTool()
@@ -89,7 +90,10 @@ def create_kaelum_tool():
         from kaelum.integrations.langchain_tool import create_kaelum_tool
         from kaelum import set_reasoning_model
         
-        set_reasoning_model(provider="ollama", model="qwen2.5:7b")
+        set_reasoning_model(
+            base_url="http://localhost:8000/v1",
+            model="TinyLlama/TinyLlama-1.1B-Chat-v0.3"
+        )
         
         kaelum_tool = create_kaelum_tool()
         agent = initialize_agent([kaelum_tool], llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)

@@ -1,9 +1,21 @@
-"""KaelumAI - Standalone Streaming Demo"""
+"""KaelumAI - Standalone Streaming Demo
+
+Start vLLM server first (for 6GB GPU):
+    python -m vllm.entrypoints.openai.api_server \
+        --model TinyLlama/TinyLlama-1.1B-Chat-v0.3 \
+        --port 8000 \
+        --gpu-memory-utilization 0.7 \
+        --max-num-seqs 32 \
+        --max-model-len 1024 \
+        --chat-template "{% for message in messages %}{{ message['role'] + ': ' + message['content'] + '\n' }}{% endfor %}assistant: "
+
+For larger GPUs (8GB+), you can remove the memory limits.
+"""
 
 from kaelum import enhance_stream, set_reasoning_model
 
 set_reasoning_model(
-    base_url="http://localhost:8000/v1",  # vLLM OpenAI-compatible endpoint
+    base_url="http://localhost:8000/v1",
     model="TinyLlama/TinyLlama-1.1B-Chat-v0.3",
     temperature=0.3,
     max_tokens=512,
