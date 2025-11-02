@@ -2,12 +2,7 @@
 
 import os
 from kaelum import set_reasoning_model, kaelum_enhance_reasoning
-
-try:
-    import google.generativeai as genai
-except ImportError:
-    print("❌ Install: pip install google-generativeai")
-    exit(1)
+import google.generativeai as genai
 
 set_reasoning_model(
     base_url="http://localhost:11434/v1",
@@ -21,10 +16,6 @@ set_reasoning_model(
 )
 
 api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    print("❌ Set GEMINI_API_KEY environment variable")
-    print("Get key: https://makersuite.google.com/app/apikey")
-    exit(1)
 
 genai.configure(api_key=api_key)
 

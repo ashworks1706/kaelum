@@ -3,15 +3,10 @@
 from typing import Optional, Type
 from pydantic import BaseModel, Field
 from kaelum import kaelum_enhance_reasoning
+from langchain.tools import BaseTool
+from langchain.callbacks.manager import CallbackManagerForToolRun
 
-try:
-    from langchain.tools import BaseTool
-    from langchain.callbacks.manager import CallbackManagerForToolRun
-    LANGCHAIN_AVAILABLE = True
-except ImportError:
-    LANGCHAIN_AVAILABLE = False
-    BaseTool = object
-
+LANGCHAIN_AVAILABLE = True
 
 class KaelumReasoningInput(BaseModel):
     """Input schema for Kaelum reasoning tool."""
