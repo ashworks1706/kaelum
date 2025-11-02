@@ -2,9 +2,14 @@
 
 from kaelum import enhance_stream, set_reasoning_model
 
+# Works with any OpenAI-compatible endpoint:
+# - Ollama: http://localhost:11434/v1
+# - vLLM: http://localhost:8000/v1
+# - LM Studio: http://localhost:1234/v1
+
 set_reasoning_model(
-    provider="ollama",
-    model="tinyllama",
+    base_url="http://localhost:11434/v1",
+    model="qwen2.5:7b",
     temperature=0.3,
     max_tokens=512,
     max_reflection_iterations=0,

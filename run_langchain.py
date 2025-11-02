@@ -9,12 +9,16 @@ except ImportError:
     exit(1)
 
 set_reasoning_model(
-    provider="ollama",
+    base_url="http://localhost:11434/v1",
     model="qwen2.5:7b",
     temperature=0.3,
     max_tokens=512,
     max_reflection_iterations=0,
+    use_symbolic_verification=True,
+    use_factual_verification=False,
+    rag_adapter=None,
 )
+
 
 llm = Ollama(model="qwen2.5:7b", temperature=0.7)
 

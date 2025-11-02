@@ -15,33 +15,19 @@ class Message(BaseModel):
 
 
 class LLMClient:
-    """LLM client supporting Ollama, vLLM, and custom providers."""
+    """Client for any OpenAI-compatible API endpoint."""
 
     def __init__(self, config: LLMConfig):
         self.config = config
-        self.base_url = self._get_base_url()
+        self.base_url = config.base_url
         self.headers = self._get_headers()
-
-    def _get_base_url(self) -> str:
-        """Get the base URL for the provider."""
-        if self.config.provider == "ollama":
-            return self.config.base_url or "http://localhost:11434/v1"
-        elif self.config.provider == "vllm":
-            return self.config.base_url or "http://localhost:8000/v1"
-        elif self.config.provider == "custom":
-            if not self.config.base_url:
-                raise ValueError("base_url required for custom provider")
-            return self.config.base_url
-        else:
-            raise ValueError(f"Unsupported provider: {self.config.provider}")
 
     def _get_headers(self) -> dict:
         """Get headers for API requests."""
-        api_key = self.config.api_key or "dummy"
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        return headers
 
     def generate(self, messages: List[Message], stream: bool = False):
         """Generate a response from the LLM.

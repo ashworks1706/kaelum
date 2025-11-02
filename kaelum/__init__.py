@@ -10,9 +10,9 @@ _mcp: Optional[MCP] = None
 
 
 def set_reasoning_model(
-    provider: str = "ollama",
-    model: str = "llama3.2:3b", 
-    base_url: Optional[str] = None,
+    base_url: str = "http://localhost:11434/v1",
+    model: str = "qwen2.5:7b",
+    api_key: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 2048,
     max_reflection_iterations: int = 2,
@@ -21,15 +21,20 @@ def set_reasoning_model(
     rag_adapter = None,
 ):
     """
-    Set YOUR reasoning model with all tweakable parameters.
+    Configure reasoning model with any OpenAI-compatible endpoint.
     
     Args:
-        provider: "ollama", "vllm", or "custom"
-        model: Your model name
-        base_url: Your model endpoint (optional, has defaults)
-        temperature: Sampling temperature (0.0-2.0, higher = more creative)
+        base_url: API endpoint (default: Ollama at localhost:11434/v1)
+                  Examples:
+                  - Ollama: "http://localhost:11434/v1"
+                  - vLLM: "http://localhost:8000/v1"
+                  - LM Studio: "http://localhost:1234/v1"
+                  - Any OpenAI-compatible server
+        model: Model name
+        api_key: API key if required (optional for local servers)
+        temperature: Sampling temperature (0.0-2.0)
         max_tokens: Max tokens to generate (1-128000)
-        max_reflection_iterations: Number of self-correction iterations (1-5)
+        max_reflection_iterations: Self-correction iterations (0-5)
         use_symbolic_verification: Enable math verification with SymPy
         use_factual_verification: Enable RAG-based fact checking
         rag_adapter: RAG adapter instance (required if use_factual_verification=True)
@@ -38,9 +43,9 @@ def set_reasoning_model(
     
     config = MCPConfig(
         reasoning_llm=LLMConfig(
-            provider=provider,
-            model=model,
             base_url=base_url,
+            model=model,
+            api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
         ),

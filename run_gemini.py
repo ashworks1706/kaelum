@@ -10,8 +10,8 @@ except ImportError:
     exit(1)
 
 set_reasoning_model(
-    provider="ollama",
-    model="tinyllama",
+    base_url="http://localhost:11434/v1",
+    model="qwen2.5:7b",
     temperature=0.3,
     max_tokens=512,
     max_reflection_iterations=0,
