@@ -19,6 +19,8 @@ def set_reasoning_model(
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
     rag_adapter = None,
+    reasoning_system_prompt: Optional[str] = None,
+    reasoning_user_template: Optional[str] = None,
 ):
     """
     Configure reasoning model with any OpenAI-compatible endpoint.
@@ -37,6 +39,11 @@ def set_reasoning_model(
         use_symbolic_verification: Enable math verification with SymPy
         use_factual_verification: Enable RAG-based fact checking
         rag_adapter: RAG adapter instance (required if use_factual_verification=True)
+        reasoning_system_prompt: Custom system prompt for reasoning model
+                                 Default: "You are a reasoning assistant. Break down problems into clear, logical steps.\nPresent your reasoning as a numbered list."
+        reasoning_user_template: Custom user prompt template. Use {query} placeholder.
+                                Default: "{query}" (passes query directly)
+                                Example: "Think step-by-step about: {query}"
     """
     global _mcp
     
@@ -52,7 +59,12 @@ def set_reasoning_model(
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
     )
-    _mcp = MCP(config, rag_adapter=rag_adapter)
+    _mcp = MCP(
+        config, 
+        rag_adapter=rag_adapter,
+        reasoning_system_prompt=reasoning_system_prompt,
+        reasoning_user_template=reasoning_user_template,
+    )
 
 
 def enhance(query: str) -> str:

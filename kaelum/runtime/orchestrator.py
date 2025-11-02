@@ -10,10 +10,14 @@ from kaelum.core.verification import VerificationEngine
 class MCP:
     """Modular Cognitive Processor."""
 
-    def __init__(self, config: MCPConfig, rag_adapter=None):
+    def __init__(self, config: MCPConfig, rag_adapter=None, reasoning_system_prompt=None, reasoning_user_template=None):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
-        self.generator = ReasoningGenerator(self.llm)
+        self.generator = ReasoningGenerator(
+            self.llm,
+            system_prompt=reasoning_system_prompt,
+            user_template=reasoning_user_template
+        )
         self.reflection = ReflectionEngine(self.llm, max_iterations=config.max_reflection_iterations)
         self.verification = VerificationEngine(
             use_symbolic=config.use_symbolic_verification,

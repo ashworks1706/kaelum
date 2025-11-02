@@ -82,8 +82,11 @@ class LLMClient:
 class ReasoningGenerator:
     """Generates reasoning traces using an LLM."""
 
-    def __init__(self, llm_client: LLMClient):
+    def __init__(self, llm_client: LLMClient, system_prompt=None, user_template=None):
         self.llm = llm_client
+        self.system_prompt = system_prompt or """You are a reasoning assistant. Break down problems into clear, logical steps.
+Present your reasoning as a numbered list."""
+        self.user_template = user_template or "{query}"
 
     def generate_reasoning(self, query: str, stream: bool = False):
         """Generate a reasoning trace for a query.
@@ -92,12 +95,12 @@ class ReasoningGenerator:
             query: User query
             stream: If True, yields chunks as they're generated
         """
-        system_prompt = """You are a reasoning assistant. Break down problems into clear, logical steps.
-Present your reasoning as a numbered list."""
+        # Format the user message using template
+        user_message = self.user_template.format(query=query)
 
         messages = [
-            Message(role="system", content=system_prompt),
-            Message(role="user", content=query),
+            Message(role="system", content=self.system_prompt),
+            Message(role="user", content=user_message),
         ]
 
         response = self.llm.generate(messages, stream=stream)
