@@ -139,7 +139,7 @@ class KaelumOrchestrator:
         
         start_time = time.time()
         
-        yield "🧠 [Reasoning]...\n\n"
+        yield "🧠 [REASON]\n\n"
         
         # Step 1: Generate reasoning trace (streaming)
         reasoning_start = time.time()
@@ -173,42 +173,50 @@ class KaelumOrchestrator:
             trace = [trace_text.strip()]
         
         # Step 2: Verify reasoning
-        yield "\n\n🔍 [Verification]\n"
+        yield "\n\n🔍 [VERIFY]\n"
         verify_start = time.time()
         errors, details = self.verification.verify_trace(trace)
         verify_time = (time.time() - verify_start) * 1000
         
-        yield f"   Steps analyzed: {details['total_steps']}\n"
+        yield f"   {details['total_steps']} steps"
         
         if self.verification.symbolic_verifier:
-            yield f"   Symbolic checks: {details['symbolic_passed']}/{details['symbolic_checks']} passed\n"
+            yield f" | Symbolic: {details['symbolic_passed']}/{details['symbolic_checks']}"
         
         if self.verification.factual_verifier:
-            yield f"   Factual checks: {details['factual_passed']}/{details['factual_checks']} passed\n"
+            yield f" | Factual: {details['factual_passed']}/{details['factual_checks']}"
         
-        yield f"   Verification time: {verify_time:.1f}ms\n"
+        yield f" | {verify_time:.1f}ms\n"
         
         if errors:
-            yield f"\n   ⚠️ Issues found:\n"
+            yield f"   ⚠️ {len(errors)} issue(s):\n"
             for error in errors:
                 yield f"      - {error}\n"
-        else:
-            yield f"   ✓ All verification checks passed\n"
         
         # Step 3: Reflect if needed
         reflection_time = 0
         if errors or self.config.max_reflection_iterations > 0:
-            yield f"\n🔄 [Reflection]\n"
-            yield f"   Max iterations: {self.config.max_reflection_iterations}\n"
+            yield f"\n🔄 [REFLECT]\n"
             
-            if errors:
-                yield f"   Reason: Found {len(errors)} error(s) to fix\n"
-            else:
-                yield f"   Reason: Performing quality enhancement\n"
-            
-            yield f"[Reasoning]\n"
             reflect_start = time.time()
-            trace = self.reflection.enhance_reasoning(query, trace)
+            
+            # Stream the reflection reasoning
+            reflection_output = ""
+            for i in range(self.config.max_reflection_iterations):
+                issues = self.reflection._verify_trace(query, trace)
+                
+                if not issues:
+                    break
+                
+                if i < self.config.max_reflection_iterations - 1:
+                    trace = self.reflection._improve_trace(query, trace, issues)
+                    # Stream the improved trace
+                    for j, step in enumerate(trace):
+                        if j == 0:
+                            yield f"\n"
+                        yield f"   {j+1}. {step}\n"
+                    yield f"\n"
+            
             reflection_time = (time.time() - reflect_start) * 1000
             
             # Log reflection
@@ -220,12 +228,9 @@ class KaelumOrchestrator:
                 cost=reflection_tokens * 0.00000001,
                 session_id=session_id
             )
-            
-            yield f"   Reflection time: {reflection_time:.1f}ms\n"
-            yield f"   ✓ Reasoning improved\n"
         
         # Step 4: Generate final answer (streaming)
-        yield "\n✅ [Final Answer]\n\n"
+        yield "\n✅ [ANSWER]\n\n"
         answer_start = time.time()
         answer_text = ""
         for chunk in self.generator.generate_answer(query, trace, stream=True):
@@ -250,16 +255,15 @@ class KaelumOrchestrator:
         savings = self.metrics.calculate_savings(session_id)
         
         yield f"\n\n{'='*70}\n"
-        yield f"📊 [Metrics]\n"
-        yield f"   Total time: {total_time:.1f}ms\n"
-        yield f"   - Reasoning: {reasoning_time:.1f}ms\n"
-        yield f"   - Verification: {verify_time:.1f}ms\n"
+        yield f"📊 [METRICS]\n"
+        yield f"   Total: {total_time:.1f}ms"
+        yield f" | Reason: {reasoning_time:.1f}ms"
+        yield f" | Verify: {verify_time:.1f}ms"
         if reflection_time > 0:
-            yield f"   - Reflection: {reflection_time:.1f}ms\n"
-        yield f"   - Answer: {answer_time:.1f}ms\n"
-        yield f"\n"
-        yield f"   Total tokens: {session_metrics['total_tokens']}\n"
-        yield f"   Local cost: ${session_metrics['total_cost']:.8f}\n"
-        yield f"   Commercial cost (est): ${savings['commercial_cost']:.4f}\n"
-        yield f"   💰 Savings: ${savings['savings']:.4f} ({savings['savings_percent']:.1f}%)\n"
+            yield f" | Reflect: {reflection_time:.1f}ms"
+        yield f" | Answer: {answer_time:.1f}ms\n"
+        yield f"   Tokens: {session_metrics['total_tokens']}"
+        yield f" | Cost: ${session_metrics['total_cost']:.8f}"
+        yield f" | vs Commercial: ${savings['commercial_cost']:.4f}"
+        yield f" | 💰 {savings['savings_percent']:.1f}% savings\n"
         yield f"{'='*70}\n"
