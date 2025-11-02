@@ -8,6 +8,7 @@ from kaelum.core.tools import get_kaelum_function_schema
 # Infrastructure
 from kaelum.core.metrics import CostTracker
 from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
+from kaelum.core.router import Router, QueryType, ReasoningStrategy
 
 # Global orchestrator with verification + reflection
 _orchestrator: Optional[KaelumOrchestrator] = None
@@ -22,6 +23,7 @@ def set_reasoning_model(
     max_reflection_iterations: int = 2,
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
+    enable_routing: bool = False,
     rag_adapter = None,
     reasoning_system_prompt: Optional[str] = None,
     reasoning_user_template: Optional[str] = None,
@@ -38,6 +40,7 @@ def set_reasoning_model(
         max_reflection_iterations: Self-correction iterations (0-5)
         use_symbolic_verification: Enable math verification with SymPy
         use_factual_verification: Enable RAG-based fact checking
+        enable_routing: Enable adaptive strategy selection (Phase 2)
         rag_adapter: RAG adapter instance (required if use_factual_verification=True)
         reasoning_system_prompt: Custom system prompt for reasoning model
         reasoning_user_template: Custom user prompt template. Use {query} placeholder.
@@ -62,6 +65,7 @@ def set_reasoning_model(
         rag_adapter=rag_adapter,
         reasoning_system_prompt=reasoning_system_prompt,
         reasoning_user_template=reasoning_user_template,
+        enable_routing=enable_routing,
     )
 
 
@@ -172,4 +176,9 @@ __all__ = [
     "ModelRegistry",
     "ModelSpec",
     "get_registry",
+    
+    # Routing (Phase 2)
+    "Router",
+    "QueryType",
+    "ReasoningStrategy",
 ]

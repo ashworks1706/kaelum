@@ -1,19 +1,21 @@
 """Core orchestration logic for Kaelum reasoning system."""
 
 import time
-from typing import Iterator, Dict, Any
+from typing import Iterator, Dict, Any, Optional
 
 from ..core.config import KaelumConfig
 from ..core.reasoning import ReasoningGenerator, LLMClient
 from ..core.verification import VerificationEngine
 from ..core.reflection import ReflectionEngine
 from ..core.metrics import CostTracker
+from ..core.router import Router
 
 
 class KaelumOrchestrator:
     """Orchestrates reasoning pipeline: Generate → Verify → Reflect → Answer"""
 
-    def __init__(self, config: KaelumConfig, rag_adapter=None, reasoning_system_prompt=None, reasoning_user_template=None):
+    def __init__(self, config: KaelumConfig, rag_adapter=None, reasoning_system_prompt=None, 
+                 reasoning_user_template=None, enable_routing: bool = False):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.generator = ReasoningGenerator(
@@ -28,15 +30,45 @@ class KaelumOrchestrator:
             rag_adapter=rag_adapter
         )
         self.metrics = CostTracker()
+        
+        # Router for adaptive strategy selection (Phase 2 feature)
+        self.router = Router(learning_enabled=True) if enable_routing else None
+        self.enable_routing = enable_routing
 
     def infer(self, query: str, stream: bool = False):
-        """Run reasoning pipeline."""
-        if stream:
-            return self._infer_stream(query)
+        """Run reasoning pipeline with optional adaptive routing."""
+        # If routing is enabled, get optimal strategy for this query
+        if self.enable_routing and self.router:
+            routing_decision = self.router.route(query)
+            
+            # Temporarily override config with routed strategy
+            original_config = {
+                "max_reflection_iterations": self.config.max_reflection_iterations,
+                "use_symbolic_verification": self.verification.symbolic_verifier is not None,
+                "use_factual_verification": self.verification.factual_verifier is not None
+            }
+            
+            # Apply routing decision
+            self.config.max_reflection_iterations = routing_decision.max_reflection_iterations
+            self.reflection.max_iterations = routing_decision.max_reflection_iterations
+            
+            # Run inference
+            result = self._infer_stream(query) if stream else self._infer_sync(query, routing_decision)
+            
+            # Record outcome for learning (only for sync mode)
+            if not stream and self.router:
+                self.router.record_outcome(routing_decision, result)
+            
+            # Restore original config
+            self.config.max_reflection_iterations = original_config["max_reflection_iterations"]
+            self.reflection.max_iterations = original_config["max_reflection_iterations"]
+            
+            return result
         else:
-            return self._infer_sync(query)
+            # Standard inference without routing
+            return self._infer_stream(query) if stream else self._infer_sync(query, None)
     
-    def _infer_sync(self, query: str) -> Dict[str, Any]:
+    def _infer_sync(self, query: str, routing_decision=None) -> Dict[str, Any]:
         """Synchronous inference with full verification + reflection."""
         session_id = f"sync_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})

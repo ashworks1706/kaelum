@@ -45,7 +45,8 @@ KaelumAI is a **reasoning middleware** that enhances commercial LLMs (GPT-4, Gem
 - ✅ Multi-model reasoning (3-8B) with verification layers
 - ✅ LangChain/LlamaIndex integration
 - ✅ Cost tracking and metrics infrastructure
-- ✅ Plugin architecture foundation
+- ✅ **Adaptive routing system** - learns optimal strategies per query type
+- ✅ Streaming inference with detailed transparency
 - 🔨 Domain-specific model registry (medical, legal, code)
 - 🔨 Advanced symbolic verification (SymPy integration)
 - 🔨 RAG-based factual verification
@@ -104,16 +105,18 @@ analysis = await vision.process({"image_path": "chart.png", "query": "Summarize 
 ### Core Components
 
 **Current (Phase 1)**:
-- `ReasoningPlugin`: Verified reasoning with local models
+- `KaelumOrchestrator`: Main reasoning pipeline coordinator
+- `Router`: Adaptive strategy selection (learns optimal approaches per query type)
 - `CostTracker`: Real-time cost savings analysis
 - `ModelRegistry`: Domain-specific model management
 - `LLMClient`: OpenAI-compatible inference client
+- `VerificationEngine`: Symbolic + factual + consistency checks
+- `ReflectionEngine`: Self-correction with bounded iterations
 
 **Planned (Phase 2-3)**:
 - `PlanningPlugin`: Task decomposition and multi-step coordination
-- `RoutingPlugin`: Intelligent tool selection and agent orchestration
 - `VisionPlugin`: Multi-modal reasoning and visual understanding
-- `ControllerModel`: Learned inference policies (1-2 B parameter network)
+- `ControllerModel`: Neural policy network (1-2B parameters) trained on routing outcomes
 
 ---
 
@@ -145,7 +148,7 @@ python -m vllm.entrypoints.openai.api_server \
 | **Verifier**          | **Symbolic** (SymPy), **Factual** (RAG), **Consistency** checks | Parallelizable; returns per-step scores   |
 | **Reflexor**          | Self-reflection prompts driven by low confidence or failed checks                 | Bounded iterations; localized corrections |
 | **Confidence Engine** | Aggregates verifier scores + entropy/variance into a single confidence            | Pluggable scoring policy                  |
-| **Router (Planned)**  | Heuristic →**trainable micro-controller** for tools/agents/depth           | Future “Kaelum Brain” (1–2B policy)    |
+| **Router** ✨         | Learns optimal reasoning strategies per query type           | ✅ Phase 1: Rule-based + learning; 🔨 Phase 2: Neural policy (1–2B)    |
 
 ---
 
