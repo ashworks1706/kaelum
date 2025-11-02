@@ -12,6 +12,9 @@ class ReasoningPlugin(KaelumPlugin):
         self,
         model_id: str,
         base_url: str = "http://localhost:8000/v1",
+        api_key: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
         system_prompt: Optional[str] = None,
         user_template: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None
@@ -19,14 +22,22 @@ class ReasoningPlugin(KaelumPlugin):
         super().__init__(name="reasoning", config=config)
         self.model_id = model_id
         self.base_url = base_url
-        self.system_prompt = system_prompt
-        self.user_template = user_template
         
-        # Initialize reasoning generator (lazy import to avoid circular deps)
-        from kaelum.core.reasoning import ReasoningGenerator
-        self.generator = ReasoningGenerator(
-            model_id=model_id,
+        # Initialize LLM client and reasoning generator
+        from kaelum.core.reasoning import LLMClient, ReasoningGenerator
+        from kaelum.core.config import LLMConfig
+        
+        llm_config = LLMConfig(
             base_url=base_url,
+            model=model_id,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        llm_client = LLMClient(llm_config)
+        self.generator = ReasoningGenerator(
+            llm_client=llm_client,
             system_prompt=system_prompt,
             user_template=user_template
         )
@@ -38,12 +49,16 @@ class ReasoningPlugin(KaelumPlugin):
         # Extract query string
         query = input_data if isinstance(input_data, str) else input_data.get("query", "")
         
-        # Generate reasoning
-        result = self.generator.generate(
-            query=query,
-            max_tokens=kwargs.get("max_tokens", 2000),
-            temperature=kwargs.get("temperature", 0.7)
-        )
+        # Generate reasoning trace
+        reasoning_trace = self.generator.generate_reasoning(query, stream=False)
+        
+        # Generate final answer
+        final_answer = self.generator.generate_answer(query, reasoning_trace, stream=False)
+        
+        # Combine into result
+        result = f"{final_answer}\n\nReasoning:\n"
+        for i, step in enumerate(reasoning_trace, 1):
+            result += f"{i}. {step}\n"
         
         # Track metrics
         latency_ms = (time.time() - start_time) * 1000
