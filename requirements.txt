@@ -8,7 +8,7 @@ python-dotenv
 google-generativeai
 
 # LangChain Integration (Open Source)
-langchain>=0.1.0
+langchain
 langchain-community
 
 # Dev
