@@ -29,39 +29,14 @@ git clone https://github.com/ashworks1706/KaelumAI.git
 cd KaelumAI
 pip install -e .
 
-# Install local model (for reasoning generation)
-ollama pull qwen2.5:7b && ollama serve
-
-# Install your commercial LLM SDK
-pip install google-generativeai  # for Gemini
-# OR
-pip install openai               # for GPT-4/Claude
+python -m vllm.entrypoints.openai.api_server \
+           --model TinyLlama/TinyLlama-1.1B-Chat-v0.3 \
+           --port 8000 \
+           --gpu-memory-utilization 0.7 \
+           --max-num-seqs 32 \
+           --max-model-len 1024 \
+           --chat-template "{% for message in messages %}{{ message['role'] + ': ' + message['content'] + '\n' }}{% endfor %}assistant: "
 ```
-
-## ⚙️ Configuration
-
-### Model Settings
-
-| Parameter    | Description                                         |
-| ------------ | --------------------------------------------------- |
-| `provider` | `"ollama"`, `"vllm"`, or `"custom"`           |
-| `model`    | Model id (e.g.,`"llama3.2:3b"`, `"qwen2.5:7b"`) |
-| `base_url` | Custom endpoint (optional)                          |
-
-### Generation Settings
-
-* `temperature` 0.0–2.0 (lower → deterministic)
-* `max_tokens` 1–128_000 (response length cap)
-
-### Reasoning/Verification Settings
-
-* `max_reflection_iterations`: 0–5 (bounded self-correction depth; default 1–2)
-* `confidence_threshold`: 0.0–1.0 (gate for reflection/correction)
-* `use_symbolic_verification`: bool (SymPy/logic checks)
-* `use_factual_verification`: bool (RAG claims checking)
-* `rag_adapter`: pluggable retriever (Chroma/Qdrant/your DB)
-* `emit_trace`: bool (include full trace in result for debugging)
-* `latency_budget_ms`: soft cap to trim steps/tools under load
 
 ---
 
@@ -80,6 +55,7 @@ pip install openai               # for GPT-4/Claude
 ## 🧱 Architecture Snapshot
 
 ```
+
 User Query
    ↓
 Context Builder (RAG optional, cacheable)
@@ -91,6 +67,7 @@ Verifier (Symbolic math/logic + Factual RAG + Consistency)
 Reflexor (bounded self-correction if confidence < τ)
    ↓
 Confidence Engine → {answer, confidence, verified_by, trace_id}
+
 ```
 
 **Design principles:** small-model first, parallel verifiers, bounded loops, observable traces, sub-500ms overhead target.
