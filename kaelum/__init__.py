@@ -1,9 +1,22 @@
-"""KaelumAI - Make any LLM reason better."""
+"""KaelumAI - Local reasoning models as cognitive middleware for commercial LLMs."""
 
 from typing import Optional, Dict, Any
 from kaelum.core.config import LLMConfig, MCPConfig
 from kaelum.runtime.orchestrator import MCP
 from kaelum.core.tools import get_kaelum_function_schema, get_gemini_function_schema
+
+# Plugin system
+from kaelum.plugins import (
+    KaelumPlugin,
+    ReasoningPlugin,
+    PlanningPlugin,
+    RoutingPlugin,
+    VisionPlugin
+)
+
+# Infrastructure
+from kaelum.core.metrics import CostTracker
+from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
 
 # YOUR reasoning model
 _mcp: Optional[MCP] = None
@@ -164,9 +177,23 @@ def get_function_schema(format: str = "openai") -> Dict[str, Any]:
 
 
 __all__ = [
+    # Core functions
     "enhance", 
     "enhance_stream", 
     "set_reasoning_model",
     "kaelum_enhance_reasoning",
-    "get_function_schema"
+    "get_function_schema",
+    
+    # Plugin system (Phase 1-3)
+    "KaelumPlugin",
+    "ReasoningPlugin",
+    "PlanningPlugin",
+    "RoutingPlugin",
+    "VisionPlugin",
+    
+    # Infrastructure
+    "CostTracker",
+    "ModelRegistry",
+    "ModelSpec",
+    "get_registry",
 ]

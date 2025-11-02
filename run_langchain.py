@@ -193,7 +193,8 @@ Present reasoning as numbered steps."""
     
     set_reasoning_model(
         base_url="http://localhost:8000/v1",
-        model="TinyLlama/TinyLlama-1.1B-Chat-v0.3",
+          model="Qwen/Qwen2.5-1.5B-Instruct",
+    # model="TinyLlama/TinyLlama-1.1B-Chat-v0.3",
         temperature=0.3,
         max_tokens=512,
         reasoning_system_prompt=reasoning_system,
