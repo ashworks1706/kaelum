@@ -651,6 +651,20 @@ vllm serve Qwen/Qwen2.5-7B-Instruct \
 
 ---
 
+## 📚 Documentation
+
+Comprehensive guides for each core component:
+
+- **[Orchestrator](./docs/ORCHESTRATOR.md)** - The reasoning pipeline conductor
+- **[Verification Engine](./docs/VERIFICATION.md)** - Multi-layer validation system
+- **[Reflection Engine](./docs/REFLECTION.md)** - Self-correction through introspection
+- **[Router](./docs/ROUTING.md)** - Adaptive strategy selection (learns from outcomes)
+- **[Metrics & Cost Tracking](./docs/METRICS.md)** - Real-time performance monitoring
+
+**Start here**: [docs/README.md](./docs/README.md) for a complete overview
+
+---
+
 ## 🤝 Contributing
 
 Contributions welcome! Areas of focus:
