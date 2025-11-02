@@ -49,19 +49,33 @@ class LLMClient:
         
         self._client = OpenAI(base_url=base_url, api_key=api_key)
 
-    def generate(self, messages: List[Message]) -> str:
-        """Generate a response from the LLM."""
+    def generate(self, messages: List[Message], stream: bool = False):
+        """Generate a response from the LLM.
+        
+        Args:
+            messages: List of messages
+            stream: If True, returns a generator that yields chunks. If False, returns complete string.
+        """
         response = self._client.chat.completions.create(
             model=self.config.model,
             messages=[{"role": m.role, "content": m.content} for m in messages],
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
+            stream=stream,
         )
         
-        if not response.choices or not response.choices[0].message.content:
-            raise RuntimeError("LLM returned empty response")
-        
-        return response.choices[0].message.content
+        if stream:
+            # Return generator for streaming
+            def stream_generator():
+                for chunk in response:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            return stream_generator()
+        else:
+            # Return complete response
+            if not response.choices or not response.choices[0].message.content:
+                raise RuntimeError("LLM returned empty response")
+            return response.choices[0].message.content
 
 
 class ReasoningGenerator:
@@ -70,8 +84,13 @@ class ReasoningGenerator:
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
 
-    def generate_reasoning(self, query: str) -> List[str]:
-        """Generate a reasoning trace for a query."""
+    def generate_reasoning(self, query: str, stream: bool = False):
+        """Generate a reasoning trace for a query.
+        
+        Args:
+            query: User query
+            stream: If True, yields chunks as they're generated
+        """
         system_prompt = """You are a reasoning assistant. Break down problems into clear, logical steps.
 Present your reasoning as a numbered list."""
 
@@ -80,21 +99,31 @@ Present your reasoning as a numbered list."""
             Message(role="user", content=query),
         ]
 
-        response = self.llm.generate(messages)
+        response = self.llm.generate(messages, stream=stream)
 
-        # Parse reasoning trace
-        trace = []
-        for line in response.strip().split("\n"):
-            line = line.strip()
-            if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
-                step = line.lstrip("0123456789.-•) ").strip()
-                if step:
-                    trace.append(step)
+        if stream:
+            # Stream chunks directly
+            return response
+        else:
+            # Parse reasoning trace
+            trace = []
+            for line in response.strip().split("\n"):
+                line = line.strip()
+                if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
+                    step = line.lstrip("0123456789.-•) ").strip()
+                    if step:
+                        trace.append(step)
 
-        return trace if trace else [response.strip()]
+            return trace if trace else [response.strip()]
 
-    def generate_answer(self, query: str, reasoning_trace: List[str]) -> str:
-        """Generate final answer based on reasoning trace."""
+    def generate_answer(self, query: str, reasoning_trace: List[str], stream: bool = False):
+        """Generate final answer based on reasoning trace.
+        
+        Args:
+            query: User query
+            reasoning_trace: List of reasoning steps
+            stream: If True, yields chunks as they're generated
+        """
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(reasoning_trace))
 
         messages = [
@@ -108,4 +137,4 @@ Present your reasoning as a numbered list."""
             ),
         ]
 
-        return self.llm.generate(messages)
+        return self.llm.generate(messages, stream=stream)

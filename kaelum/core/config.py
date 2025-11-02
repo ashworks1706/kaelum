@@ -34,7 +34,7 @@ class MCPConfig(BaseModel):
     reasoning_llm: LLMConfig = Field(default_factory=LLMConfig)
     
     # Reflection settings
-    max_reflection_iterations: int = Field(default=2, ge=1, le=5)
+    max_reflection_iterations: int = Field(default=2, ge=0, le=5)
     
     # Verification settings
     use_symbolic_verification: bool = Field(default=True)

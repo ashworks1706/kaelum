@@ -66,8 +66,39 @@ def enhance(query: str) -> str:
         set_reasoning_model()
     
     result = _mcp.infer(query)
-    trace = "\n".join(f"{i+1}. {s}" for i, s in enumerate(result["trace"]))
-    return f"{result['final']}\n\nReasoning:\n{trace}"
+    
+    # Clean up the output
+    final = result["final"].strip()
+    trace = result["trace"]
+    
+    # Format output cleanly
+    output = f"{final}\n\nReasoning:"
+    for i, step in enumerate(trace, 1):
+        # Clean each step
+        step_clean = step.strip().replace('\n', ' ')
+        output += f"\n{i}. {step_clean}"
+    
+    return output
 
 
-__all__ = ["enhance", "set_reasoning_model"]
+def enhance_stream(query: str):
+    """
+    Enhance reasoning for a query with streaming output.
+    
+    Args:
+        query: User's question
+    
+    Yields:
+        Chunks of the response as they're generated
+    """
+    global _mcp
+    
+    if _mcp is None:
+        set_reasoning_model()
+    
+    # Stream the response
+    for chunk in _mcp.infer(query, stream=True):
+        yield chunk
+
+
+__all__ = ["enhance", "enhance_stream", "set_reasoning_model"]
