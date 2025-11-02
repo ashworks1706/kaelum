@@ -1,25 +1,16 @@
 """KaelumAI - Local reasoning models as cognitive middleware for commercial LLMs."""
 
 from typing import Optional, Dict, Any
-from kaelum.core.config import LLMConfig, MCPConfig
-from kaelum.runtime.orchestrator import MCP
+from kaelum.core.config import KaelumConfig, LLMConfig
+from kaelum.runtime.orchestrator import KaelumOrchestrator
 from kaelum.core.tools import get_kaelum_function_schema
-
-# Plugin system
-from kaelum.plugins import (
-    KaelumPlugin,
-    ReasoningPlugin,
-    PlanningPlugin,
-    RoutingPlugin,
-    VisionPlugin
-)
 
 # Infrastructure
 from kaelum.core.metrics import CostTracker
 from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
 
 # Global orchestrator with verification + reflection
-_orchestrator: Optional[MCP] = None
+_orchestrator: Optional[KaelumOrchestrator] = None
 
 
 def set_reasoning_model(
@@ -53,7 +44,7 @@ def set_reasoning_model(
     """
     global _orchestrator
     
-    config = MCPConfig(
+    config = KaelumConfig(
         reasoning_llm=LLMConfig(
             base_url=base_url,
             model=model,
@@ -66,7 +57,7 @@ def set_reasoning_model(
         use_factual_verification=use_factual_verification,
     )
     
-    _orchestrator = MCP(
+    _orchestrator = KaelumOrchestrator(
         config, 
         rag_adapter=rag_adapter,
         reasoning_system_prompt=reasoning_system_prompt,

@@ -23,8 +23,8 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=2048, ge=1, le=128000)
 
 
-class MCPConfig(BaseModel):
-    """KaelumAI configuration."""
+class KaelumConfig(BaseModel):
+    """KaelumAI orchestrator configuration."""
     
     reasoning_llm: LLMConfig = Field(default_factory=LLMConfig)
     max_reflection_iterations: int = Field(default=2, ge=0, le=5)

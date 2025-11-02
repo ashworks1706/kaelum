@@ -1,16 +1,16 @@
-"""MCP Runtime Orchestrator."""
+"""Kaelum Runtime Orchestrator."""
 
 from typing import Dict, List
-from kaelum.core.config import MCPConfig
+from kaelum.core.config import KaelumConfig
 from kaelum.core.reasoning import LLMClient, ReasoningGenerator
 from kaelum.core.reflection import ReflectionEngine
 from kaelum.core.verification import VerificationEngine
 
 
-class MCP:
-    """Modular Cognitive Processor."""
+class KaelumOrchestrator:
+    """Orchestrates reasoning pipeline: Generate → Verify → Reflect → Answer"""
 
-    def __init__(self, config: MCPConfig, rag_adapter=None, reasoning_system_prompt=None, reasoning_user_template=None):
+    def __init__(self, config: KaelumConfig, rag_adapter=None, reasoning_system_prompt=None, reasoning_user_template=None):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.generator = ReasoningGenerator(
