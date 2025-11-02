@@ -167,13 +167,6 @@ __all__ = [
     "kaelum_enhance_reasoning",
     "get_function_schema",
     
-    # Plugin system (Phase 1-3)
-    "KaelumPlugin",
-    "ReasoningPlugin",
-    "PlanningPlugin",
-    "RoutingPlugin",
-    "VisionPlugin",
-    
     # Infrastructure
     "CostTracker",
     "ModelRegistry",
