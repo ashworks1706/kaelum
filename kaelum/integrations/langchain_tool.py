@@ -3,47 +3,37 @@
 from typing import Optional, Type
 from pydantic import BaseModel, Field
 from kaelum import kaelum_enhance_reasoning
-from langchain.tools import BaseTool
-from langchain.callbacks.manager import CallbackManagerForToolRun
+from langchain_core.tools import BaseTool
+from langchain_core.callbacks.manager import CallbackManagerForToolRun
 
 class KaelumReasoningInput(BaseModel):
     """Input schema for Kaelum reasoning tool."""
-    query: str = Field(description="The question or problem that needs reasoning enhancement")
+    query: str = Field(
+        description="The question or problem requiring step-by-step reasoning. "
+        "Best for: math problems, logical puzzles, multi-step analysis, complex decision-making."
+    )
     domain: Optional[str] = Field(
         default="general",
-        description="Optional domain hint: math, logic, code, science, or general"
+        description="Domain context for verification: 'math' (enables symbolic verification), "
+        "'logic', 'code', 'science', or 'general'. Use 'math' for equations and calculations."
     )
 
 
 class KaelumReasoningTool(BaseTool):
-    """
-    LangChain tool for Kaelum reasoning enhancement.
-    
-    Usage:
-        from kaelum.integrations.langchain_tool import KaelumReasoningTool
-        from kaelum import set_reasoning_model
-        
-        # Configure Kaelum
-        set_reasoning_model(
-            base_url="http://localhost:8000/v1",
-            model="TinyLlama/TinyLlama-1.1B-Chat-v0.3"
-        )
-        
-        # Create tool
-        kaelum_tool = KaelumReasoningTool()
-        
-        # Use in agent
-        tools = [kaelum_tool]
-        agent = initialize_agent(tools, llm, agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION)
-    """
     
     name: str = "kaelum_reasoning"
     description: str = (
-        "Enhances reasoning for complex questions by breaking them down into "
-        "logical steps. Use this when you need to solve math problems, "
-        "logical puzzles, multi-step reasoning tasks, or any question that "
-        "requires careful step-by-step thinking. Returns structured reasoning "
-        "steps and a suggested approach."
+        "Calls a local reasoning engine (KaelumAI) to generate verified step-by-step reasoning traces. "
+        "Use this tool when facing complex problems that require careful logical breakdown: "
+        "mathematical calculations, multi-step word problems, logical puzzles, algorithmic thinking, "
+        "or any task where step-by-step verification improves accuracy. "
+        "\n\n"
+        "The tool returns: (1) verified reasoning steps from a local LLM, (2) symbolic verification results "
+        "for math operations, and (3) a suggested approach. You should then use these verified steps to "
+        "construct your final answer. "
+        "\n\n"
+        "When to use: Problems requiring >2 logical steps, math with equations, situations where accuracy "
+        "is critical and you need verified intermediate steps."
     )
     args_schema: Type[BaseModel] = KaelumReasoningInput
     return_direct: bool = False
@@ -54,16 +44,21 @@ class KaelumReasoningTool(BaseTool):
         domain: str = "general",
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
-        """Execute Kaelum reasoning."""
         result = kaelum_enhance_reasoning(query=query, domain=domain)
         
-        # Format output for LangChain
-        output = "🧠 Kaelum Reasoning Steps:\n\n"
-        for i, step in enumerate(result["reasoning_steps"], 1):
-            output += f"{i}. {step}\n"
+        # Format output for commercial LLM consumption
+        output = "═══ KAELUM VERIFIED REASONING ═══\n\n"
+        output += f"Query: {query}\n"
+        output += f"Domain: {domain}\n\n"
         
-        output += f"\n💡 Suggested Approach:\n{result['suggested_approach']}\n"
-        output += f"\n📊 Total Steps: {result['reasoning_count']}"
+        output += "Step-by-Step Reasoning (Verified):\n"
+        for i, step in enumerate(result["reasoning_steps"], 1):
+            output += f"  {i}. {step}\n"
+        
+        output += f"\n💡 Suggested Final Approach:\n{result['suggested_approach']}\n"
+        output += f"\n📊 Reasoning Depth: {result['reasoning_count']} steps\n"
+        output += "\nℹ️  Note: These steps have been verified by Kaelum's symbolic and consistency checkers.\n"
+        output += "Use them to construct an accurate, well-reasoned final answer."
         
         return output
     
@@ -79,37 +74,21 @@ class KaelumReasoningTool(BaseTool):
 
 # Simple function-based tool creator (alternative to class)
 def create_kaelum_tool():
-    """
-    Create a simple LangChain Tool instance for Kaelum.
-    
-    Returns:
-        A LangChain Tool that can be used with agents
-    
-    Usage:
-        from langchain.agents import initialize_agent, AgentType
-        from kaelum.integrations.langchain_tool import create_kaelum_tool
-        from kaelum import set_reasoning_model
-        
-        set_reasoning_model(
-            base_url="http://localhost:8000/v1",
-            model="TinyLlama/TinyLlama-1.1B-Chat-v0.3"
-        )
-        
-        kaelum_tool = create_kaelum_tool()
-        agent = initialize_agent([kaelum_tool], llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
-    """
     try:
         from langchain.tools import Tool
     except ImportError:
         raise ImportError("LangChain not installed. Install with: pip install langchain")
     
     def kaelum_func(query: str) -> str:
+        """Wrapper function for Kaelum reasoning."""
         result = kaelum_enhance_reasoning(query=query, domain="general")
         
-        output = "Reasoning Steps:\n"
+        output = "═══ KAELUM VERIFIED REASONING ═══\n\n"
+        output += "Reasoning Steps:\n"
         for i, step in enumerate(result["reasoning_steps"], 1):
             output += f"{i}. {step}\n"
-        output += f"\nSuggested Approach: {result['suggested_approach']}"
+        output += f"\nSuggested Approach: {result['suggested_approach']}\n"
+        output += f"Steps: {result['reasoning_count']}"
         
         return output
     
@@ -117,8 +96,9 @@ def create_kaelum_tool():
         name="KaelumReasoning",
         func=kaelum_func,
         description=(
-            "Enhances reasoning for complex questions by breaking them down into "
-            "logical steps. Use for math, logic, multi-step problems. "
-            "Input: the question needing reasoning enhancement."
+            "Generates verified step-by-step reasoning using a local LLM with symbolic verification. "
+            "Use for math problems, logical puzzles, multi-step analysis where accuracy matters. "
+            "Input should be the question needing detailed reasoning. "
+            "Returns verified reasoning steps and a suggested approach."
         )
     )
