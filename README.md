@@ -123,19 +123,20 @@ By externalizing reasoning, Kaelum gains control over what happens *between* ste
 
 ##### Our LLM List for this step (so far)
 
-| Name                       | Size   | CoT Score (/10) | Latency Score (/10) | Cost Score (/10) | Tool Use Score (/10) | Speciality              | Reason                                                              |
-| -------------------------- | ------ | --------------- | ------------------- | ---------------- | -------------------- | ----------------------- | ------------------------------------------------------------------- |
-| **Llama 3.2 0.5 B**        | 0.5 B  | 3.5             | **10**              | **10**           | 3                    | ultra-light baseline    | Tests minimal reasoning floor; blazing fast but very weak logic.    |
-| **Qwen 2.5 0.5 B**         | 0.5 B  | 4.2             | 9.5                 | 9.5              | 4                    | ultra-cheap generalist  | Slightly smarter than Llama 0.5 B; strong structural formatting.    |
-| **Llama 3.2 1.5 B**        | 1.5 B  | 4.8             | 9                   | 9                | 4                    | small generalist        | Cheap & fast; useful baseline for reasoning-vs-latency curves.      |
-| **Qwen 2.5 1.5 B**         | 1.5 B  | 5.4             | 9                   | 9                | 5                    | small balanced          | Better CoT than Llama 1.5 B; possible controller fine-tune sandbox. |
-| **Phi-3 Mini**             | ~3.8 B | 6.5             | 8                   | 8.5              | 6                    | efficient mid-size      | Ideal Kaelum-Lite model: sub-4 GB VRAM, fast, good logic for cost.  |
-| **Mistral 7 B Instruct**   | 7 B    | 7.5             | 7                   | 7                | 7                    | general reasoning       | Stable Apache-2.0 baseline; balanced across reasoning and cost.     |
-| **Qwen 2.5 7 B Instruct**  | 7 B    | **8.4**         | 6.8                 | 7                | **8**                | generalist + math       | ⭐ **Recommended base** — best reasoning & tool-use trade-off.       |
-| **Mathstral 7 B**          | 7 B    | 8.1             | 6.5                 | 6.5              | 5                    | math specialist         | Excels on GSM8K/MATH; perfect for Kaelum’s symbolic check mode.     |
-| **DeepSeek-Math 7 B**      | 7 B    | 7.9             | 6.5                 | 6.5              | 5                    | math specialist         | GRPO-trained math head; complementary to Mathstral.                 |
-| **Llama 3.1 8 B Instruct** | 8 B    | **8.6**         | 6                   | 6                | **8**                | high-quality generalist | Strongest small-model reasoning; slightly heavier VRAM (≈8 GB Q4).  |
-| **Gemma 2 9 B**            | 9 B    | 8.5             | 5.8                 | 5.5              | 8                    | Google-tier quality     | Upper-bound reference for local inference performance ceiling.      |
+| Name                       | Size   | CoT Score (/10) | Latency Score (/10) | Cost Score (/10) | Tool Use Score (/10) | Speciality              | Reason                                                                                                  |
+| -------------------------- | ------ | --------------- | ------------------- | ---------------- | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Llama 3.2 0.5 B**        | 0.5 B  | 3.5             | **10**              | **10**           | 3                    | ultra-light baseline    | Tests minimal reasoning floor; blazing fast but very weak logic.                                        |
+| **Qwen 2.5 0.5 B**         | 0.5 B  | 4.2             | 9.5                 | 9.5              | 4                    | ultra-cheap generalist  | Slightly smarter than Llama 0.5 B; strong structural formatting.                                        |
+| **TinyLlama 1.1 B**        | 1.1 B  | 4.6             | 9.2                 | 9.3              | 4                    | efficient micro-model   | 1 B-scale open model (Apache 2.0); optimized for speed & low VRAM; solid baseline for controller tests. |
+| **Llama 3.2 1.5 B**        | 1.5 B  | 4.8             | 9                   | 9                | 4                    | small generalist        | Cheap & fast; useful baseline for reasoning-vs-latency curves.                                          |
+| **Qwen 2.5 1.5 B**         | 1.5 B  | 5.4             | 9                   | 9                | 5                    | small balanced          | Better CoT than Llama 1.5 B; possible controller fine-tune sandbox.                                     |
+| **Phi-3 Mini**             | ~3.8 B | 6.5             | 8                   | 8.5              | 6                    | efficient mid-size      | Ideal Kaelum-Lite model: sub-4 GB VRAM, fast, good logic for cost.                                      |
+| **Mistral 7 B Instruct**   | 7 B    | 7.5             | 7                   | 7                | 7                    | general reasoning       | Stable Apache-2.0 baseline; balanced across reasoning and cost.                                         |
+| **Qwen 2.5 7 B Instruct**  | 7 B    | **8.4**         | 6.8                 | 7                | **8**                | generalist + math       | ⭐ **Recommended base** — best reasoning & tool-use trade-off.                                           |
+| **Mathstral 7 B**          | 7 B    | 8.1             | 6.5                 | 6.5              | 5                    | math specialist         | Excels on GSM8K/MATH; perfect for Kaelum’s symbolic check mode.                                         |
+| **DeepSeek-Math 7 B**      | 7 B    | 7.9             | 6.5                 | 6.5              | 5                    | math specialist         | GRPO-trained math head; complementary to Mathstral.                                                     |
+| **Llama 3.1 8 B Instruct** | 8 B    | **8.6**         | 6                   | 6                | **8**                | high-quality generalist | Strongest small-model reasoning; slightly heavier VRAM (≈ 8 GB Q4).                                     |
+| **Gemma 2 9 B**            | 9 B    | 8.5             | 5.8                 | 5.5              | 8                    | Google-tier quality     | Upper-bound reference for local inference performance ceiling.                                          |
 
 ---
 
