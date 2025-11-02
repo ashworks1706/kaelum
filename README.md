@@ -36,7 +36,7 @@ KaelumAI is a **reasoning middleware** that enhances commercial LLMs (GPT-4, Gem
 
 ---
 
-## 11111111�️ Roadmap
+## Roadmap
 
 ### Phase 1: Domain-Specific Reasoning (Current)
 **Goal**: Best-in-class local reasoning with verification  
