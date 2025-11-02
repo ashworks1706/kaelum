@@ -149,29 +149,248 @@ python -m vllm.entrypoints.openai.api_server \
 
 ---
 
-## 🧱 Architecture Snapshot
+## 🔄 How Kaelum Works
+
+### Complete Workflow
 
 ```
-
-User Query
-   ↓
-Context Builder (RAG optional, cacheable)
-   ↓
-Reasoner (Base LLM; emits step-tagged trace)
-   ↓
-Verifier (Symbolic math/logic + Factual RAG + Consistency)
-   ↓
-Reflexor (bounded self-correction if confidence < τ)
-   ↓
-Confidence Engine → {answer, confidence, verified_by, trace_id}
-
+User Application (LangChain, Custom Script, etc.)
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  Kaelum Public API (kaelum/__init__.py)             │
+│  • set_reasoning_model()                            │
+│  • kaelum_enhance_reasoning()                       │
+└─────────────────┬───────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  MCP Orchestrator - Main Coordinator                │
+│  Workflow: Generate → Verify → Reflect → Return     │
+└─────────────────┬───────────────────────────────────┘
+                  │
+        ┌─────────┼─────────┐
+        ▼         ▼         ▼
+   ┏━━━━━━━┓ ┏━━━━━━━┓ ┏━━━━━━━┓
+   ┃ STEP 1┃ ┃ STEP 2┃ ┃ STEP 3┃
+   ┃Reason ┃ ┃ Verify┃ ┃Reflect┃
+   ┗━━━━━━━┛ ┗━━━━━━━┛ ┗━━━━━━━┛
+        │         │         │
+        ▼         ▼         ▼
+   Generate    Check      Fix
+   Steps     Correctness  Errors
+        │         │         │
+        └─────────┴─────────┘
+                  │
+                  ▼
+         Final Verified Answer
 ```
 
-**Design principles:** small-model first, parallel verifiers, bounded loops, observable traces, sub-500ms overhead target.
+### Step-by-Step Execution
+
+**Example Query:** *"If I buy 3 items at $12.99 each with 8% tax, what's the total?"*
+
+#### **Step 1: Initialize** (`set_reasoning_model()`)
+```python
+set_reasoning_model(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    base_url="http://localhost:8000/v1"
+)
+```
+
+**What happens:**
+1. Creates `LLMConfig` with model parameters
+2. Instantiates `LLMClient` (OpenAI-compatible)
+3. Builds `ReasoningGenerator` with custom prompts
+4. Creates `VerificationEngine` for validation
+5. Creates `ReflectionEngine` for self-correction
+6. Assembles `MCPOrchestrator` to coordinate all components
+7. Stores globally for reuse
 
 ---
 
-### 🧩 **1. Reasoner — Step-Tagged Thought Generation**
+#### **Step 2: Generate Reasoning** (`ReasoningGenerator`)
+```python
+result = kaelum_enhance_reasoning(query)
+```
+
+**Internal flow:**
+```
+Query → Format with system prompt & template
+      → POST to http://localhost:8000/v1/chat/completions
+      → vLLM processes with Qwen 7B model
+      → Returns: "1. Calculate price: 3 × $12.99 = $38.97
+                  2. Calculate tax: $38.97 × 0.08 = $3.12
+                  3. Add tax to price: $38.97 + $3.12 = $42.09"
+      → Parse into steps list
+```
+
+**Output:**
+```python
+reasoning_steps = [
+    "Calculate price: 3 × $12.99 = $38.97",
+    "Calculate tax: $38.97 × 0.08 = $3.12",
+    "Add tax to price: $38.97 + $3.12 = $42.09"
+]
+```
+
+---
+
+#### **Step 3: Verify Steps** (`VerificationEngine`)
+
+**Three parallel checks:**
+
+**A. Symbolic Verification** (using SymPy)
+```python
+Check: 3 × 12.99 = 38.97  ✓
+Check: 38.97 × 0.08 = 3.12  ✓
+Check: 38.97 + 3.12 = 42.09  ✓
+```
+
+**B. Consistency Check**
+```python
+Step 1 uses values from query ✓
+Step 2 uses output from Step 1 ✓
+Step 3 uses outputs from Steps 1 & 2 ✓
+No contradictions found ✓
+```
+
+**C. Logic Chain Validation**
+```python
+Each step logically follows from previous ✓
+Final answer addresses original query ✓
+```
+
+**Output:**
+```python
+verification_result = {
+    "passed": True,
+    "checks": {
+        "symbolic_math": True,
+        "consistency": True,
+        "logic_chain": True
+    },
+    "errors": []
+}
+```
+
+---
+
+#### **Step 4: Reflect (if needed)** (`ReflectionEngine`)
+
+**Triggered when:** `verification_result["passed"] == False`
+
+**Example failure scenario:**
+```python
+# If Step 2 had wrong calculation: $38.97 × 0.08 = $2.50 ✗
+```
+
+**Reflection process:**
+```
+1. Identify failing step: "Step 2 math error"
+2. Prompt LLM: "You calculated $2.50 but verification shows $3.12. 
+                Recalculate $38.97 × 0.08"
+3. LLM generates corrected step
+4. Re-verify corrected reasoning
+5. Continue or try again (max 2 iterations)
+```
+
+**Output:**
+```python
+reflection_result = {
+    "corrected_steps": [...],
+    "corrections_made": 1,
+    "confidence": 0.95
+}
+```
+
+---
+
+#### **Step 5: Generate Final Answer** (`ReasoningGenerator.generate_answer()`)
+
+```python
+Input:
+  Query: "If I buy 3 items..."
+  Reasoning: 
+    1. Calculate price: $38.97
+    2. Calculate tax: $3.12
+    3. Add tax: $42.09
+    
+LLM generates:
+  "The total cost is $42.09"
+```
+
+---
+
+#### **Step 6: Return Complete Result**
+
+```python
+{
+    "reasoning_steps": [
+        "Calculate price: 3 × $12.99 = $38.97",
+        "Calculate tax: $38.97 × 0.08 = $3.12",
+        "Add tax to price: $38.97 + $3.12 = $42.09"
+    ],
+    "verification": {
+        "passed": True,
+        "checks": {"symbolic_math": True, "consistency": True, "logic_chain": True}
+    },
+    "reflection": None,  # Not needed - verification passed
+    "final_answer": "The total cost is $42.09"
+}
+```
+
+---
+
+## 🧱 Architecture Components
+
+## 🧱 Architecture Components
+
+### Core Files & Their Roles
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `kaelum/__init__.py` | Public API | `set_reasoning_model()`, `kaelum_enhance_reasoning()` |
+| `kaelum/core/mcp.py` | Main orchestrator | Coordinates Generate → Verify → Reflect workflow |
+| `kaelum/core/reasoning.py` | LLM communication | `LLMClient`, `ReasoningGenerator` |
+| `kaelum/core/verification.py` | Validation engine | Symbolic, consistency, logic checks |
+| `kaelum/core/reflection.py` | Error correction | Self-correction with bounded iterations |
+| `kaelum/plugins/reasoning.py` | Reasoning plugin | Async reasoning with metrics |
+| `kaelum/plugins/planning.py` | Planning plugin (Phase 2) | Task decomposition |
+| `kaelum/plugins/routing.py` | Router plugin (Phase 2) | Tool selection |
+| `kaelum/core/metrics.py` | Cost tracking | Real-time cost analysis |
+| `kaelum/core/registry.py` | Model management | Domain-specific model registry |
+
+### Plugin System Architecture
+
+```python
+# Base plugin interface
+class KaelumPlugin(ABC):
+    @abstractmethod
+    async def process(self, input_data: Any) -> Any:
+        """Process input and return result."""
+        pass
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Return plugin metrics (tokens, latency, cost)."""
+        pass
+
+# Example: Reasoning Plugin
+reasoning = ReasoningPlugin(
+    model_id="Qwen/Qwen2.5-7B-Instruct",
+    base_url="http://localhost:8000/v1"
+)
+result = await reasoning.process("Solve 2+2")
+```
+
+**Design principles:** 
+- Small-model first (3-8B optimized)
+- Parallel verification layers
+- Bounded reflection loops (max 2 iterations)
+- Observable traces for debugging
+- Sub-500ms latency target
+
+---
 
 **Purpose:**
 The Reasoner is the heart of Kaelum’s inference pipeline. It wraps the base LLM (e.g., Llama 3.2 3B, Qwen 2.5 7B, or Mistral 7B) and standardizes how it produces reasoning traces. Instead of asking the model to “just give an answer,” Kaelum prompts it to *think out loud* in a structured way.
