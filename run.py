@@ -11,18 +11,25 @@ Start vLLM server first (for 6GB GPU):
 
 For larger GPUs (8GB+), you can remove the memory limits.
 """
-
+import os
 from kaelum import enhance_stream, set_reasoning_model
 
 set_reasoning_model(
     base_url="http://localhost:8000/v1",
     model="Qwen/Qwen2.5-1.5B-Instruct",
+    # model="Qwen/Qwen2.5-1.5B-Instruct",
     # model="TinyLlama/TinyLlama-1.1B-Chat-v0.3",
-    temperature=0.3,
+    temperature=0.7,
     max_tokens=512,
 )
 
 query = "What is 25% of 80?"
+
+# get txt file
+
+with open("demo_query.txt", "r") as f:
+    query = "Summarize this: " + f.read().strip()
+
 print(f"Query: {query}\n")
 
 try:
