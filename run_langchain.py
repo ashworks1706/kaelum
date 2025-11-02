@@ -199,6 +199,10 @@ Present reasoning as numbered steps."""
         max_tokens=512,
         reasoning_system_prompt=reasoning_system,
         reasoning_user_template=reasoning_template,
+            use_symbolic_verification=True,
+    use_factual_verification=False,
+    max_reflection_iterations=2
+
     )
     
     reasoning_tool = KaelumReasoningTool()

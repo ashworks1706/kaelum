@@ -50,14 +50,14 @@ class MCP:
     
     def _infer_stream(self, query: str):
         """Streaming inference."""
-        yield "🧠 Generating reasoning trace...\n\n"
+        yield "🧠 [CoT]...\n\n"
         
         trace_text = ""
         for chunk in self.generator.generate_reasoning(query, stream=True):
             trace_text += chunk
             yield chunk
         
-        yield "\n\n✓ Reasoning complete. Generating answer...\n\n"
+        yield "\n\n✓ [KAELUM]\n\n"
         
         trace = []
         for line in trace_text.strip().split("\n"):

@@ -18,8 +18,8 @@ from kaelum.plugins import (
 from kaelum.core.metrics import CostTracker
 from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
 
-# YOUR reasoning model
-_mcp: Optional[MCP] = None
+# Global orchestrator with verification + reflection
+_orchestrator: Optional[MCP] = None
 
 
 def set_reasoning_model(
@@ -36,29 +36,22 @@ def set_reasoning_model(
     reasoning_user_template: Optional[str] = None,
 ):
     """
-    Configure reasoning model with any OpenAI-compatible endpoint.
+    Configure reasoning model with verification and reflection.
     
     Args:
         base_url: API endpoint (default: vLLM at localhost:8000/v1)
-                  Examples:
-                  - vLLM: "http://localhost:8000/v1"
-                  - LM Studio: "http://localhost:1234/v1"
-                  - Any OpenAI-compatible server
         model: Model name (full HuggingFace path for vLLM)
         api_key: API key if required (optional for local servers)
         temperature: Sampling temperature (0.0-2.0)
-        max_tokens: Max tokens to generate (1-128000)
+        max_tokens: Max tokens to generate
         max_reflection_iterations: Self-correction iterations (0-5)
         use_symbolic_verification: Enable math verification with SymPy
         use_factual_verification: Enable RAG-based fact checking
         rag_adapter: RAG adapter instance (required if use_factual_verification=True)
         reasoning_system_prompt: Custom system prompt for reasoning model
-                                 Default: "You are a reasoning assistant. Break down problems into clear, logical steps.\nPresent your reasoning as a numbered list."
         reasoning_user_template: Custom user prompt template. Use {query} placeholder.
-                                Default: "{query}" (passes query directly)
-                                Example: "Think step-by-step about: {query}"
     """
-    global _mcp
+    global _orchestrator
     
     config = MCPConfig(
         reasoning_llm=LLMConfig(
@@ -72,7 +65,8 @@ def set_reasoning_model(
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
     )
-    _mcp = MCP(
+    
+    _orchestrator = MCP(
         config, 
         rag_adapter=rag_adapter,
         reasoning_system_prompt=reasoning_system_prompt,
@@ -82,7 +76,7 @@ def set_reasoning_model(
 
 def enhance(query: str) -> str:
     """
-    Enhance reasoning for a query.
+    Enhance reasoning for a query with verification and reflection.
     
     Args:
         query: User's question
@@ -90,21 +84,20 @@ def enhance(query: str) -> str:
     Returns:
         Answer with reasoning trace
     """
-    global _mcp
+    global _orchestrator
     
-    if _mcp is None:
+    if _orchestrator is None:
         set_reasoning_model()
     
-    result = _mcp.infer(query)
+    # Run through Generate → Verify → Reflect → Answer pipeline
+    result = _orchestrator.infer(query, stream=False)
     
-    # Clean up the output
+    # Format output cleanly
     final = result["final"].strip()
     trace = result["trace"]
     
-    # Format output cleanly
     output = f"{final}\n\nReasoning:"
     for i, step in enumerate(trace, 1):
-        # Clean each step
         step_clean = step.strip().replace('\n', ' ')
         output += f"\n{i}. {step_clean}"
     
@@ -121,20 +114,20 @@ def enhance_stream(query: str):
     Yields:
         Chunks of the response as they're generated
     """
-    global _mcp
+    global _orchestrator
     
-    if _mcp is None:
+    if _orchestrator is None:
         set_reasoning_model()
     
-    # Stream the response
-    for chunk in _mcp.infer(query, stream=True):
+    # Stream the response through the pipeline
+    for chunk in _orchestrator.infer(query, stream=True):
         yield chunk
 
 
 def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, Any]:
     """
     Function for commercial LLMs to call for reasoning enhancement.
-    This is designed to be used as a tool/function by LLMs like Gemini, GPT-4, Claude, etc.
+    Uses full pipeline: Generate → Verify → Reflect → Answer
     
     Args:
         query: The question or problem that needs reasoning enhancement
@@ -143,12 +136,13 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
     Returns:
         Dictionary with reasoning trace and suggested answer structure
     """
-    global _mcp
+    global _orchestrator
     
-    if _mcp is None:
+    if _orchestrator is None:
         set_reasoning_model()
     
-    result = _mcp.infer(query, stream=False)
+    # Run through full verification + reflection pipeline
+    result = _orchestrator.infer(query, stream=False)
     
     # Format for function calling response
     return {
@@ -156,7 +150,7 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
         "reasoning_count": len(result["trace"]),
         "suggested_approach": result["final"],
         "domain": domain,
-        "note": "Use these reasoning steps to formulate your comprehensive answer"
+        "note": "Use these verified reasoning steps to formulate your comprehensive answer"
     }
 
 
