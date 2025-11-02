@@ -37,33 +37,3 @@ def get_kaelum_function_schema() -> Dict[str, Any]:
             "required": ["query"]
         }
     }
-
-
-def get_gemini_function_schema() -> Dict[str, Any]:
-    """
-    Get the function schema specifically formatted for Google Gemini.
-    Gemini uses a slightly different format than OpenAI.
-    """
-    return {
-        "name": "kaelum_enhance_reasoning",
-        "description": (
-            "Enhances reasoning for complex questions by breaking them down into "
-            "logical steps. Use this when you need to solve math problems, "
-            "logical puzzles, multi-step reasoning tasks, or any question that "
-            "requires careful step-by-step thinking."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "query": {
-                    "type": "STRING",
-                    "description": "The question or problem that needs reasoning enhancement"
-                },
-                "domain": {
-                    "type": "STRING",
-                    "description": "Optional domain hint: math, logic, code, science, or general"
-                }
-            },
-            "required": ["query"]
-        }
-    }

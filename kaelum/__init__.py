@@ -3,7 +3,7 @@
 from typing import Optional, Dict, Any
 from kaelum.core.config import LLMConfig, MCPConfig
 from kaelum.runtime.orchestrator import MCP
-from kaelum.core.tools import get_kaelum_function_schema, get_gemini_function_schema
+from kaelum.core.tools import get_kaelum_function_schema
 
 # Plugin system
 from kaelum.plugins import (
@@ -171,8 +171,6 @@ def get_function_schema(format: str = "openai") -> Dict[str, Any]:
     Returns:
         Function schema that can be passed to the LLM
     """
-    if format.lower() == "gemini":
-        return get_gemini_function_schema()
     return get_kaelum_function_schema()
 
 
