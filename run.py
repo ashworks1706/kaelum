@@ -141,16 +141,11 @@ reasoning_template = "Solve this problem step-by-step, showing all your work:\n\
 
 # Configure Kaelum
 set_reasoning_model(
-    base_url="http://localhost:8000/v1",
-    model="Qwen/Qwen2.5-1.5B-Instruct",
- # Change to test different models
-    temperature=0.7,
-    max_tokens=2048,
+    base_url="http://localhost:11434/v1",  # Ollama default
+    model="qwen3:4b",                        # Or your chosen model
     use_symbolic_verification=True,
     use_factual_verification=False,
-    max_reflection_iterations=2,
-    reasoning_system_prompt=reasoning_system,
-    reasoning_user_template=reasoning_template,
+    debug_verification=True  # Enable debug logging for math verification
 )
 
 

@@ -27,7 +27,8 @@ class KaelumOrchestrator:
         self.verification = VerificationEngine(
             use_symbolic=config.use_symbolic_verification,
             use_factual_check=config.use_factual_verification,
-            rag_adapter=rag_adapter
+            rag_adapter=rag_adapter,
+            debug=config.debug_verification
         )
         self.metrics = CostTracker()
         

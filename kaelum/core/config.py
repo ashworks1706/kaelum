@@ -30,6 +30,7 @@ class KaelumConfig(BaseModel):
     max_reflection_iterations: int = Field(default=2, ge=0, le=5)
     use_symbolic_verification: bool = Field(default=True)
     use_factual_verification: bool = Field(default=False)
+    debug_verification: bool = Field(default=False, description="Enable debug logging for verification")
     
     class Config:
         arbitrary_types_allowed = True

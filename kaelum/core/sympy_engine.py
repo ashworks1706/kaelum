@@ -21,6 +21,19 @@ from typing import Sequence, List, Tuple, Union, Optional
 class SympyEngine:
     """Collection of static helpers wrapping SymPy functionality."""
 
+    debug = False  # Class-level debug flag
+    
+    @classmethod
+    def set_debug(cls, enabled: bool):
+        """Enable or disable debug logging."""
+        cls.debug = enabled
+    
+    @classmethod
+    def _log_debug(cls, message: str):
+        """Print debug message if debug mode is enabled."""
+        if cls.debug:
+            print(f"    [SYMPY ENGINE] {message}")
+
     # -------------------- Parsing Helpers --------------------
     @staticmethod
     def _normalize_equation(equation: str) -> Tuple[str, str]:
@@ -41,10 +54,18 @@ class SympyEngine:
     @classmethod
     def check_equivalence(cls, expression: str) -> bool:
         """Check symbolic equivalence for 'A = B' or 'A == B'."""
+        cls._log_debug(f"→ check_equivalence('{expression}')")
         left, right = cls._normalize_equation(expression)
+        cls._log_debug(f"  Normalized: LHS='{left}' RHS='{right}'")
         left_expr = cls._sympify(left)
+        cls._log_debug(f"  Parsed LHS: {left_expr}")
         right_expr = cls._sympify(right)
-        return sp.simplify(left_expr - right_expr) == 0
+        cls._log_debug(f"  Parsed RHS: {right_expr}")
+        diff = sp.simplify(left_expr - right_expr)
+        cls._log_debug(f"  Simplified(LHS - RHS): {diff}")
+        result = diff == 0
+        cls._log_debug(f"  Result: {result}")
+        return result
 
     @classmethod
     def solve_equation(cls, equation: str, solve_for: Optional[Sequence[str]] = None):
@@ -77,18 +98,28 @@ class SympyEngine:
           - ['x', 'y'] (∂/∂x then ∂/∂y)
           - [('x', 2), ('y', 1)] for higher-order derivatives.
         """
+        cls._log_debug(f"→ differentiate(expression='{expression}', variables={variables})")
         expr = cls._sympify(expression)
+        cls._log_debug(f"  Parsed expression: {expr}")
+        
         if isinstance(variables, str):
-            return sp.diff(expr, sp.Symbol(variables))
-        # Sequence
-        diff_args = []
-        for item in variables:
-            if isinstance(item, tuple):
-                var, order = item
-                diff_args.append((sp.Symbol(var), order))
-            else:
-                diff_args.append(sp.Symbol(item))
-        return sp.diff(expr, *diff_args)
+            cls._log_debug(f"  Computing d/d{variables}")
+            result = sp.diff(expr, sp.Symbol(variables))
+        else:
+            # Sequence
+            diff_args = []
+            for item in variables:
+                if isinstance(item, tuple):
+                    var, order = item
+                    diff_args.append((sp.Symbol(var), order))
+                    cls._log_debug(f"  Adding d^{order}/d{var}^{order}")
+                else:
+                    diff_args.append(sp.Symbol(item))
+                    cls._log_debug(f"  Adding d/d{item}")
+            result = sp.diff(expr, *diff_args)
+        
+        cls._log_debug(f"  Result: {result}")
+        return result
 
     @classmethod
     def integrate(
@@ -104,13 +135,22 @@ class SympyEngine:
           - mix of bounded and unbounded: ['x', ('y', 0, 2)]
         Multiple entries produce nested integrals: integrate(integrate(expr, x), (y,0,2)).
         """
+        cls._log_debug(f"→ integrate(expression='{expression}', variables={variables})")
         expr = cls._sympify(expression)
+        cls._log_debug(f"  Parsed expression: {expr}")
+        
         for item in variables:
             if isinstance(item, tuple):
                 var, a, b = item
+                cls._log_debug(f"  Computing ∫[{a} to {b}] ... d{var}")
                 expr = sp.integrate(expr, (sp.Symbol(var), a, b))
+                cls._log_debug(f"  Intermediate result: {expr}")
             else:
+                cls._log_debug(f"  Computing ∫ ... d{item}")
                 expr = sp.integrate(expr, sp.Symbol(item))
+                cls._log_debug(f"  Intermediate result: {expr}")
+        
+        cls._log_debug(f"  Final result: {expr}")
         return expr
 
     @classmethod
@@ -142,8 +182,10 @@ class SympyEngine:
         lhs examples accepted: d/dx(x**2), d/dx ( sin(x) ), diff(x**2, x)
         We normalize lhs into a diff() call and compare with rhs expression.
         """
+        cls._log_debug(f"→ verify_derivative(lhs='{lhs}', rhs='{rhs}')")
         lhs = lhs.strip()
         rhs = rhs.strip()
+        
         # Patterns: d/dx(...)
         if lhs.startswith('d/d'):
             # extract variable and inner expression
@@ -151,61 +193,109 @@ class SympyEngine:
                 after = lhs[3:]  # skip 'd/d'
                 var = after.split('(')[0].strip()
                 inner = lhs.split('(', 1)[1].rsplit(')', 1)[0]
-                computed = sp.diff(cls._sympify(inner), sp.Symbol(var))
-            except Exception:
+                cls._log_debug(f"  Detected d/d{var} pattern")
+                cls._log_debug(f"  Inner expression: '{inner}'")
+                inner_expr = cls._sympify(inner)
+                cls._log_debug(f"  Parsed inner: {inner_expr}")
+                cls._log_debug(f"  Computing derivative wrt {var}...")
+                computed = sp.diff(inner_expr, sp.Symbol(var))
+                cls._log_debug(f"  Computed derivative: {computed}")
+            except Exception as e:
+                cls._log_debug(f"  ⚠ Parse error (non-fatal): {e}")
                 return True  # Non fatal parsing; skip
         elif lhs.startswith('diff'):
             try:
                 inner = lhs[len('diff('):-1]  # remove diff( ... )
                 parts = [p.strip() for p in inner.split(',')]
+                cls._log_debug(f"  Detected diff(...) pattern")
+                cls._log_debug(f"  Parts: {parts}")
                 base = cls._sympify(parts[0])
+                cls._log_debug(f"  Base expression: {base}")
                 vars_ = [sp.Symbol(p) for p in parts[1:]]
+                cls._log_debug(f"  Variables: {[str(v) for v in vars_]}")
+                cls._log_debug(f"  Computing derivative...")
                 computed = sp.diff(base, *vars_)
-            except Exception:
+                cls._log_debug(f"  Computed derivative: {computed}")
+            except Exception as e:
+                cls._log_debug(f"  ⚠ Parse error (non-fatal): {e}")
                 return True
         else:
+            cls._log_debug(f"  Not a recognized derivative form, skipping")
             return True  # not a derivative form we handle here
+        
         try:
             rhs_expr = cls._sympify(rhs)
-            return sp.simplify(computed - rhs_expr) == 0
-        except Exception:
+            cls._log_debug(f"  Parsed expected result: {rhs_expr}")
+            diff = sp.simplify(computed - rhs_expr)
+            cls._log_debug(f"  Simplified(computed - expected): {diff}")
+            result = diff == 0
+            cls._log_debug(f"  Verification result: {result}")
+            return result
+        except Exception as e:
+            cls._log_debug(f"  ⚠ Comparison error (non-fatal): {e}")
             return True
 
     @classmethod
     def verify_integral(cls, lhs: str, rhs: str) -> bool:
         """Verify integral step for simple forms like ∫(expr)dx = result or integrate(expr, x)."""
+        cls._log_debug(f"→ verify_integral(lhs='{lhs}', rhs='{rhs}')")
         lhs = lhs.strip()
         rhs = rhs.strip()
+        
         if lhs.startswith('integrate'):
             try:
                 inner = lhs[len('integrate('):-1]
                 parts = [p.strip() for p in inner.split(',')]
+                cls._log_debug(f"  Detected integrate(...) pattern")
+                cls._log_debug(f"  Parts: {parts}")
                 base = cls._sympify(parts[0])
+                cls._log_debug(f"  Base expression: {base}")
                 vars_ = []
                 for p in parts[1:]:
                     if p.startswith('(') and p.endswith(')'):
                         vparts = p[1:-1].split(',')
                         if len(vparts) == 3:
-                            vars_.append((sp.Symbol(vparts[0].strip()), cls._sympify(vparts[1].strip()), cls._sympify(vparts[2].strip())))
+                            var_sym = sp.Symbol(vparts[0].strip())
+                            a = cls._sympify(vparts[1].strip())
+                            b = cls._sympify(vparts[2].strip())
+                            vars_.append((var_sym, a, b))
+                            cls._log_debug(f"  Integration variable (definite): ∫[{a} to {b}] d{var_sym}")
                         else:
                             vars_.append(sp.Symbol(vparts[0].strip()))
+                            cls._log_debug(f"  Integration variable (indefinite): ∫ d{vparts[0].strip()}")
                     else:
                         vars_.append(sp.Symbol(p))
+                        cls._log_debug(f"  Integration variable (indefinite): ∫ d{p}")
+                
                 computed = base
+                cls._log_debug(f"  Computing integral...")
                 for v in vars_:
                     if isinstance(v, tuple):
                         s, a, b = v
                         computed = sp.integrate(computed, (s, a, b))
+                        cls._log_debug(f"  After integrating wrt {s} from {a} to {b}: {computed}")
                     else:
                         computed = sp.integrate(computed, v)
-            except Exception:
+                        cls._log_debug(f"  After integrating wrt {v}: {computed}")
+                
+                cls._log_debug(f"  Final computed integral: {computed}")
+            except Exception as e:
+                cls._log_debug(f"  ⚠ Parse error (non-fatal): {e}")
                 return True
         else:
+            cls._log_debug(f"  Not a recognized integral form, skipping")
             return True
+        
         try:
             rhs_expr = cls._sympify(rhs)
-            return sp.simplify(computed - rhs_expr) == 0
-        except Exception:
+            cls._log_debug(f"  Parsed expected result: {rhs_expr}")
+            diff = sp.simplify(computed - rhs_expr)
+            cls._log_debug(f"  Simplified(computed - expected): {diff}")
+            result = diff == 0
+            cls._log_debug(f"  Verification result: {result}")
+            return result
+        except Exception as e:
+            cls._log_debug(f"  ⚠ Comparison error (non-fatal): {e}")
             return True
 
         
