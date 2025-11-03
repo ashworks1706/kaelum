@@ -15,7 +15,7 @@ _orchestrator: Optional[KaelumOrchestrator] = None
 
 
 def set_reasoning_model(
-    base_url: str = "http://localhost:8000/v1",
+    base_url: str = "http://localhost:11434/v1",
     model: str = "TinyLlama/TinyLlama-1.1B-Chat-v0.3",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
@@ -46,6 +46,8 @@ def set_reasoning_model(
         reasoning_user_template: Custom user prompt template. Use {query} placeholder.
     """
     global _orchestrator
+
+    print("Setting reasoning model to:", model)
     
     config = KaelumConfig(
         reasoning_llm=LLMConfig(
