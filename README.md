@@ -75,126 +75,48 @@ User Application (LangChain, Custom Script, etc.)
 │  Workflow: Generate → Verify → Reflect → Return     │
 └─────────────────┬───────────────────────────────────┘
                   │
-        ┌─────────┼─────────┐
-        ▼         ▼         ▼
-   ┏━━━━━━━┓ ┏━━━━━━━┓ ┏━━━━━━━┓
-   ┃ STEP 1┃ ┃ STEP 2┃ ┃ STEP 3┃
-   ┃Reason ┃ ┃ Verify┃ ┃Reflect┃
-   ┗━━━━━━━┛ ┗━━━━━━━┛ ┗━━━━━━━┛
-        │         │         │
-        ▼         ▼         ▼
-   Generate    Check      Fix
-   Steps     Correctness  Errors
-        │         │         │
-        └─────────┴─────────┘
-                  │
-                  ▼
-         Final Verified Answer
-```
+        # Kaelum — Reasoning framework (routing-first)
 
-### Step-by-Step Execution
+        This repository is now a minimal developer-focused scaffold for building a reasoning framework that specializes in routing queries to expert agents (MoE-style), with an eventual RL policy and per-agent search (LATS/MCTS-like) for intra-agent decision making.
 
-**Example Query:** *"If I buy 3 items at $12.99 each with 8% tax, what's the total?"*
+        This is intentionally small and developer-focused: no marketing, no production infra, just code you can iterate on for research and prototypes.
 
-#### **Step 1: Initialize** (`set_reasoning_model()`)
-```python
-set_reasoning_model(
-    model="Qwen/Qwen2.5-7B-Instruct",
-    base_url="http://localhost:8000/v1"
-)
-```
+        Goals
+        - Provide a lightweight environment to explore routing policies (supervised, contextual-bandit, RL).
+        - Keep an execution engine (orchestrator + agents + verifiers) to act as the environment for training.
+        - Add a simple policy interface so different routing approaches can be plugged in.
 
-**What happens:**
-1. Creates `LLMConfig` with model parameters
-2. Instantiates `LLMClient` (OpenAI-compatible)
-3. Builds `ReasoningGenerator` with custom prompts
-4. Creates `VerificationEngine` for validation
-5. Creates `ReflectionEngine` for self-correction
-6. Assembles `MCPOrchestrator` to coordinate all components
-7. Stores globally for reuse
+        Quick dev steps
+        1. Create a virtualenv and install the project dependencies:
 
----
+        ```fish
+        python -m venv .venv
+        source .venv/bin/activate.fish
+        pip install -r requirements.txt
+        ```
 
-#### **Step 2: Generate Reasoning** (`ReasoningGenerator`)
-```python
-result = kaelum_enhance_reasoning(query)
-```
+        2. Run unit tests (if present):
 
-**Internal flow:**
-```
-Query → Format with system prompt & template
-      → POST to http://localhost:8000/v1/chat/completions
-      → vLLM processes with Qwen 7B model
-      → Returns: "1. Calculate price: 3 × $12.99 = $38.97
-                  2. Calculate tax: $38.97 × 0.08 = $3.12
-                  3. Add tax to price: $38.97 + $3.12 = $42.09"
-      → Parse into steps list
-```
+        ```fish
+        # optional - run pytest if you keep tests
+        python -m pytest -q
+        ```
 
-**Output:**
-```python
-reasoning_steps = [
-    "Calculate price: 3 × $12.99 = $38.97",
-    "Calculate tax: $38.97 × 0.08 = $3.12",
-    "Add tax to price: $38.97 + $3.12 = $42.09"
-]
-```
+        3. Start developing:
+           - Implement a policy by adding a class that implements `kaelum.core.router_policy.RouterPolicy`.
+           - Use `kaelum/runtime/orchestrator.py` as the environment to evaluate routing decisions.
 
----
+        What changed in this slimmed repo
+        - Removed CLI examples and auxiliary Docker/compose files to keep the repo focused on research/development.
+        - Added a minimal `RouterPolicy` interface under `kaelum/core/` (see `kaelum/core/router_policy.py`).
 
-#### **Step 3: Verify Steps** (`VerificationEngine`)
+        Roadmap (suggested)
+        - Phase 0: Add `RouterPolicy` interface and a supervised/bandit baseline.
+        - Phase 1: Build an environment wrapper around the orchestrator to collect episodes and rewards.
+        - Phase 2: Prototype per-agent LATS (lightweight MCTS) for intra-agent exploration/exploitation.
+        - Phase 3: Train and iterate on RL policies (PPO / contextual bandits first) with safe rollouts and rule fallbacks.
 
-**Three parallel checks:**
-
-**A. Symbolic Verification** (using SymPy)
-```python
-Check: 3 × 12.99 = 38.97  ✓
-Check: 38.97 × 0.08 = 3.12  ✓
-Check: 38.97 + 3.12 = 42.09  ✓
-```
-
-**B. Consistency Check**
-```python
-Step 1 uses values from query ✓
-Step 2 uses output from Step 1 ✓
-Step 3 uses outputs from Steps 1 & 2 ✓
-No contradictions found ✓
-```
-
-**C. Logic Chain Validation**
-```python
-Each step logically follows from previous ✓
-Final answer addresses original query ✓
-```
-
-**Output:**
-```python
-verification_result = {
-    "passed": True,
-    "checks": {
-        "symbolic_math": True,
-        "consistency": True,
-        "logic_chain": True
-    },
-    "errors": []
-}
-```
-
----
-
-#### **Step 4: Reflect (if needed)** (`ReflectionEngine`)
-
-**Triggered when:** `verification_result["passed"] == False`
-
-**Example failure scenario:**
-```python
-# If Step 2 had wrong calculation: $38.97 × 0.08 = $2.50 ✗
-```
-
-**Reflection process:**
-```
-1. Identify failing step: "Step 2 math error"
-2. Prompt LLM: "You calculated $2.50 but verification shows $3.12. 
+        If you want I can scaffold a contextual‑bandit baseline next (one small file + training harness) and wire the logging for replay buffer collection.
                 Recalculate $38.97 × 0.08"
 3. LLM generates corrected step
 4. Re-verify corrected reasoning

@@ -27,6 +27,48 @@ except ImportError:
     logger = logging.getLogger("kaelum.neural_router")
     logger.warning("PyTorch not installed. Neural router will use rule-based fallback.")
     logger.info("Install with: pip install torch")
+    # Provide tiny stubs for `nn` and `F` so class definitions that reference
+    # `nn.Module`, `nn.Linear`, etc. won't raise at import time when torch is
+    # not installed. These stubs are inert and will raise if actually used.
+    try:
+        import types
+    except Exception:
+        types = None
+
+    class _DummyModule:
+        pass
+
+    class _DummyLinear:
+        def __init__(self, *a, **k):
+            pass
+
+    class _DummyLayerNorm:
+        def __init__(self, *a, **k):
+            pass
+
+    def _dummy_relu(x):
+        return x
+
+    class _DummyDropout:
+        def __init__(self, *a, **k):
+            pass
+
+    if types is not None:
+        nn = types.SimpleNamespace(
+            Linear=_DummyLinear,
+            LayerNorm=_DummyLayerNorm,
+            ReLU=_dummy_relu,
+            Dropout=_DummyDropout,
+            Sequential=lambda *args, **kwargs: None,
+            Module=_DummyModule,
+        )
+        F = types.SimpleNamespace(
+            softmax=lambda x, dim=-1: x,
+            sigmoid=lambda x: x,
+        )
+    else:
+        nn = None
+        F = None
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -226,8 +268,6 @@ class PolicyNetwork(nn.Module):
                 'use_factual_verification': use_factual,
                 'confidence_threshold': confidence_thresh,
             }
-
-
 class NeuralRouter:
     """Neural router using learned policy network.
     

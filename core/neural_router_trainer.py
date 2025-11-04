@@ -24,6 +24,23 @@ except ImportError:
     logger = logging.getLogger("kaelum.neural_router_trainer")
     logger.error("PyTorch not installed. Cannot train neural router.")
     logger.info("Install with: pip install torch")
+    # Provide tiny stubs so module can be imported when torch is missing.
+    try:
+        import types
+    except Exception:
+        types = None
+
+    class _DummyTensor:
+        pass
+
+    if types is not None:
+        torch = types.SimpleNamespace(Tensor=_DummyTensor)
+    else:
+        torch = None
+
+    # Minimal dataset/dataloader placeholders so class definitions parse.
+    Dataset = object
+    DataLoader = list
 
 from .neural_router import NeuralRouter, NeuralRoutingFeatures, PolicyNetwork
 from .router import QueryType, ReasoningStrategy, RoutingOutcome
