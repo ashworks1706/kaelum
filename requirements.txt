@@ -1,21 +1,21 @@
 # Core
-pydantic>=2.0.0
-httpx>=0.24.0
-sympy>=1.12
-python-dotenv>=1.0.0
-click>=8.0.0
+pydantic
+httpx
+sympy
+python-dotenv
+click
 
 # Neural Routing (Novel Contribution)
-torch>=2.0.0                  # PyTorch for neural network routing
-sentence-transformers>=2.2.0  # For query embeddings (384-dim)
-numpy>=1.24.0                 # For numerical operations
+torch              # PyTorch for neural network routing
+sentence-transformers  # For query embeddings (384-dim)
+numpy               # For numerical operations
 
 # Formal Reasoning
-z3-solver>=4.12.0             # For formal logic verification
+z3-solver          # For formal logic verification
 
 # Commercial LLM Integration (optional)
 google-generativeai
 
 # Dev Tools
-black>=23.0.0
-ruff>=0.1.0
+black
+ruff
