@@ -20,7 +20,7 @@ A store is having a sale. A laptop originally costs $899.
 First, there's a 15% discount. Then, an additional $50 coupon is applied.
 Finally, 8.5% sales tax is added to the discounted price.
 
-What is the final price the customer pays? Show all calculations.
+What is the final price the customer pays?
 """,
 
     "2_logic_puzzle": """
@@ -142,7 +142,7 @@ reasoning_template = "Solve this problem step-by-step, showing all your work:\n\
 # Configure Kaelum
 set_reasoning_model(
     base_url="http://localhost:8000/v1",
-    model="Qwen/Qwen2.5-1.5B-Instruct",
+    model="HuggingFaceTB/SmolLM2-1.7B-Instruct",
  # Change to test different models
     temperature=0.7,
     max_tokens=1024,
