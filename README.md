@@ -20,58 +20,6 @@ KaelumAI is a **reasoning middleware** that enhances commercial LLMs (GPT-4, Gem
 5. **🔧 Flexible**: Works with ANY commercial LLM that supports function calling
 6. **📊 Observable**: Every reasoning step is auditable, traceable, and debuggable
 
-### Market Positioning
-
-**Primary Use Cases:**
-- **Enterprise Agent Systems**: Multi-step reasoning for customer service, document analysis, workflow automation
-- **Cost-Critical Applications**: High-volume query systems where reasoning dominates token budgets
-- **Privacy-Sensitive Domains**: Healthcare, legal, financial services requiring on-premise reasoning
-- **Latency-Critical Apps**: Sub-500ms reasoning requirement with local inference
-
-**Value Proposition:**
-- Replace 80% of reasoning tokens in commercial LLM calls with local models
-- Maintain or improve accuracy through verification layers
-- Full reasoning audit trails for compliance and debugging
-- Pay only for final answer generation from commercial LLMs
-
----
-
-## 🏗️ Architecture
-
-### Plugin System
-Kaelum uses a modular plugin architecture for extensibility:
-
-```python
-from kaelum.plugins import ReasoningPlugin, PlanningPlugin, VisionPlugin
-
-# Phase 1: Reasoning (available now)
-reasoning = ReasoningPlugin(model_id="Qwen/Qwen2.5-7B-Instruct")
-result = await reasoning.process("Solve: 2x + 6 = 10")
-
-# Phase 2: Planning (coming Q2 2025)
-planning = PlanningPlugin(model_id="kaelum/planning-1.5B")
-plan = await planning.decompose_task("Build a web scraper for product prices")
-
-# Phase 3: Vision (coming Q3 2025)
-vision = VisionPlugin(model_id="kaelum/vision-7B")
-analysis = await vision.process({"image_path": "chart.png", "query": "Summarize trends"})
-```
-
-### Core Components
-
-**Current (Phase 1)**:
-- `KaelumOrchestrator`: Main reasoning pipeline coordinator
-- `Router`: Adaptive strategy selection (learns optimal approaches per query type)
-- `CostTracker`: Real-time cost savings analysis
-- `ModelRegistry`: Domain-specific model management
-- `LLMClient`: OpenAI-compatible inference client
-- `VerificationEngine`: Symbolic + factual + consistency checks
-- `ReflectionEngine`: Self-correction with bounded iterations
-
-**Planned (Phase 2-3)**:
-- `PlanningPlugin`: Task decomposition and multi-step coordination
-- `VisionPlugin`: Multi-modal reasoning and visual understanding
-- `ControllerModel`: Neural policy network (1-2B parameters) trained on routing outcomes
 
 ---
 
