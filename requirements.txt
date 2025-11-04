@@ -1,16 +1,19 @@
 # Core
 pydantic>=2.0.0
-httpx
-sympy
+httpx>=0.24.0
+sympy>=1.12
+python-dotenv>=1.0.0
+click>=8.0.0
 
 # Commercial LLM Integration
-python-dotenv
 google-generativeai
 
 # LangChain Integration (Open Source)
 langchain
 langchain-community
 
-# Dev
-pytest
-black
+# Dev & Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+ruff>=0.1.0

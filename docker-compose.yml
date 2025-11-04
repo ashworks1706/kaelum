@@ -1,0 +1,68 @@
+# Kaelum AI - Production Docker Compose
+# Includes Kaelum + vLLM reasoning engine
+
+version: '3.8'
+
+services:
+  # vLLM reasoning engine (runs the small local model)
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: kaelum-vllm
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL=TinyLlama/TinyLlama-1.1B-Chat-v0.3  # Change to your preferred model
+      - GPU_MEMORY_UTILIZATION=0.7
+      - MAX_MODEL_LEN=1024
+      - MAX_NUM_SEQS=32
+    command: >
+      --model ${MODEL:-TinyLlama/TinyLlama-1.1B-Chat-v0.3}
+      --port 8000
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.7}
+      --max-model-len ${MAX_MODEL_LEN:-1024}
+      --max-num-seqs ${MAX_NUM_SEQS:-32}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Kaelum application
+  kaelum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kaelum-app
+    depends_on:
+      vllm:
+        condition: service_healthy
+    environment:
+      - KAELUM_REASONING_URL=http://vllm:8000/v1
+      - KAELUM_MODEL=${MODEL:-TinyLlama/TinyLlama-1.1B-Chat-v0.3}
+      - KAELUM_TEMPERATURE=0.7
+      - KAELUM_MAX_TOKENS=2048
+      - KAELUM_USE_SYMBOLIC_VERIFICATION=true
+      - KAELUM_MAX_REFLECTION_ITERATIONS=2
+    volumes:
+      - ./examples:/app/examples:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - kaelum-network
+
+networks:
+  kaelum-network:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local

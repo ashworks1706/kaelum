@@ -9,10 +9,15 @@ Phase 2: Small neural policy model (1-2B parameters)
 
 import json
 import time
+import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
+
+# Set up router-specific logger
+logger = logging.getLogger("kaelum.router")
+logger.setLevel(logging.INFO)
 
 
 class QueryType(Enum):
@@ -83,9 +88,24 @@ class Router:
         
         self.outcomes_file = self.data_dir / "outcomes.jsonl"
         self.stats_file = self.data_dir / "stats.json"
+        self.decisions_log = self.data_dir / "routing_decisions.log"
+        
+        # Set up file handler for routing decisions log
+        fh = logging.FileHandler(self.decisions_log)
+        fh.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
+        if not logger.handlers:
+            logger.addHandler(fh)
         
         # Load historical performance stats
         self.performance_stats = self._load_stats()
+        
+        logger.info("=" * 60)
+        logger.info("Router initialized")
+        logger.info(f"Learning enabled: {learning_enabled}")
+        logger.info(f"Data directory: {self.data_dir}")
+        logger.info("=" * 60)
         
     def route(self, query: str, context: Optional[Dict] = None) -> RoutingDecision:
         """Route a query to the optimal reasoning strategy.
@@ -97,17 +117,32 @@ class Router:
         Returns:
             RoutingDecision with strategy and configuration
         """
+        start_time = time.time()
+        
+        logger.info("-" * 60)
+        logger.info(f"ROUTING REQUEST: {query[:100]}...")
+        
         # Step 1: Classify query type
         query_type = self._classify_query(query, context)
+        logger.info(f"  Query Type: {query_type.value}")
         
         # Step 2: Select strategy based on query type + learned performance
         strategy = self._select_strategy(query_type, context)
+        logger.info(f"  Strategy: {strategy.value}")
         
         # Step 3: Configure reasoning parameters for this strategy
         config = self._build_config(query_type, strategy, context)
+        logger.info(f"  Config: reflection={config['max_reflection_iterations']}, "
+                   f"symbolic={config['use_symbolic_verification']}, "
+                   f"factual={config['use_factual_verification']}")
         
         # Step 4: Generate reasoning for decision (for observability)
         reasoning = self._explain_decision(query, query_type, strategy, config)
+        logger.info(f"  Reasoning: {reasoning}")
+        
+        routing_time = (time.time() - start_time) * 1000
+        logger.info(f"  Routing time: {routing_time:.2f}ms")
+        logger.info("-" * 60)
         
         return RoutingDecision(
             query_type=query_type,
@@ -145,6 +180,16 @@ class Router:
             
             timestamp=time.time()
         )
+        
+        logger.info("=" * 60)
+        logger.info("ROUTING OUTCOME")
+        logger.info(f"  Success: {outcome.success}")
+        logger.info(f"  Accuracy: {outcome.accuracy_score:.2f}")
+        logger.info(f"  Latency: {outcome.latency_ms:.2f}ms")
+        logger.info(f"  Cost: ${outcome.cost:.6f}")
+        logger.info(f"  Symbolic verification: {'PASS' if outcome.symbolic_passed else 'FAIL'}")
+        logger.info(f"  Factual verification: {'PASS' if outcome.factual_passed else 'FAIL'}")
+        logger.info("=" * 60)
         
         # Append to outcomes log
         with open(self.outcomes_file, "a") as f:

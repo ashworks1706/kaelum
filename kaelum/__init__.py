@@ -1,5 +1,7 @@
 """KaelumAI - Local reasoning models as cognitive middleware for commercial LLMs."""
 
+__version__ = "1.5.0"
+
 from typing import Optional, Dict, Any
 from kaelum.core.config import KaelumConfig, LLMConfig
 from kaelum.runtime.orchestrator import KaelumOrchestrator
@@ -23,7 +25,7 @@ def set_reasoning_model(
     max_reflection_iterations: int = 2,
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
-    enable_routing: bool = False,
+    enable_routing: bool = True,
     debug_verification: bool = False,
     rag_adapter = None,
     reasoning_system_prompt: Optional[str] = None,

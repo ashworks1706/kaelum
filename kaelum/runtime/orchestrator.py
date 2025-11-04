@@ -73,16 +73,34 @@ class KaelumOrchestrator:
         """Synchronous inference with full verification + reflection."""
         session_id = f"sync_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
-        
         start_time = time.time()
         
         # Step 1: Generate reasoning trace
+        trace, reasoning_time = self._generate_trace_sync(query, session_id)
+        
+        # Step 2: Verify reasoning
+        errors, details, verify_time = self._verify_trace_timed(trace)
+        
+        # Step 3: Reflect if needed
+        trace, reflection_time = self._reflect_if_needed(query, trace, errors, session_id)
+        
+        # Step 4: Generate final answer
+        answer, answer_time = self._generate_answer_sync(query, trace, session_id)
+        
+        # Calculate and return metrics
+        return self._build_result(
+            query, trace, answer, errors, details,
+            start_time, reasoning_time, verify_time, reflection_time, answer_time,
+            session_id
+        )
+    
+    def _generate_trace_sync(self, query: str, session_id: str) -> tuple:
+        """Generate reasoning trace and return parsed steps with timing."""
         reasoning_start = time.time()
         trace_text = self.generator.generate_reasoning(query, stream=False)
         reasoning_time = (time.time() - reasoning_start) * 1000
         reasoning_tokens = len(trace_text.split())
         
-        # Log reasoning generation
         self.metrics.log_inference(
             model_type="local_reasoning",
             tokens=reasoning_tokens,
@@ -91,7 +109,11 @@ class KaelumOrchestrator:
             session_id=session_id
         )
         
-        # Parse reasoning steps
+        trace = self._parse_trace(trace_text)
+        return trace, reasoning_time
+    
+    def _parse_trace(self, trace_text: str) -> list:
+        """Parse reasoning trace text into list of steps."""
         trace = []
         for line in trace_text.strip().split("\n"):
             line = line.strip()
@@ -99,23 +121,23 @@ class KaelumOrchestrator:
                 step = line.lstrip("0123456789.-•) ").strip()
                 if step:
                     trace.append(step)
-        
-        if not trace:
-            trace = [trace_text.strip()]
-        
-        # Step 2: Verify reasoning
+        return trace if trace else [trace_text.strip()]
+    
+    def _verify_trace_timed(self, trace: list) -> tuple:
+        """Verify trace and return errors, details, and timing."""
         verify_start = time.time()
         errors, details = self.verification.verify_trace(trace)
         verify_time = (time.time() - verify_start) * 1000
-        
-        # Step 3: Reflect if needed
+        return errors, details, verify_time
+    
+    def _reflect_if_needed(self, query: str, trace: list, errors: list, session_id: str) -> tuple:
+        """Apply reflection if needed and return enhanced trace with timing."""
         reflection_time = 0
         if errors or self.config.max_reflection_iterations > 0:
             reflect_start = time.time()
             trace = self.reflection.enhance_reasoning(query, trace)
             reflection_time = (time.time() - reflect_start) * 1000
             
-            # Log reflection
             reflection_tokens = sum(len(step.split()) for step in trace)
             self.metrics.log_inference(
                 model_type="local_reflection",
@@ -124,14 +146,15 @@ class KaelumOrchestrator:
                 cost=reflection_tokens * 0.00000001,
                 session_id=session_id
             )
-        
-        # Step 4: Generate final answer
+        return trace, reflection_time
+    
+    def _generate_answer_sync(self, query: str, trace: list, session_id: str) -> tuple:
+        """Generate final answer and return text with timing."""
         answer_start = time.time()
         answer = self.generator.generate_answer(query, trace, stream=False)
         answer_time = (time.time() - answer_start) * 1000
         answer_tokens = len(answer.split())
         
-        # Log answer generation
         self.metrics.log_inference(
             model_type="local_answer",
             tokens=answer_tokens,
@@ -139,8 +162,12 @@ class KaelumOrchestrator:
             cost=answer_tokens * 0.00000001,
             session_id=session_id
         )
-        
-        # Calculate metrics
+        return answer, answer_time
+    
+    def _build_result(self, query: str, trace: list, answer: str, errors: list, details: dict,
+                     start_time: float, reasoning_time: float, verify_time: float, 
+                     reflection_time: float, answer_time: float, session_id: str) -> dict:
+        """Build final result dictionary with all metrics."""
         total_time = (time.time() - start_time) * 1000
         session_metrics = self.metrics.get_session_metrics(session_id)
         savings = self.metrics.calculate_savings(session_id)
@@ -169,12 +196,27 @@ class KaelumOrchestrator:
         """Streaming inference with full verification + reflection."""
         session_id = f"stream_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
-        
         start_time = time.time()
         
+        # Step 1: Stream reasoning trace
         yield "🧠 [REASON]\n\n"
+        trace, reasoning_time = yield from self._stream_reasoning(query, session_id)
         
-        # Step 1: Generate reasoning trace (streaming)
+        # Step 2: Stream verification
+        errors, details, verify_time = yield from self._stream_verification(trace)
+        
+        # Step 3: Stream reflection if needed
+        trace, reflection_time = yield from self._stream_reflection(query, trace, errors, session_id)
+        
+        # Step 4: Stream final answer
+        answer_time = yield from self._stream_answer(query, trace, session_id)
+        
+        # Step 5: Stream metrics summary
+        yield from self._stream_metrics(start_time, reasoning_time, verify_time, 
+                                       reflection_time, answer_time, session_id)
+    
+    def _stream_reasoning(self, query: str, session_id: str):
+        """Stream reasoning generation and return trace with timing."""
         reasoning_start = time.time()
         trace_text = ""
         for chunk in self.generator.generate_reasoning(query, stream=True):
@@ -184,28 +226,19 @@ class KaelumOrchestrator:
         reasoning_time = (time.time() - reasoning_start) * 1000
         reasoning_tokens = len(trace_text.split())
         
-        # Log reasoning generation
         self.metrics.log_inference(
             model_type="local_reasoning",
             tokens=reasoning_tokens,
             latency_ms=reasoning_time,
-            cost=reasoning_tokens * 0.00000001,  # Local model cost
+            cost=reasoning_tokens * 0.00000001,
             session_id=session_id
         )
         
-        # Parse reasoning steps
-        trace = []
-        for line in trace_text.strip().split("\n"):
-            line = line.strip()
-            if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
-                step = line.lstrip("0123456789.-•) ").strip()
-                if step:
-                    trace.append(step)
-        
-        if not trace:
-            trace = [trace_text.strip()]
-        
-        # Step 2: Verify reasoning
+        trace = self._parse_trace(trace_text)
+        return trace, reasoning_time
+    
+    def _stream_verification(self, trace: list):
+        """Stream verification results and return errors, details, timing."""
         yield "\n\n🔍 [VERIFY]\n"
         verify_start = time.time()
         errors, details = self.verification.verify_trace(trace)
@@ -226,24 +259,23 @@ class KaelumOrchestrator:
             for error in errors:
                 yield f"      - {error}\n"
         
-        # Step 3: Reflect if needed
+        return errors, details, verify_time
+    
+    def _stream_reflection(self, query: str, trace: list, errors: list, session_id: str):
+        """Stream reflection process and return enhanced trace with timing."""
         reflection_time = 0
         if errors or self.config.max_reflection_iterations > 0:
             yield f"\n🔄 [REFLECT]\n"
             
             reflect_start = time.time()
             
-            # Stream the reflection reasoning
-            reflection_output = ""
             for i in range(self.config.max_reflection_iterations):
                 issues = self.reflection._verify_trace(query, trace)
-                
                 if not issues:
                     break
                 
                 if i < self.config.max_reflection_iterations - 1:
                     trace = self.reflection._improve_trace(query, trace, issues)
-                    # Stream the improved trace
                     for j, step in enumerate(trace):
                         if j == 0:
                             yield f"\n"
@@ -252,7 +284,6 @@ class KaelumOrchestrator:
             
             reflection_time = (time.time() - reflect_start) * 1000
             
-            # Log reflection
             reflection_tokens = sum(len(step.split()) for step in trace)
             self.metrics.log_inference(
                 model_type="local_reflection",
@@ -262,7 +293,10 @@ class KaelumOrchestrator:
                 session_id=session_id
             )
         
-        # Step 4: Generate final answer (streaming)
+        return trace, reflection_time
+    
+    def _stream_answer(self, query: str, trace: list, session_id: str):
+        """Stream final answer generation and return timing."""
         yield "\n✅ [ANSWER]\n\n"
         answer_start = time.time()
         answer_text = ""
@@ -273,7 +307,6 @@ class KaelumOrchestrator:
         answer_time = (time.time() - answer_start) * 1000
         answer_tokens = len(answer_text.split())
         
-        # Log answer generation
         self.metrics.log_inference(
             model_type="local_answer",
             tokens=answer_tokens,
@@ -282,7 +315,11 @@ class KaelumOrchestrator:
             session_id=session_id
         )
         
-        # Final metrics summary
+        return answer_time
+    
+    def _stream_metrics(self, start_time: float, reasoning_time: float, verify_time: float,
+                       reflection_time: float, answer_time: float, session_id: str):
+        """Stream final metrics summary."""
         total_time = (time.time() - start_time) * 1000
         session_metrics = self.metrics.get_session_metrics(session_id)
         savings = self.metrics.calculate_savings(session_id)
