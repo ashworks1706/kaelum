@@ -460,8 +460,4 @@ def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = N
     if not worker_class:
         raise ValueError(f"No worker available for specialty: {specialty}")
     
-    if specialty == WorkerSpecialty.FACTUAL:
-        rag_adapter = kwargs.get('rag_adapter')
-        return worker_class(config, rag_adapter)
-    else:
-        return worker_class(config)
+    return worker_class(config)

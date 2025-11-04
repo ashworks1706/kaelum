@@ -127,16 +127,6 @@ class SymbolicVerifier:
             return True  # Silently ignore parsing failures
 
 
-class FactualVerifier:
-    def __init__(self, rag_adapter=None):
-        self.rag_adapter = rag_adapter
-
-    def verify_step(self, step: str) -> Tuple[bool, float]:
-        if not self.rag_adapter:
-            return True, 1.0
-        
-        is_verified, confidence = self.rag_adapter.verify_claim(step)
-        return is_verified, confidence
 
 
 class VerificationEngine:
@@ -144,7 +134,7 @@ class VerificationEngine:
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
-        self.factual_verifier = None  # RAG verification removed for simplicity
+        self.factual_verifier = None
         self.debug = debug
     
     def _log_debug(self, message: str):

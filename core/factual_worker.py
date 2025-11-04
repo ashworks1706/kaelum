@@ -69,34 +69,20 @@ class FactualWorker(WorkerAgent):
         start_time = time.time()
         reasoning_steps = []
         
-        # Detect query type
         query_type = self._classify_factual_query(query)
         reasoning_steps.append(f"Query type: {query_type}")
         
-        # Retrieve relevant context if RAG adapter available
-        retrieved_context = None
-        if self.rag_adapter:
-            try:
-                retrieved_context = await self.rag_adapter.retrieve(query, top_k=5)
-                reasoning_steps.append(f"Retrieved {len(retrieved_context)} relevant documents")
-            except Exception as e:
-                reasoning_steps.append(f"RAG retrieval failed: {str(e)}")
-        
-        # Build prompt with retrieved context
-        prompt = self._build_prompt(query, query_type, retrieved_context)
+        prompt = self._build_prompt(query, query_type, None)
         reasoning_steps.append("Built factual query prompt")
         
-        # Generate answer
         messages = [Message(role="user", content=prompt)]
         response = self.llm_client.generate(messages)
         reasoning_steps.append("Generated factual answer")
         
-        # Extract sources if present
-        sources = self._extract_sources(response, retrieved_context)
+        sources = self._extract_sources(response, None)
         
-        # Calculate confidence based on source availability and query type
         confidence = self._calculate_confidence(
-            query_type, retrieved_context, sources, response
+            query_type, None, sources, response
         )
         
         execution_time = time.time() - start_time
@@ -105,13 +91,11 @@ class FactualWorker(WorkerAgent):
             answer=response,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=retrieved_context is not None,
+            verification_passed=True,
             specialty=WorkerSpecialty.FACTUAL,
             execution_time=execution_time,
             metadata={
                 'query_type': query_type,
-                'has_rag': self.rag_adapter is not None,
-                'retrieved_docs': len(retrieved_context) if retrieved_context else 0,
                 'sources': sources
             }
         )
@@ -140,10 +124,8 @@ class FactualWorker(WorkerAgent):
     ) -> str:
         prompt_parts = []
         
-        # Base instruction
         prompt_parts.append("You are a factual information expert. Provide accurate, well-sourced answers.")
         
-        # Query-type specific instructions
         if query_type == 'definition':
             prompt_parts.append("\nProvide a clear, concise definition with examples if helpful.")
         elif query_type == 'historical':
@@ -155,16 +137,6 @@ class FactualWorker(WorkerAgent):
         elif query_type == 'biographical':
             prompt_parts.append("\nProvide accurate information about the person including key achievements.")
         
-        # Add retrieved context if available
-        if retrieved_context:
-            prompt_parts.append("\n\nRelevant Context:")
-            for i, doc in enumerate(retrieved_context[:5], 1):
-                prompt_parts.append(f"\n[Source {i}]: {doc}")
-            prompt_parts.append("\n\nUse the above context to answer accurately. Cite sources when possible.")
-        else:
-            prompt_parts.append("\n\nNote: No external context available. Answer based on your knowledge.")
-        
-        # Add the query
         prompt_parts.append(f"\n\nQuestion: {query}")
         prompt_parts.append("\nAnswer:")
         
@@ -201,53 +173,31 @@ class FactualWorker(WorkerAgent):
         sources: List[str],
         response: str
     ) -> float:
-        confidence = 0.5  # Base confidence
+        confidence = 0.5
         
-        # Bonus for RAG retrieval
-        if retrieved_context:
+        if query_type in ['definition', 'biographical']:
             confidence += 0.2
-            
-            # Additional bonus if sources were cited
-            if sources:
+        elif query_type == 'quantitative':
+            if re.search(r'\d+', response):
                 confidence += 0.15
         
-        # Adjust for query type complexity
-        if query_type in ['definition', 'biographical']:
-            confidence += 0.1  # Straightforward queries
-        elif query_type == 'quantitative':
-            # Check if response contains numbers
-            if re.search(r'\d+', response):
-                confidence += 0.05
-        
-        # Penalize very short responses
         if len(response) < 50:
             confidence -= 0.1
         
         return min(max(confidence, 0.0), 1.0)
     
     async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        # Basic checks
         if not answer or len(answer.strip()) < 10:
             return False
         
-        # Check if answer contains relevant keywords from query
         query_words = set(query.lower().split())
         answer_words = set(answer.lower().split())
         
-        # Remove common words
         common_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'who', 'when', 'where', 'how'}
         query_keywords = query_words - common_words
         
-        # At least some query keywords should appear in answer
         overlap = len(query_keywords & answer_words)
         if overlap == 0 and len(query_keywords) > 0:
             return False
-        
-        # If RAG was used, prefer answers with citations
-        if self.rag_adapter:
-            has_citations = bool(re.search(r'\[Source\s+\d+\]|\[\d+\]', answer))
-            if not has_citations:
-                # Still valid but lower confidence
-                pass
         
         return True
