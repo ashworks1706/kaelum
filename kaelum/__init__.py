@@ -5,11 +5,22 @@ __version__ = "1.5.0"
 from typing import Optional, Dict, Any
 from kaelum.core.config import KaelumConfig, LLMConfig
 from kaelum.runtime.orchestrator import KaelumOrchestrator
-from kaelum.core.tools import get_kaelum_function_schema
+from kaelum.core.tools import (
+    get_kaelum_function_schema, 
+    get_all_kaelum_schemas,
+    kaelum_verify_math,
+    kaelum_compute_math
+)
 
 # Infrastructure
 from kaelum.core.metrics import CostTracker
-from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
+from kaelum.core.registry import (
+    ModelRegistry, 
+    ModelSpec, 
+    MathCapabilities,
+    get_registry,
+    register_default_math_models
+)
 from kaelum.core.router import Router, QueryType, ReasoningStrategy
 
 # Global orchestrator with verification + reflection
@@ -27,6 +38,7 @@ def set_reasoning_model(
     use_factual_verification: bool = False,
     enable_routing: bool = True,
     debug_verification: bool = False,
+    strict_math_format: bool = False,
     rag_adapter = None,
     reasoning_system_prompt: Optional[str] = None,
     reasoning_user_template: Optional[str] = None,
@@ -65,6 +77,7 @@ def set_reasoning_model(
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
         debug_verification=debug_verification,
+        strict_math_format=strict_math_format,
     )
     
     _orchestrator = KaelumOrchestrator(
@@ -91,12 +104,18 @@ def enhance(query: str) -> str:
     if _orchestrator is None:
         set_reasoning_model()
     
+    # Ensure orchestrator is not None
+    assert _orchestrator is not None, "Orchestrator failed to initialize"
+    
     # Run through Generate → Verify → Reflect → Answer pipeline
     result = _orchestrator.infer(query, stream=False)
     
+    # Ensure result is a dictionary
+    assert isinstance(result, dict), f"Expected dict result, got {type(result)}"
+    
     # Format output cleanly
-    final = result["final"].strip()
-    trace = result["trace"]
+    final = result["answer"].strip()
+    trace = result["reasoning_trace"]
     
     output = f"{final}\n\nReasoning:"
     for i, step in enumerate(trace, 1):
@@ -121,6 +140,9 @@ def enhance_stream(query: str):
     if _orchestrator is None:
         set_reasoning_model()
     
+    # Ensure orchestrator is not None
+    assert _orchestrator is not None, "Orchestrator failed to initialize"
+    
     # Stream the response through the pipeline
     for chunk in _orchestrator.infer(query, stream=True):
         yield chunk
@@ -143,14 +165,20 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
     if _orchestrator is None:
         set_reasoning_model()
     
+    # Ensure orchestrator is not None
+    assert _orchestrator is not None, "Orchestrator failed to initialize"
+    
     # Run through full verification + reflection pipeline
     result = _orchestrator.infer(query, stream=False)
     
+    # Ensure result is a dictionary
+    assert isinstance(result, dict), f"Expected dict result, got {type(result)}"
+    
     # Format for function calling response
     return {
-        "reasoning_steps": result["trace"],
-        "reasoning_count": len(result["trace"]),
-        "suggested_approach": result["final"],
+        "reasoning_steps": result["reasoning_trace"],
+        "reasoning_count": len(result["reasoning_trace"]),
+        "suggested_approach": result["answer"],
         "domain": domain,
         "note": "Use these verified reasoning steps to formulate your comprehensive answer"
     }
@@ -178,14 +206,25 @@ __all__ = [
     "kaelum_enhance_reasoning",
     "get_function_schema",
     
+    # Math functions
+    "kaelum_verify_math",
+    "kaelum_compute_math", 
+    "get_all_kaelum_schemas",
+    
     # Infrastructure
     "CostTracker",
     "ModelRegistry",
     "ModelSpec",
+    "MathCapabilities",
     "get_registry",
+    "register_default_math_models",
     
     # Routing (Phase 2)
     "Router",
     "QueryType",
     "ReasoningStrategy",
 ]
+
+
+# Initialize default math models on import
+register_default_math_models()

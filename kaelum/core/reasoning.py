@@ -46,6 +46,10 @@ class LLMClient:
             "stream": stream,
         }
         
+        # # Debug logging for request
+        # print(f"[LLM DEBUG] Request URL: {url}")
+        # print(f"[LLM DEBUG] Request payload: {json.dumps(payload, indent=2)}")
+        
         if stream:
             # Return generator for streaming
             def stream_generator():
@@ -73,7 +77,23 @@ class LLMClient:
                 response.raise_for_status()
                 data = response.json()
                 
+                # Debug logging for diagnosis
+                print(f"[LLM DEBUG] Response status: {response.status_code}")
+                print(f"[LLM DEBUG] Response keys: {list(data.keys())}")
+                if "choices" in data:
+                    print(f"[LLM DEBUG] Choices count: {len(data['choices'])}")
+                    if len(data["choices"]) > 0:
+                        choice = data["choices"][0]
+                        print(f"[LLM DEBUG] Choice keys: {list(choice.keys())}")
+                        if "message" in choice:
+                            message = choice["message"]
+                            print(f"[LLM DEBUG] Message keys: {list(message.keys())}")
+                            content = message.get("content", "")
+                            print(f"[LLM DEBUG] Content length: {len(content)}")
+                            print(f"[LLM DEBUG] Content preview: '{content[:100]}...'")
+                
                 if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
+                    print(f"[LLM DEBUG] Full response: {json.dumps(data, indent=2)}")
                     raise RuntimeError("LLM returned empty response")
                 
                 return data["choices"][0]["message"]["content"]
@@ -109,6 +129,12 @@ Present your reasoning as a numbered list."""
             # Stream chunks directly
             return response
         else:
+            # Ensure response is a string
+            if not isinstance(response, str):
+                print(f"[REASONING DEBUG] Unexpected response type: {type(response)}")
+                print(f"[REASONING DEBUG] Response content: {response}")
+                return ["Error: Invalid response type from LLM"]
+            
             # Parse reasoning trace
             trace = []
             for line in response.strip().split("\n"):

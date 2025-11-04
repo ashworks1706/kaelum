@@ -4,6 +4,7 @@ import re
 from typing import List, Optional, Tuple
 import sympy
 from .sympy_engine import SympyEngine
+from .math_preprocessor import MathPreprocessor, MathExpression
 
 
 class SymbolicVerifier:
@@ -28,11 +29,14 @@ class SymbolicVerifier:
         r'(?<![a-zA-Z])([0-9.]+(?:\s*[+\-*/×÷^]\s*[0-9.]+)*)\s*=\s*([0-9.]+)(?![a-zA-Z*])'
     )
     
-    def __init__(self, debug: bool = False):
-        """Initialize verifier with optional debug logging."""
+    def __init__(self, debug: bool = False, strict_format: bool = False):
+        """Initialize verifier with optional debug logging and format strictness."""
         self.debug = debug
+        self.strict_format = strict_format
+        self.preprocessor = MathPreprocessor()
         # Enable SympyEngine debug mode if verification debug is enabled
         SympyEngine.set_debug(debug)
+        MathPreprocessor.set_debug(debug)
     
     def _log_debug(self, message: str):
         """Print debug message if debug mode is enabled."""
@@ -47,6 +51,44 @@ class SymbolicVerifier:
         """
         self._log_debug(f"Verifying step: {step[:100]}...")
         
+        # First, check for and extract math blocks [MATH: ...]
+        math_blocks = self.preprocessor.extract_math_blocks(step)
+        if math_blocks:
+            self._log_debug(f"Found {len(math_blocks)} math block(s)")
+            return self._verify_math_blocks(math_blocks)
+        
+        # Fallback to pattern-based verification for unstructured math
+        return self._verify_unstructured_math(step)
+    
+    def _verify_math_blocks(self, math_blocks: List[Tuple[str, str]]) -> Tuple[bool, Optional[str]]:
+        """Verify structured [MATH: ...] blocks."""
+        for full_block, math_content in math_blocks:
+            self._log_debug(f"  Verifying math block: {math_content}")
+            
+            # Normalize the math expression
+            normalized = self.preprocessor.normalize_expression(math_content)
+            self._log_debug(f"  Normalized to: {normalized.standardized}")
+            
+            # Verify based on expression type
+            is_valid, error = self._verify_normalized_expression(normalized)
+            if not is_valid:
+                if self.strict_format:
+                    return False, f"Math block error: {error}"
+                else:
+                    self._log_debug(f"  ⚠ Math block failed, trying auto-fix...")
+                    # Try to fix and re-verify
+                    fixed = self._attempt_auto_fix(normalized)
+                    if fixed:
+                        is_valid, error = self._verify_normalized_expression(fixed)
+                        if is_valid:
+                            self._log_debug(f"  ✓ Auto-fix successful")
+                            continue
+                    return False, f"Math block error (auto-fix failed): {error}"
+        
+        return True, None
+    
+    def _verify_unstructured_math(self, step: str) -> Tuple[bool, Optional[str]]:
+        """Verify unstructured math using existing pattern detection."""
         # 1. Derivative checks
         derivative_matches = self.DERIVATIVE_PATTERN.findall(step)
         if derivative_matches:
@@ -56,7 +98,12 @@ class SymbolicVerifier:
             lhs, rhs = match.split('=', 1)
             self._log_debug(f"  Checking derivative: {lhs.strip()} = {rhs.strip()}")
             self._log_debug(f"  → Calling SympyEngine.verify_derivative()")
-            if not SympyEngine.verify_derivative(lhs.strip(), rhs.strip()):
+            
+            # Try to normalize before verification
+            norm_lhs = self.preprocessor.normalize_expression(lhs.strip()).standardized
+            norm_rhs = self.preprocessor.normalize_expression(rhs.strip()).standardized
+            
+            if not SympyEngine.verify_derivative(norm_lhs, norm_rhs):
                 self._log_debug(f"  ❌ FAILED derivative check")
                 return False, f"Incorrect derivative: {match.strip()}"
             self._log_debug(f"  ✓ Derivative verified")
@@ -70,7 +117,12 @@ class SymbolicVerifier:
             lhs, rhs = match.split('=', 1)
             self._log_debug(f"  Checking integral: {lhs.strip()} = {rhs.strip()}")
             self._log_debug(f"  → Calling SympyEngine.verify_integral()")
-            if not SympyEngine.verify_integral(lhs.strip(), rhs.strip()):
+            
+            # Try to normalize before verification
+            norm_lhs = self.preprocessor.normalize_expression(lhs.strip()).standardized
+            norm_rhs = self.preprocessor.normalize_expression(rhs.strip()).standardized
+            
+            if not SympyEngine.verify_integral(norm_lhs, norm_rhs):
                 self._log_debug(f"  ❌ FAILED integral check")
                 return False, f"Incorrect integral: {match.strip()}"
             self._log_debug(f"  ✓ Integral verified")
@@ -83,15 +135,82 @@ class SymbolicVerifier:
         for eq in equations:
             self._log_debug(f"  Checking equivalence: {eq.strip()}")
             self._log_debug(f"  → Calling SympyEngine.check_equivalence()")
-            if not self._verify_equation(eq):
+            
+            # Normalize equation before verification
+            normalized_eq = self.preprocessor.normalize_expression(eq).standardized
+            
+            if not self._verify_equation(normalized_eq):
                 self._log_debug(f"  ❌ FAILED equivalence check")
                 return False, f"Math error: {eq.strip()}"
             self._log_debug(f"  ✓ Equivalence verified")
         
-        if derivative_matches or integral_matches or equations:
-            self._log_debug(f"✓ All checks passed for this step")
         
         return True, None
+    
+    def _verify_normalized_expression(self, expr: MathExpression) -> Tuple[bool, Optional[str]]:
+        """Verify a normalized math expression based on its type."""
+        try:
+            if expr.expression_type == 'derivative':
+                # Extract LHS and RHS from derivative equation
+                if '=' in expr.standardized:
+                    lhs, rhs = expr.standardized.split('=', 1)
+                    return (SympyEngine.verify_derivative(lhs.strip(), rhs.strip()), None)
+                return (True, None)  # No verification needed if no equation
+            
+            elif expr.expression_type == 'integral':
+                # Extract LHS and RHS from integral equation
+                if '=' in expr.standardized:
+                    lhs, rhs = expr.standardized.split('=', 1)
+                    return (SympyEngine.verify_integral(lhs.strip(), rhs.strip()), None)
+                return (True, None)
+            
+            elif expr.expression_type == 'equation':
+                return (SympyEngine.check_equivalence(expr.standardized), None)
+            
+            else:  # arithmetic
+                # For arithmetic, just check if it's parseable
+                SympyEngine._sympify(expr.standardized)
+                return (True, None)
+        
+        except Exception as e:
+            return (False, f"Verification failed: {str(e)}")
+    
+    def _attempt_auto_fix(self, expr: MathExpression) -> Optional[MathExpression]:
+        """Attempt to auto-fix common math expression issues."""
+        if self.debug:
+            self._log_debug(f"  Attempting auto-fix for: {expr.standardized}")
+        
+        fixed_expr = expr.standardized
+        
+        # Try common fixes
+        fixes = [
+            # Add missing multiplication: 2x -> 2*x
+            (r'(\d)([a-zA-Z])', r'\1*\2'),
+            # Fix spacing in functions: sin x -> sin(x)
+            (r'\b(sin|cos|tan|log|exp|sqrt)\s+([a-zA-Z0-9_]+)', r'\1(\2)'),
+            # Fix double negatives: --x -> x
+            (r'--', ''),
+            # Fix multiple operators: **+ -> **
+            (r'\*\*\+', '**'),
+        ]
+        
+        for pattern, replacement in fixes:
+            new_expr = re.sub(pattern, replacement, fixed_expr)
+            if new_expr != fixed_expr:
+                self._log_debug(f"    Applied fix: {pattern} -> {replacement}")
+                fixed_expr = new_expr
+        
+        # Return new MathExpression if we made changes
+        if fixed_expr != expr.standardized:
+            return MathExpression(
+                original=expr.original,
+                standardized=fixed_expr,
+                expression_type=expr.expression_type,
+                variables=expr.variables,
+                metadata={**expr.metadata, 'auto_fixed': True}
+            )
+        
+        return None
 
     def _extract_equations(self, text: str) -> List[str]:
         """Extract mathematical equations from text.
@@ -179,10 +298,11 @@ class FactualVerifier:
 class VerificationEngine:
     """Combines symbolic and factual verification."""
 
-    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False, rag_adapter=None, debug: bool = False):
-        self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
+    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False, rag_adapter=None, debug: bool = False, strict_format: bool = False):
+        self.symbolic_verifier = SymbolicVerifier(debug=debug, strict_format=strict_format) if use_symbolic else None
         self.factual_verifier = FactualVerifier(rag_adapter) if use_factual_check else None
         self.debug = debug
+        self.strict_format = strict_format
     
     def _log_debug(self, message: str):
         """Print debug message if debug mode is enabled."""

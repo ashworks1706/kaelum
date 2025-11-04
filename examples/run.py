@@ -10,8 +10,16 @@ Start vLLM server first (for 6GB GPU with AWQ quantization):
 
 For testing different models, change the model parameter below.
 """
-from kaelum import enhance_stream, set_reasoning_model
+import sys
+import os
 
+# Add the parent directory to the Python path to import kaelum
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from kaelum import enhance_stream, set_reasoning_model
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Test cases to stress test Kaelum's reasoning + verification + reflection
 TEST_CASES = {
@@ -141,14 +149,13 @@ reasoning_template = "Solve this problem step-by-step, showing all your work:\n\
 
 # Configure Kaelum
 set_reasoning_model(
-    base_url="http://localhost:8000/v1",
-    model="HuggingFaceTB/SmolLM2-1.7B-Instruct",
- # Change to test different models
-    temperature=0.7,
-    max_tokens=1024,
-    use_symbolic_verification=True,
-    use_factual_verification=False,
-    debug_verification=True  # Enable debug logging for math verification
+    base_url=os.getenv("MODEL_BASE_URL", "http://localhost:11434/v1"),
+    model=os.getenv("MODEL_NAME", "llama3.1:8b"),
+    temperature=float(os.getenv("TEMPERATURE", 0.7)),
+    max_tokens=int(os.getenv("MAX_TOKENS", 1024)),
+    use_symbolic_verification=os.getenv("USE_SYMBOLIC_VERIFICATION", "True") == "True",
+    use_factual_verification=os.getenv("USE_FACTUAL_VERIFICATION", "False") == "True",
+    debug_verification=os.getenv("DEBUG_VERIFICATION", "True") == "True"
 )
 
 

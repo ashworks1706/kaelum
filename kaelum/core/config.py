@@ -31,6 +31,7 @@ class KaelumConfig(BaseModel):
     use_symbolic_verification: bool = Field(default=True)
     use_factual_verification: bool = Field(default=False)
     debug_verification: bool = Field(default=False, description="Enable debug logging for verification")
+    strict_math_format: bool = Field(default=False, description="Require strict SymPy-compatible math formatting")
     
     class Config:
         arbitrary_types_allowed = True

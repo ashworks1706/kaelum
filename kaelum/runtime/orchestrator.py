@@ -18,6 +18,14 @@ class KaelumOrchestrator:
                  reasoning_user_template=None, enable_routing: bool = False):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
+        
+        # Use enhanced prompts for math when strict format is enabled
+        if config.strict_math_format and reasoning_system_prompt is None:
+            from ..core.prompts import get_enhanced_reasoning_prompts
+            prompts = get_enhanced_reasoning_prompts()
+            reasoning_system_prompt = prompts["system_prompt"]
+            reasoning_user_template = prompts["user_template"]
+        
         self.generator = ReasoningGenerator(
             self.llm,
             system_prompt=reasoning_system_prompt,
@@ -28,7 +36,8 @@ class KaelumOrchestrator:
             use_symbolic=config.use_symbolic_verification,
             use_factual_check=config.use_factual_verification,
             rag_adapter=rag_adapter,
-            debug=config.debug_verification
+            debug=config.debug_verification,
+            strict_format=config.strict_math_format
         )
         self.metrics = CostTracker()
         
@@ -57,7 +66,7 @@ class KaelumOrchestrator:
             result = self._infer_stream(query) if stream else self._infer_sync(query, routing_decision)
             
             # Record outcome for learning (only for sync mode)
-            if not stream and self.router:
+            if not stream and self.router and isinstance(result, dict):
                 self.router.record_outcome(routing_decision, result)
             
             # Restore original config
@@ -97,9 +106,11 @@ class KaelumOrchestrator:
     def _generate_trace_sync(self, query: str, session_id: str) -> tuple:
         """Generate reasoning trace and return parsed steps with timing."""
         reasoning_start = time.time()
-        trace_text = self.generator.generate_reasoning(query, stream=False)
+        trace = self.generator.generate_reasoning(query, stream=False)
         reasoning_time = (time.time() - reasoning_start) * 1000
-        reasoning_tokens = len(trace_text.split())
+        
+        # Calculate tokens from trace list
+        reasoning_tokens = sum(len(step.split()) for step in trace) if isinstance(trace, list) else len(str(trace).split())
         
         self.metrics.log_inference(
             model_type="local_reasoning",
@@ -109,7 +120,6 @@ class KaelumOrchestrator:
             session_id=session_id
         )
         
-        trace = self._parse_trace(trace_text)
         return trace, reasoning_time
     
     def _parse_trace(self, trace_text: str) -> list:
@@ -153,7 +163,10 @@ class KaelumOrchestrator:
         answer_start = time.time()
         answer = self.generator.generate_answer(query, trace, stream=False)
         answer_time = (time.time() - answer_start) * 1000
-        answer_tokens = len(answer.split())
+        
+        # Ensure answer is a string
+        answer_str = str(answer) if not isinstance(answer, str) else answer
+        answer_tokens = len(answer_str.split())
         
         self.metrics.log_inference(
             model_type="local_answer",
@@ -162,7 +175,7 @@ class KaelumOrchestrator:
             cost=answer_tokens * 0.00000001,
             session_id=session_id
         )
-        return answer, answer_time
+        return answer_str, answer_time
     
     def _build_result(self, query: str, trace: list, answer: str, errors: list, details: dict,
                      start_time: float, reasoning_time: float, verify_time: float, 
