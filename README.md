@@ -431,34 +431,47 @@ It determines whether to stop (accept answer) or continue (trigger Reflexor).
 Confidence here is *not a heuristic guess* — it’s a measurable fusion of verifier outputs.
 This provides interpretability (“why Kaelum trusted this answer”) and creates a **ground truth dataset** for later training the **Kaelum Brain** (controller model).
 
-### 🧠 **5. Router (Planned) — The Kaelum Brain**
+
+### 🧠 **5. Router (Neural Router / Kaelum Brain) — ✅ IMPLEMENTED**
 
 **Purpose:**
-The Router (or Kaelum Brain) is the planned **meta-controller** that learns *how Kaelum should think*.
-Instead of fixed heuristics (e.g., “if confidence < 0.7 → reflect once”), it dynamically decides which tools, agents, or reasoning depths to use per query.
+The Router (or Kaelum Brain) is the **meta-controller** that learns *how Kaelum should think*.
+Instead of fixed heuristics (e.g., "if confidence < 0.7 → reflect once"), it dynamically decides which tools, agents, or reasoning depths to use per query.
 
-**How it will work:**
+**How it works:**
 
-* Takes as input: query metadata, verifier scores, model latency, and past trace stats.
-* Predicts optimal inference strategy (e.g., “use symbolic only,” “call MathAgent,” “increase reflection depth”).
+* Takes as input: query metadata, embeddings, query type scores, and historical performance.
+* Predicts optimal inference strategy using a learned policy network.
 * Learns from logged data over time — effectively **a policy model** controlling the runtime itself.
 
 **Design Rationale:**
 This converts Kaelum from a static reasoning engine into an *adaptive system* that improves as it operates.
 It becomes capable of trading speed vs. accuracy per task, making it context-aware and cost-efficient.
 
-**Tech (planned):**
+**Tech (implemented):**
 
-* Model: ~1–2B parameter distilled policy network (transformer or MLP hybrid).
-* Input features: verifier scores, confidence deltas, metadata embeddings.
-* Output: routing actions (tool choice, reflection depth, stopping signal).
-* Training data: collected reasoning traces and verifier outcomes.
+* Model: Lightweight MLP with residual connections (256-dim hidden, multi-head outputs).
+* Input features: 398-dim (384 query embedding + 14 categorical features).
+* Output: routing actions (strategy choice, reflection depth, verification flags, confidence threshold).
+* Training data: collected routing outcomes (real or synthetic).
 
 **Example Behavior:**
 
-* Detects “math” → routes to SymPy and small LLM.
-* Detects “open question” → uses RAG verifier and deeper reflection.
-* Detects “high latency pressure” → disables reflection and trusts symbolic verifier only.
+* Detects "math" → routes to symbolic_heavy strategy.
+* Detects "factual question" → uses factual_heavy with RAG verification.
+* Detects "code problem" → uses deep strategy with max reflection.
+
+**Quick Start:**
+
+```bash
+# Train the neural router
+python -m kaelum.cli_neural_router train --generate-synthetic 500 --epochs 50
+
+# Use with Kaelum
+python example_neural_router.py
+```
+
+See [docs/NEURAL_ROUTER.md](docs/NEURAL_ROUTER.md) for full documentation.
 
 ---
 
@@ -468,7 +481,7 @@ It becomes capable of trading speed vs. accuracy per task, making it context-awa
 | **Verifier**              | Performs symbolic, factual, and consistency validation; the “truth filter.”                 | Async tasks; SymPy, vector RAG, self-consistency sampling.                        |
 | **Reflexor**              | Localized self-correction loop for failed reasoning steps.                                    | Runs short re-prompts; bounded iterations; avoids full re-generation.             |
 | **Confidence Engine**     | Aggregates verifier results into a confidence score and decides whether to accept or reflect. | Weighted score fusion; entropy-aware calibration; logs decisions.                 |
-| **Router (Kaelum Brain)** | Learns adaptive inference policies — tool choice, depth, reflection strategy.                | Small controller model (1–2B); trained on trace logs; implements meta-reasoning. |
+| **Router (Kaelum Brain)** | ✅ Learns adaptive inference policies — tool choice, depth, reflection strategy.                | Lightweight MLP (256-dim); trained on routing outcomes; multi-head outputs. |
 
 ---
 
