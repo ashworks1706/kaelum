@@ -1,19 +1,38 @@
-"""Adaptive routing and strategy selection for reasoning queries.
+"""Intelligent routing using embeddings and learning.
 
-The Router is Kaelum's "brain" - it learns which reasoning strategies work best
-for different types of queries by analyzing past performance and simulations.
+NO keyword matching. Uses sentence embeddings to understand query semantics
+and learns from outcomes to improve routing over time.
 
-Phase 1: Rule-based routing with learning
-Phase 2: Small neural policy model (1-2B parameters)
+Architecture:
+- Embedding-based classification (sentence-transformers)
+- K-NN with similarity search
+- Continuous learning from outcomes
+- Optional: Neural classifier (Qwen2.5-1.5B) for advanced routing
 """
 
 import json
 import time
 import logging
+import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
+from collections import defaultdict
+
+try:
+    from sentence_transformers import SentenceTransformer
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+    print("⚠️  sentence-transformers not installed. Install with: pip install sentence-transformers")
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    print("⚠️  scikit-learn not installed. Install with: pip install scikit-learn")
 
 # Set up router-specific logger
 logger = logging.getLogger("kaelum.router")
@@ -82,10 +101,10 @@ class RoutingOutcome:
 
 
 class Router:
-    """Adaptive router that learns optimal reasoning strategies.
+    """Intelligent router using embeddings and learning.
     
-    Phase 1: Rule-based heuristics + outcome tracking
-    Phase 2: Neural policy model trained on collected data
+    NO keyword matching. Uses semantic similarity to classify queries
+    and learns from outcomes to improve over time.
     """
     
     def __init__(self, learning_enabled: bool = True, data_dir: str = ".kaelum/routing"):
@@ -95,23 +114,37 @@ class Router:
         
         self.outcomes_file = self.data_dir / "outcomes.jsonl"
         self.stats_file = self.data_dir / "stats.json"
-        self.decisions_log = self.data_dir / "routing_decisions.log"
+        self.training_data_file = self.data_dir / "training_queries.json"
         
-        # Set up file handler for routing decisions log
-        fh = logging.FileHandler(self.decisions_log)
-        fh.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        fh.setFormatter(formatter)
-        if not logger.handlers:
-            logger.addHandler(fh)
+        # Initialize embedding model (lightweight, 80MB)
+        if EMBEDDINGS_AVAILABLE:
+            logger.info("Loading sentence embedding model...")
+            self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("✓ Embedding model loaded")
+        else:
+            logger.warning("Embeddings not available - falling back to basic classification")
+            self.encoder = None
         
-        # Load historical performance stats
+        # Load training data and embeddings
+        self.training_queries = self._load_training_data()
+        if self.encoder and self.training_queries:
+            logger.info(f"Computing embeddings for {len(self.training_queries)} training examples...")
+            self.training_embeddings = self.encoder.encode(
+                [q['query'] for q in self.training_queries],
+                show_progress_bar=False
+            )
+            logger.info("✓ Training embeddings ready")
+        else:
+            self.training_embeddings = None
+        
+        # Performance stats
         self.performance_stats = self._load_stats()
         
         logger.info("=" * 60)
-        logger.info("Router initialized")
+        logger.info("Intelligent Router initialized")
+        logger.info(f"Embedding-based: {self.encoder is not None}")
+        logger.info(f"Training examples: {len(self.training_queries)}")
         logger.info(f"Learning enabled: {learning_enabled}")
-        logger.info(f"Data directory: {self.data_dir}")
         logger.info("=" * 60)
         
     def route(self, query: str, context: Optional[Dict] = None) -> RoutingDecision:

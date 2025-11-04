@@ -36,61 +36,6 @@ KaelumAI is a **reasoning middleware** that enhances commercial LLMs (GPT-4, Gem
 
 ---
 
-## Roadmap
-
-### Phase 1: Domain-Specific Reasoning (Current)
-**Goal**: Best-in-class local reasoning with verification  
-**Timeline**: Q1 2025  
-**Features**:
-- ✅ Multi-model reasoning (3-8B) with verification layers
-- ✅ LangChain/LlamaIndex integration
-- ✅ Cost tracking and metrics infrastructure
-- ✅ **Adaptive routing system** - learns optimal strategies per query type
-- ✅ Streaming inference with detailed transparency
-- ✅ **Worker Agent system** - specialized reasoning agents (Math, Logic)
-- ✅ **MetaReasoner** - combines multiple workers with 5 strategies
-- ✅ **Parallel execution** - async worker coordination for 2-3x speedup
-- 🔨 Domain-specific model registry (medical, legal, code)
-- 🔨 Advanced symbolic verification (SymPy integration) - PARTIAL (MathWorker complete)
-- 🔨 RAG-based factual verification
-- 🔨 Benchmark suite (GSM8K, MATH, ToolBench)
-
-**Recent Updates** (Week 2):
-- Implemented specialized Worker Agents (MathWorker with SymPy, LogicWorker with deep reflection)
-- MetaReasoner coordinates multiple workers with voting, confidence, verification, synthesis, weighted strategies
-- 36/36 tests passing (21 worker tests + 15 meta-reasoner tests)
-- Automatic worker selection based on query type
-- Parallel async execution of multiple workers
-
-**Deliverable**: Production-ready reasoning middleware with 30-50% cost reduction
-
-### Phase 2: Agent Platform (Q2 2025)
-**Goal**: Multi-agent orchestration with planning  
-**Timeline**: Q2 2025  
-**Features**:
-- Task decomposition and planning plugin
-- Tool routing and selection plugin
-- Multi-step reasoning coordination
-- Agent memory and context management
-- Parallel reasoning streams
-- Controller model for adaptive inference (1-2B policy network)
-
-**Deliverable**: Full agent orchestration platform with learned routing policies
-
-### Phase 3: Multi-Modal Reasoning (Q3-Q4 2025)
-**Goal**: Visual reasoning and multi-modal understanding  
-**Timeline**: Q3-Q4 2025  
-**Features**:
-- Vision plugin (image understanding)
-- Multi-modal reasoning traces
-- Visual verification layers
-- Document/chart/diagram analysis
-- Cross-modal consistency checks
-
-**Deliverable**: Complete multi-modal agent platform with visual reasoning
-
----
-
 ## 🏗️ Architecture
 
 ### Plugin System
@@ -355,7 +300,6 @@ LLM generates:
 
 ---
 
-## 🧱 Architecture Components
 
 ## 🧱 Architecture Components
 
@@ -615,7 +559,6 @@ a closed feedback system that reasons, verifies, corrects, and learns *without r
 
 ---
 
-## 🧪 Testing
 
 ## 🧪 Testing
 
@@ -630,75 +573,3 @@ python example.py
 python benchmarks/runner.py --suite gsm8k
 ```
 
----
-
-## 🎯 Production Deployment
-
-### GPU Recommendations
-- **Development**: 6GB VRAM (RTX 3060, 4060) - 4-bit quantization required
-- **Production**: 8-12GB VRAM (RTX 4070, A4000) - optimal for 7B models
-- **Enterprise**: 24GB+ VRAM (RTX 4090, A5000) - multi-model serving
-
-### Optimization Tips
-```bash
-# 4-bit quantization for 6GB GPU
-vllm serve Qwen/Qwen2.5-7B-Instruct \
-  --quantization awq \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.85
-
-# Tensor parallelism for multi-GPU
-vllm serve Qwen/Qwen2.5-7B-Instruct \
-  --tensor-parallel-size 2 \
-  --gpu-memory-utilization 0.90
-```
-
-### Cost Analysis
-**Example**: 10,000 reasoning queries/day
-- Commercial LLM only: ~$50-100/day ($1,500-3,000/month)
-- Kaelum + Commercial: ~$10-20/day ($300-600/month)
-- **Savings**: 60-80% reduction in reasoning costs
-
----
-
-## 📚 Documentation
-
-Comprehensive guides for each core component:
-
-- **[Orchestrator](./docs/ORCHESTRATOR.md)** - The reasoning pipeline conductor
-- **[Verification Engine](./docs/VERIFICATION.md)** - Multi-layer validation system
-- **[Reflection Engine](./docs/REFLECTION.md)** - Self-correction through introspection
-- **[Router](./docs/ROUTING.md)** - Adaptive strategy selection (learns from outcomes)
-- **[Metrics & Cost Tracking](./docs/METRICS.md)** - Real-time performance monitoring
-
-**Start here**: [docs/README.md](./docs/README.md) for a complete overview
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Areas of focus:
-- Domain-specific reasoning models (medical, legal, code)
-- Verification layer improvements
-- Benchmark implementations
-- Plugin development (Phase 2-3)
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
----
-
-## 🔗 Links
-
-- **Documentation**: Coming soon
-- **Discord**: Coming soon
-- **Twitter**: [@KaelumAI](https://twitter.com/KaelumAI)
-
----
-
-**Built with ❤️ for the open-source AI community**
-
----

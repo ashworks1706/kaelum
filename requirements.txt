@@ -5,16 +5,28 @@ sympy>=1.12
 python-dotenv>=1.0.0
 click>=8.0.0
 
-# Commercial LLM Integration
+# Intelligence & ML
+sentence-transformers>=2.2.0  # For embedding-based routing
+scikit-learn>=1.3.0           # For similarity calculations
+numpy>=1.24.0                 # For numerical operations
+
+# Formal Reasoning
+z3-solver>=4.12.0             # For formal logic verification
+
+# RAG & Knowledge
+chromadb>=0.4.0               # For vector storage
+faiss-cpu>=1.7.0              # Alternative vector DB
+
+# Code Execution
+# docker>=6.0.0               # For safe code execution (optional)
+
+# Commercial LLM Integration (optional)
 google-generativeai
 
-# LangChain Integration (Open Source)
+# LangChain Integration (optional - only if needed)
 langchain
 langchain-community
 
-# Dev & Testing
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.0.0
+# Dev Tools
 black>=23.0.0
 ruff>=0.1.0
