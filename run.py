@@ -145,7 +145,7 @@ set_reasoning_model(
     model="Qwen/Qwen2.5-1.5B-Instruct",
  # Change to test different models
     temperature=0.7,
-    max_tokens=2048,
+    max_tokens=1024,
     use_symbolic_verification=True,
     use_factual_verification=False,
     max_reflection_iterations=2,
