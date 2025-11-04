@@ -1,5 +1,3 @@
-"""Verification layer for symbolic and factual checking."""
-
 import re
 from typing import List, Optional, Tuple
 import sympy
@@ -7,12 +5,9 @@ from .sympy_engine import SympyEngine
 
 
 class SymbolicVerifier:
-    # More specific patterns to avoid capturing incomplete fragments
     DERIVATIVE_PATTERN = re.compile(r"(?:d/d\w+|∂/∂\w+|diff)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
     INTEGRAL_PATTERN = re.compile(r"(?:integrate|∫)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
     
-    # Pattern for simple arithmetic equations: number/expression = number
-    # Matches things like: "899 × 0.15 = 134.85" or "2 + 3 = 5"
     EQUATION_PATTERN = re.compile(
         r'(?<![a-zA-Z])([0-9.]+(?:\s*[+\-*/×÷^]\s*[0-9.]+)*)\s*=\s*([0-9.]+)(?![a-zA-Z*])'
     )
