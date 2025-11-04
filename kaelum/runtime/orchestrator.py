@@ -10,12 +10,19 @@ from ..core.reflection import ReflectionEngine
 from ..core.metrics import CostTracker
 from ..core.router import Router
 
+try:
+    from ..core.neural_router import NeuralRouter
+    NEURAL_ROUTER_AVAILABLE = True
+except ImportError:
+    NEURAL_ROUTER_AVAILABLE = False
+    NeuralRouter = None
+
 
 class KaelumOrchestrator:
     """Orchestrates reasoning pipeline: Generate → Verify → Reflect → Answer"""
 
     def __init__(self, config: KaelumConfig, rag_adapter=None, reasoning_system_prompt=None, 
-                 reasoning_user_template=None, enable_routing: bool = False):
+                 reasoning_user_template=None, enable_routing: bool = False, use_neural_router: bool = True):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.generator = ReasoningGenerator(
@@ -33,8 +40,22 @@ class KaelumOrchestrator:
         self.metrics = CostTracker()
         
         # Router for adaptive strategy selection (Phase 2 feature)
-        self.router = Router(learning_enabled=True) if enable_routing else None
+        # Try to use neural router if available and requested
+        self.router = None
         self.enable_routing = enable_routing
+        
+        if enable_routing:
+            if use_neural_router and NEURAL_ROUTER_AVAILABLE:
+                try:
+                    self.router = NeuralRouter(fallback_to_rules=True)
+                    print("✓ Using Neural Router (Kaelum Brain)")
+                except Exception as e:
+                    print(f"⚠️  Neural Router failed to initialize: {e}")
+                    print("   Falling back to rule-based router")
+                    self.router = Router(learning_enabled=True)
+            else:
+                self.router = Router(learning_enabled=True)
+                print("✓ Using rule-based router")
 
     def infer(self, query: str, stream: bool = False):
         """Run reasoning pipeline with optional adaptive routing."""
