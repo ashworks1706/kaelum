@@ -1,7 +1,7 @@
 """Self-reflection and reasoning improvement engine."""
 
 from typing import List
-from kaelum.core.reasoning import LLMClient, Message
+from core.reasoning import LLMClient, Message
 
 
 class ReflectionEngine:

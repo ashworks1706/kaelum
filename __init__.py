@@ -3,16 +3,16 @@
 __version__ = "1.5.0"
 
 from typing import Optional, Dict, Any
-from kaelum.core.config import KaelumConfig, LLMConfig
+from core.config import KaelumConfig, LLMConfig
 from kaelum.runtime.orchestrator import KaelumOrchestrator
-from kaelum.core.tools import get_kaelum_function_schema
+from core.tools import get_kaelum_function_schema
 
 # Infrastructure
-from kaelum.core.metrics import CostTracker
-from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
-from kaelum.core.router import Router, QueryType, ReasoningStrategy
+from core.metrics import CostTracker
+from core.registry import ModelRegistry, ModelSpec, get_registry
+from core.router import Router, QueryType, ReasoningStrategy
 from core.neural_router import NeuralRouter
-from kaelum.core.neural_router_trainer import NeuralRouterTrainer
+from core.neural_router_trainer import NeuralRouterTrainer
 
 # Global orchestrator with verification + reflection
 _orchestrator: Optional[KaelumOrchestrator] = None
@@ -80,7 +80,12 @@ def set_reasoning_model(
 
 def enhance(query: str) -> str:
     """
-    Enhance reasoning for a query with verification and reflection.
+    Enhance reasoning for a query using LATS-based worker agents.
+    
+    Architecture:
+    1. Router classifies query and selects specialist worker
+    2. Worker uses LATS (MCTS) tree search for multi-step reasoning
+    3. Returns verified answer with reasoning trace
     
     Args:
         query: User's question
@@ -93,14 +98,22 @@ def enhance(query: str) -> str:
     if _orchestrator is None:
         set_reasoning_model()
     
-    # Run through Generate → Verify → Reflect → Answer pipeline
+    # Run through Router → Worker → LATS pipeline
     result = _orchestrator.infer(query, stream=False)
     
     # Format output cleanly
-    final = result["final"].strip()
-    trace = result["trace"]
+    answer = result.get("answer", "").strip()
+    trace = result.get("reasoning_trace", [])
+    worker = result.get("worker", "unknown")
+    confidence = result.get("confidence", 0.0)
+    cache_hit = result.get("cache_hit", False)
     
-    output = f"{final}\n\nReasoning:"
+    output = f"{answer}\n\n"
+    output += f"Worker: {worker} | Confidence: {confidence:.2f}"
+    if cache_hit:
+        output += " | 🎯 Cache Hit"
+    output += "\n\nReasoning:"
+    
     for i, step in enumerate(trace, 1):
         step_clean = step.strip().replace('\n', ' ')
         output += f"\n{i}. {step_clean}"
@@ -131,7 +144,7 @@ def enhance_stream(query: str):
 def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, Any]:
     """
     Function for commercial LLMs to call for reasoning enhancement.
-    Uses full pipeline: Generate → Verify → Reflect → Answer
+    Uses Router → Worker → LATS pipeline for verified multi-step reasoning.
     
     Args:
         query: The question or problem that needs reasoning enhancement
@@ -145,16 +158,19 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
     if _orchestrator is None:
         set_reasoning_model()
     
-    # Run through full verification + reflection pipeline
+    # Run through worker-based LATS reasoning
     result = _orchestrator.infer(query, stream=False)
     
     # Format for function calling response
     return {
-        "reasoning_steps": result["trace"],
-        "reasoning_count": len(result["trace"]),
-        "suggested_approach": result["final"],
+        "reasoning_steps": result.get("reasoning_trace", []),
+        "reasoning_count": len(result.get("reasoning_trace", [])),
+        "suggested_approach": result.get("answer", ""),
+        "worker_used": result.get("worker", "unknown"),
+        "confidence": result.get("confidence", 0.0),
+        "cache_hit": result.get("cache_hit", False),
         "domain": domain,
-        "note": "Use these verified reasoning steps to formulate your comprehensive answer"
+        "note": "These reasoning steps were generated using LATS (Language Agent Tree Search) with MCTS exploration"
     }
 
 

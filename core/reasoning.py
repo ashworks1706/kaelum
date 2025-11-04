@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 import httpx
 from pydantic import BaseModel, Field
-from kaelum.core.config import LLMConfig
+from core.config import LLMConfig
 
 
 class Message(BaseModel):

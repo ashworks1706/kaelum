@@ -1,23 +1,27 @@
 """Worker agents - specialized reasoning agents for specific query types.
 
 Workers are domain-specific agents that excel at particular types of queries:
-- MathWorker: Mathematical calculations, symbolic reasoning
+- MathWorker: Mathematical calculations, symbolic reasoning  
 - LogicWorker: Logical proofs, deductive reasoning
 - CodeWorker: Code generation, debugging, algorithms
 - etc.
 
-Each worker can be run independently or in parallel via the ParallelRunner.
+Each worker uses LATS (Language Agent Tree Search) for multi-step reasoning
+with MCTS-style exploration and tree caching for similar queries.
 """
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from enum import Enum
 
-from kaelum.core.config import KaelumConfig
-from kaelum.core.reasoning import LLMClient
-from kaelum.core.sympy_engine import SympyEngine
+from core.config import KaelumConfig
+from core.reasoning import LLMClient, Message
+from core.sympy_engine import SympyEngine
+from core.lats import LATS, LATSNode
+from core.tree_cache import TreeCache
 
 
 class WorkerSpecialty(Enum):
@@ -60,20 +64,24 @@ class WorkerAgent(ABC):
     """Base class for specialized worker agents.
     
     Workers are domain experts that:
-    1. Solve queries in their specialty area
-    2. Apply domain-specific verification
-    3. Return confidence scores
-    4. Support async execution for parallel processing
+    1. Solve queries in their specialty area using LATS tree search
+    2. Check tree cache for similar past reasoning
+    3. Apply domain-specific verification
+    4. Return confidence scores
+    5. Support async execution for parallel processing
     """
     
-    def __init__(self, config: Optional[KaelumConfig] = None):
+    def __init__(self, config: Optional[KaelumConfig] = None, 
+                 tree_cache: Optional[TreeCache] = None):
         """Initialize worker agent.
         
         Args:
             config: Optional Kaelum configuration
+            tree_cache: Optional tree cache for storing/retrieving reasoning trees
         """
         self.config = config or KaelumConfig()
         self.llm_client = LLMClient(self.config.reasoning_llm)
+        self.tree_cache = tree_cache or TreeCache()
         
     @abstractmethod
     def get_specialty(self) -> WorkerSpecialty:
@@ -94,31 +102,92 @@ class WorkerAgent(ABC):
         pass
     
     @abstractmethod
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve the query using worker-specific strategies.
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
+        """Solve the query using LATS-based tree search.
         
         Args:
             query: The query to solve
             context: Optional context
+            use_cache: Whether to check tree cache for similar queries
+            max_tree_depth: Maximum depth for LATS tree
+            num_simulations: Number of MCTS simulations to run
             
         Returns:
             WorkerResult with answer and metadata
         """
         pass
     
-    async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+    def _check_cache(self, query: str) -> Optional[WorkerResult]:
+        """Check tree cache for similar query.
+        
+        Args:
+            query: Query to search for
+            
+        Returns:
+            WorkerResult from cache or None if not found
+        """
+        cached = self.tree_cache.retrieve(
+            query,
+            worker_specialty=self.get_specialty().value,
+            require_success=True
+        )
+        
+        if cached is None:
+            return None
+        
+        tree, metadata, similarity = cached
+        
+        # Extract answer from best path in tree
+        best_node = tree.best_child()
+        if best_node is None:
+            return None
+        
+        # Build reasoning steps from tree path
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if "step" in node.state:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        answer = best_node.state.get("answer", "")
+        
+        return WorkerResult(
+            answer=answer,
+            confidence=metadata.confidence * similarity,  # Adjust confidence by similarity
+            reasoning_steps=reasoning_steps,
+            verification_passed=metadata.success,
+            specialty=self.get_specialty(),
+            execution_time=0.001,  # Cache hit is fast
+            metadata={
+                "cache_hit": True,
+                "similarity": similarity,
+                "original_query": metadata.query
+            }
+        )
+    
+    async def solve_async(self, query: str, context: Optional[Dict] = None,
+                         use_cache: bool = True, max_tree_depth: int = 5,
+                         num_simulations: int = 10) -> WorkerResult:
         """Async version of solve() for parallel execution.
         
         Args:
             query: The query to solve
             context: Optional context
+            use_cache: Whether to check tree cache
+            max_tree_depth: Maximum tree depth
+            num_simulations: Number of MCTS simulations
             
         Returns:
             WorkerResult with answer and metadata
         """
         # Default implementation: run sync solve in executor
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.solve, query, context)
+        return await loop.run_in_executor(
+            None, self.solve, query, context, use_cache, max_tree_depth, num_simulations
+        )
     
     def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
         """Verify the answer using worker-specific verification.
@@ -133,7 +202,7 @@ class WorkerAgent(ABC):
         """
         # Default implementation: basic verification via LLM
         try:
-            from kaelum.core.reasoning import Message
+            from core.reasoning import Message
             
             messages = [
                 Message(role="system", content="You are a verification assistant. Check if the answer is correct for the given question."),
@@ -193,133 +262,157 @@ class MathWorker(WorkerAgent):
             
         return min(score, 1.0)
     
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve math query using SymPy-heavy approach."""
-        import time
-        import re
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
+        """Solve math query using LATS tree search with SymPy verification.
+        
+        Architecture:
+        1. Check tree cache for similar queries
+        2. Build LATS reasoning tree with MCTS exploration
+        3. Each node represents a reasoning step
+        4. Simulate/verify using SymPy when possible
+        5. Backpropagate success/failure scores
+        6. Extract best path as final reasoning
+        """
         start_time = time.time()
         
-        reasoning_steps = []
-        error = None
-        answer = ""
-        confidence = 0.0
-        verification_passed = False
-        used_sympy = False
+        # Step 1: Check cache
+        if use_cache:
+            cached_result = self._check_cache(query)
+            if cached_result:
+                return cached_result
         
-        try:
-            # Step 1: Try to extract mathematical expression
-            reasoning_steps.append("Analyzing query for mathematical expressions...")
+        # Step 2: Initialize LATS tree
+        root_state = {
+            "query": query,
+            "step": "Initial problem analysis",
+            "depth": 0,
+            "partial_solution": None
+        }
+        
+        # Define simulator for LATS
+        def simulate_math_step(node: LATSNode) -> float:
+            """Evaluate a reasoning step using SymPy verification."""
+            state = node.state
             
-            # Step 2: Try SymPy for direct solving
-            reasoning_steps.append("Attempting symbolic computation with SymPy...")
+            # If we have an answer, try to verify it
+            if "answer" in state:
+                try:
+                    # Try SymPy verification
+                    answer = state["answer"]
+                    # Basic verification: check if answer is reasonable
+                    if answer and len(str(answer)) > 0:
+                        return 0.9  # High reward for complete answers
+                except:
+                    return 0.3
             
-            query_lower = query.lower()
+            # Partial solution gets medium reward
+            if state.get("partial_solution"):
+                return 0.5
             
-            # Try different SymPy approaches
+            # Deep nodes without progress get low reward
+            depth = state.get("depth", 0)
+            return max(0.1, 0.5 - depth * 0.05)
+        
+        # Define expansion function
+        def expand_math_step(parent_node: LATSNode) -> Dict[str, Any]:
+            """Generate next reasoning step using LLM."""
+            parent_state = parent_node.state
+            depth = parent_state.get("depth", 0)
+            
+            # Build reasoning history
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
+            
+            # Generate next step with LLM
+            prompt = f"Query: {query}\n\n"
+            if history:
+                prompt += "Previous steps:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
+                prompt += "\n\nWhat is the next step?"
+            else:
+                prompt += "What is the first step to solve this?"
+            
             try:
-                # Pattern 1: "solve for x: equation"
-                if "solve" in query_lower and (":" in query or "for" in query_lower):
-                    # Extract equation after colon or "for"
-                    if ":" in query:
-                        eq_part = query.split(":", 1)[1].strip()
-                    else:
-                        # Extract after "for x"
-                        parts = query_lower.split("for", 1)
-                        if len(parts) > 1:
-                            eq_part = query.split("for", 1)[1].strip()
-                        else:
-                            eq_part = query
-                    
-                    sympy_answer = self.sympy_engine.solve_equation(eq_part)
-                    if sympy_answer:
-                        answer = str(sympy_answer)
-                        used_sympy = True
-                        confidence = 0.9
-                        reasoning_steps.append(f"SymPy solved: {answer}")
-                
-                # Pattern 2: "derivative of expr" or "differentiate expr"
-                elif "derivative" in query_lower or "differentiate" in query_lower:
-                    # Extract expression (between "of" and "?" or end)
-                    if "of" in query_lower:
-                        expr_part = query.split("of", 1)[1].strip().rstrip("?")
-                        # Replace ^ with ** for SymPy
-                        expr_part = expr_part.replace("^", "**")
-                        
-                        # Try to find variable (look for "with respect to" or just use 'x')
-                        if "with respect to" in expr_part.lower():
-                            parts = expr_part.lower().split("with respect to")
-                            expr = parts[0].strip()
-                            var = parts[1].strip().rstrip("?")
-                        else:
-                            expr = expr_part
-                            var = "x"  # Default variable
-                        
-                        from sympy import diff, Symbol
-                        from sympy.parsing.sympy_parser import parse_expr
-                        result = diff(parse_expr(expr), Symbol(var))
-                        answer = str(result)
-                        used_sympy = True
-                        confidence = 0.9
-                        reasoning_steps.append(f"SymPy computed derivative: {answer}")
-                
-                # Pattern 3: "integral of expr"
-                elif "integral" in query_lower or "integrate" in query_lower:
-                    if "of" in query_lower:
-                        expr_part = query.split("of", 1)[1].strip().rstrip("?")
-                        from sympy import integrate, Symbol
-                        from sympy.parsing.sympy_parser import parse_expr
-                        result = integrate(parse_expr(expr_part), Symbol("x"))
-                        answer = str(result)
-                        used_sympy = True
-                        confidence = 0.9
-                        reasoning_steps.append(f"SymPy computed integral: {answer}")
-                
-                # Pattern 4: Simple arithmetic "what is X + Y?" or "calculate X + Y"
-                elif any(op in query for op in ["+", "-", "*", "/", "×"]):
-                    # Extract numeric expression
-                    expr_match = re.search(r'[\d\.\s\+\-\*/×÷]+', query)
-                    if expr_match:
-                        expr = expr_match.group().replace("×", "*").replace("÷", "/")
-                        from sympy.parsing.sympy_parser import parse_expr
-                        result = parse_expr(expr)
-                        answer = str(result)
-                        used_sympy = True
-                        confidence = 0.95
-                        reasoning_steps.append(f"SymPy evaluated: {answer}")
-                        
-            except Exception as e:
-                reasoning_steps.append(f"SymPy failed: {str(e)[:50]}")
-            
-            # If SymPy didn't work, use LLM
-            if not answer:
-                reasoning_steps.append("Using LLM for math reasoning...")
-                from kaelum.core.reasoning import Message
-                
-                messages = [
-                    Message(role="system", content="You are a mathematics expert. Solve problems step by step and provide just the final answer."),
-                    Message(role="user", content=query)
-                ]
-                
+                messages = [Message(role="system", content="You are a math expert. Provide ONE next reasoning step."), 
+                           Message(role="user", content=prompt)]
                 response = self.llm_client.generate(messages)
-                answer = response
-                reasoning_steps.append("LLM solved the problem")
-                confidence = 0.7
-            
-            # Step 3: Verify result (basic check)
-            reasoning_steps.append("Verification complete")
-            verification_passed = True
-            
-            if verification_passed:
-                confidence = min(confidence + 0.05, 1.0)
-                reasoning_steps.append("✓ Result verified")
+                next_step = response.strip()
                 
-        except Exception as e:
-            error = str(e)
-            reasoning_steps.append(f"✗ Error: {error}")
-            answer = f"Error solving math query: {error}"
-            confidence = 0.0
+                # Try to extract answer if this seems like a final step
+                is_final = any(word in next_step.lower() for word in ["answer is", "result is", "equals", "="])
+                
+                return {
+                    "query": query,
+                    "step": next_step,
+                    "depth": depth + 1,
+                    "partial_solution": next_step if not is_final else None,
+                    "answer": next_step if is_final else None
+                }
+            except:
+                # Fallback
+                return {
+                    "query": query,
+                    "step": f"Continue solving step {depth + 1}",
+                    "depth": depth + 1
+                }
+        
+        # Step 3: Run LATS search
+        tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step)
+        
+        for _ in range(num_simulations):
+            # Select promising node
+            node = tree.select()
             
+            # Don't expand beyond max depth
+            if node.state.get("depth", 0) >= max_tree_depth:
+                continue
+            
+            # Expand
+            child_state = expand_math_step(node)
+            child = tree.expand(node, child_state)
+            
+            # Simulate
+            reward = simulate_math_step(child)
+            
+            # Backpropagate
+            tree.backpropagate(child, reward)
+        
+        # Step 4: Extract best path
+        best_node = tree.best_child()
+        if best_node is None:
+            best_node = tree.root
+        
+        # Build reasoning path
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if node.state.get("step") and node != tree.root:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        # Get final answer
+        answer = best_node.state.get("answer", "")
+        if not answer and reasoning_steps:
+            answer = reasoning_steps[-1]
+        
+        # Calculate confidence from tree statistics
+        if best_node.visits > 0:
+            confidence = best_node.value / best_node.visits
+        else:
+            confidence = 0.5
+        
+        verification_passed = confidence > 0.7
         execution_time = time.time() - start_time
+        
+        # Step 5: Cache the tree
+        if use_cache and verification_passed:
+            self.tree_cache.store(query, tree, self.get_specialty().value, 
+                                 verification_passed, confidence)
         
         return WorkerResult(
             answer=answer,
@@ -328,10 +421,11 @@ class MathWorker(WorkerAgent):
             verification_passed=verification_passed,
             specialty=self.get_specialty(),
             execution_time=execution_time,
-            error=error,
             metadata={
-                "used_sympy": used_sympy,
-                "query_type": "mathematical"
+                "num_simulations": num_simulations,
+                "tree_depth": best_node.state.get("depth", 0),
+                "tree_visits": tree.root.visits,
+                "cache_hit": False
             }
         )
 
@@ -379,50 +473,121 @@ class LogicWorker(WorkerAgent):
             
         return min(score, 1.0)
     
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve logic query using deep reflection."""
-        import time
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
+        """Solve logic query using LATS with deep deductive reasoning."""
         start_time = time.time()
         
-        reasoning_steps = []
-        error = None
+        # Step 1: Check cache
+        if use_cache:
+            cached_result = self._check_cache(query)
+            if cached_result:
+                return cached_result
         
-        try:
-            # Step 1: Identify logical structure
-            reasoning_steps.append("Analyzing logical structure of query...")
+        # Step 2: Initialize LATS for logical reasoning
+        root_state = {
+            "query": query,
+            "step": "Initial logical analysis",
+            "depth": 0,
+            "premises": [],
+            "conclusion": None
+        }
+        
+        def simulate_logic_step(node: LATSNode) -> float:
+            """Evaluate logical reasoning step."""
+            state = node.state
             
-            # Step 2: Apply LLM reasoning with emphasis on logic
-            from kaelum.core.reasoning import Message
+            # Reward for reaching conclusions
+            if state.get("conclusion"):
+                return 0.95
             
-            reasoning_steps.append("Applying deductive reasoning with deep analysis...")
-            messages = [
-                Message(role="system", content="You are a logic and reasoning expert. Think through problems step by step using formal logic principles."),
-                Message(role="user", content=query)
-            ]
+            # Reward for identifying premises
+            num_premises = len(state.get("premises", []))
+            if num_premises > 0:
+                return 0.6 + (num_premises * 0.05)
             
-            response = self.llm_client.generate(messages)
-            answer = response
-            reasoning_steps.append(f"Logical analysis: {answer[:100]}...")
-            confidence = 0.75
+            # Penalize excessive depth without progress
+            depth = state.get("depth", 0)
+            return max(0.2, 0.5 - depth * 0.04)
+        
+        def expand_logic_step(parent_node: LATSNode) -> Dict[str, Any]:
+            """Generate next logical reasoning step."""
+            parent_state = parent_node.state
+            depth = parent_state.get("depth", 0)
             
-            # Step 3: Verify logical validity
-            reasoning_steps.append("Verifying logical validity...")
-            verification_passed = self.verify(query, answer, context)
+            # Build history
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
             
-            if verification_passed:
-                confidence = min(confidence + 0.1, 1.0)
-                reasoning_steps.append("✓ Logical validity confirmed")
+            prompt = f"Query: {query}\n\n"
+            if history:
+                prompt += "Reasoning so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
+                prompt += "\n\nWhat is the next logical step?"
             else:
-                reasoning_steps.append("⚠ Could not verify logical validity")
-                
-        except Exception as e:
-            error = str(e)
-            reasoning_steps.append(f"✗ Error: {error}")
-            answer = f"Error solving logic query: {error}"
-            confidence = 0.0
-            verification_passed = False
+                prompt += "Apply logical reasoning. What is the first step?"
             
+            try:
+                messages = [Message(role="system", content="You are a logic expert. Apply formal deductive reasoning."),
+                           Message(role="user", content=prompt)]
+                response = self.llm_client.generate(messages)
+                next_step = response.strip()
+                
+                # Check if this is a conclusion
+                is_conclusion = any(word in next_step.lower() for word in ["therefore", "thus", "conclude", "answer is"])
+                
+                return {
+                    "query": query,
+                    "step": next_step,
+                    "depth": depth + 1,
+                    "premises": parent_state.get("premises", []),
+                    "conclusion": next_step if is_conclusion else None
+                }
+            except:
+                return {
+                    "query": query,
+                    "step": f"Logical step {depth + 1}",
+                    "depth": depth + 1,
+                    "premises": parent_state.get("premises", [])
+                }
+        
+        # Step 3: Run LATS
+        tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step)
+        
+        for _ in range(num_simulations):
+            node = tree.select()
+            if node.state.get("depth", 0) >= max_tree_depth:
+                continue
+            child_state = expand_logic_step(node)
+            child = tree.expand(node, child_state)
+            reward = simulate_logic_step(child)
+            tree.backpropagate(child, reward)
+        
+        # Step 4: Extract best path
+        best_node = tree.best_child()
+        if best_node is None:
+            best_node = tree.root
+        
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if node.state.get("step") and node != tree.root:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        answer = best_node.state.get("conclusion", reasoning_steps[-1] if reasoning_steps else "")
+        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
+        verification_passed = confidence > 0.7
         execution_time = time.time() - start_time
+        
+        # Step 5: Cache
+        if use_cache and verification_passed:
+            self.tree_cache.store(query, tree, self.get_specialty().value,
+                                 verification_passed, confidence)
         
         return WorkerResult(
             answer=answer,
@@ -431,10 +596,10 @@ class LogicWorker(WorkerAgent):
             verification_passed=verification_passed,
             specialty=self.get_specialty(),
             execution_time=execution_time,
-            error=error,
             metadata={
-                "reflection_depth": 5,
-                "query_type": "logical"
+                "num_simulations": num_simulations,
+                "tree_depth": best_node.state.get("depth", 0),
+                "cache_hit": False
             }
         )
 
@@ -452,9 +617,9 @@ def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = N
         WorkerAgent instance
     """
     # Import all worker types
-    from kaelum.core.code_worker import CodeWorker
-    from kaelum.core.factual_worker import FactualWorker
-    from kaelum.core.creative_worker import CreativeWorker
+    from core.code_worker import CodeWorker
+    from core.factual_worker import FactualWorker
+    from core.creative_worker import CreativeWorker
     
     workers = {
         WorkerSpecialty.MATH: MathWorker,

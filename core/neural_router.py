@@ -191,33 +191,36 @@ class PolicyNetwork(nn.Module):
         with torch.no_grad():
             outputs = self.forward(x)
             
-            # Strategy: argmax over softmax
+            # Strategy: argmax over softmax (but now maps to workers)
             strategy_probs = F.softmax(outputs['strategy_logits'], dim=-1)
             strategy_idx = torch.argmax(strategy_probs, dim=-1).item()
             strategy_conf = strategy_probs[0, strategy_idx].item()
             
-            # Reflection iterations: round and clip to [0, 3]
-            reflection = torch.clamp(
-                torch.round(torch.sigmoid(outputs['reflection_logits']) * 3),
-                0, 3
+            # Reflection iterations → max_tree_depth
+            tree_depth = torch.clamp(
+                torch.round(torch.sigmoid(outputs['reflection_logits']) * 7) + 3,
+                3, 10
             ).int().item()
             
-            # Binary decisions: sigmoid > 0.5
-            use_symbolic = (torch.sigmoid(outputs['symbolic_logits']) > 0.5).item()
-            use_factual = (torch.sigmoid(outputs['factual_logits']) > 0.5).item()
+            # Symbolic → num_simulations (higher = more simulations)
+            num_sims = torch.clamp(
+                torch.round(torch.sigmoid(outputs['symbolic_logits']) * 20) + 5,
+                5, 25
+            ).int().item()
             
-            # Confidence threshold: scale sigmoid to [0.5, 0.95]
-            confidence_thresh = (
-                0.5 + 0.45 * torch.sigmoid(outputs['confidence_logits'])
-            ).item()
+            # Factual → use_tree_cache
+            use_cache = (torch.sigmoid(outputs['factual_logits']) > 0.5).item()
+            
+            # Confidence threshold → overall confidence
+            confidence = torch.sigmoid(outputs['confidence_logits']).item()
             
             return {
                 'strategy_idx': strategy_idx,
                 'strategy_confidence': strategy_conf,
-                'max_reflection_iterations': reflection,
-                'use_symbolic_verification': use_symbolic,
-                'use_factual_verification': use_factual,
-                'confidence_threshold': confidence_thresh,
+                'max_tree_depth': tree_depth,
+                'num_simulations': num_sims,
+                'use_tree_cache': use_cache,
+                'confidence': confidence,
             }
 class NeuralRouter:
     """Neural router using learned policy network.
@@ -240,12 +243,13 @@ class NeuralRouter:
         self.device = device
 
         # Strategy mapping
-        self.strategy_idx_to_enum = [
-            ReasoningStrategy.SYMBOLIC_HEAVY,
-            ReasoningStrategy.FACTUAL_HEAVY,
-            ReasoningStrategy.BALANCED,
-            ReasoningStrategy.FAST,
-            ReasoningStrategy.DEEP,
+        # Map strategy indices to worker specialties
+        self.strategy_idx_to_worker = [
+            "math",      # 0: Heavy symbolic (math-focused)
+            "factual",   # 1: Factual/knowledge-heavy
+            "logic",     # 2: Balanced reasoning
+            "creative",  # 3: Fast/creative
+            "code",      # 4: Deep analysis (code)
         ]
 
         # Initialize components
@@ -322,7 +326,7 @@ class NeuralRouter:
         prediction = self.policy_network.predict_routing(x)
         
         # Step 4: Convert to routing decision
-        strategy = self.strategy_idx_to_enum[prediction['strategy_idx']]
+        worker_specialty = self.strategy_idx_to_worker[prediction['strategy_idx']]
         
         # Infer query type from scores
         type_scores = {
@@ -336,20 +340,20 @@ class NeuralRouter:
         query_type = max(type_scores.items(), key=lambda x: x[1])[0]
         
         logger.info(f"  Query Type: {query_type.value} (neural inference)")
-        logger.info(f"  Strategy: {strategy.value} (confidence: {prediction['strategy_confidence']:.2f})")
-        logger.info(f"  Config: reflection={prediction['max_reflection_iterations']}, "
-                   f"symbolic={prediction['use_symbolic_verification']}, "
-                   f"factual={prediction['use_factual_verification']}")
+        logger.info(f"  Worker: {worker_specialty} (confidence: {prediction['strategy_confidence']:.2f})")
+        logger.info(f"  LATS Config: depth={prediction['max_tree_depth']}, "
+                   f"simulations={prediction['num_simulations']}, "
+                   f"cache={prediction['use_tree_cache']}")
         
         return RoutingDecision(
             query_type=query_type,
-            strategy=strategy,
-            max_reflection_iterations=prediction['max_reflection_iterations'],
-            use_symbolic_verification=prediction['use_symbolic_verification'],
-            use_factual_verification=prediction['use_factual_verification'],
-            confidence_threshold=prediction['confidence_threshold'],
+            worker_specialty=worker_specialty,
+            confidence=prediction['confidence'],
             reasoning=f"Neural router prediction (confidence: {prediction['strategy_confidence']:.2f})",
-            complexity_score=features.query_complexity
+            complexity_score=features.query_complexity,
+            use_tree_cache=prediction['use_tree_cache'],
+            max_tree_depth=prediction['max_tree_depth'],
+            num_simulations=prediction['num_simulations']
         )
     
     def _extract_features(self, query: str, context: Optional[Dict]) -> NeuralRoutingFeatures:

@@ -12,8 +12,8 @@ from enum import Enum
 from typing import List, Dict, Optional, Any
 from collections import Counter
 
-from kaelum.core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from kaelum.core.reasoning import LLMClient, Message
+from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from core.reasoning import LLMClient, Message
 
 
 class CombinationStrategy(Enum):

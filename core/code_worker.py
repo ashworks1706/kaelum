@@ -13,9 +13,9 @@ import asyncio
 import time
 from typing import Optional, Dict, List, Any
 
-from kaelum.core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from kaelum.core.config import KaelumConfig
-from kaelum.core.reasoning import LLMClient, Message
+from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from core.config import KaelumConfig
+from core.reasoning import LLMClient, Message
 
 
 class CodeWorker(WorkerAgent):

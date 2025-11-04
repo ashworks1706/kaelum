@@ -61,17 +61,17 @@ class ReasoningStrategy(Enum):
 
 @dataclass
 class RoutingDecision:
-    """Decision made by the router."""
+    """Decision made by the router - routes to specific worker agent."""
     query_type: QueryType
-    strategy: ReasoningStrategy
-    max_reflection_iterations: int
-    use_symbolic_verification: bool
-    use_factual_verification: bool
-    confidence_threshold: float
+    worker_specialty: str  # Which worker to use: 'math', 'logic', 'code', 'factual', 'creative', 'analysis'
+    confidence: float  # Router's confidence in this decision (0-1)
     reasoning: str = ""
-    # New fields for Phase 1.5
+    # Additional metadata
     secondary_types: List[QueryType] = None  # Multi-category detection
     complexity_score: float = 0.0  # 0-1, estimated query complexity
+    use_tree_cache: bool = True  # Whether to check/use cached reasoning trees
+    max_tree_depth: int = 5  # Maximum depth for LATS tree search
+    num_simulations: int = 10  # Number of MCTS simulations to run
     
     def __post_init__(self):
         if self.secondary_types is None:
@@ -148,14 +148,14 @@ class Router:
         logger.info("=" * 60)
         
     def route(self, query: str, context: Optional[Dict] = None) -> RoutingDecision:
-        """Route a query to the optimal reasoning strategy.
+        """Route a query to the optimal worker agent.
         
         Args:
             query: The input query to route
             context: Optional context (previous results, user preferences, etc.)
             
         Returns:
-            RoutingDecision with strategy and configuration
+            RoutingDecision with worker selection and configuration
         """
         start_time = time.time()
         
@@ -175,18 +175,20 @@ class Router:
         complexity = self._estimate_complexity(query, scores)
         logger.info(f"  Complexity: {complexity:.2f}")
         
-        # Step 2: Select strategy based on query type + learned performance
-        strategy = self._select_strategy(query_type, context)
-        logger.info(f"  Strategy: {strategy.value}")
+        # Step 2: Select worker based on query type + learned performance
+        worker_specialty = self._select_worker(query_type, context)
+        logger.info(f"  Worker: {worker_specialty}")
         
-        # Step 3: Configure reasoning parameters for this strategy
-        config = self._build_config(query_type, strategy, context)
-        logger.info(f"  Config: reflection={config['max_reflection_iterations']}, "
-                   f"symbolic={config['use_symbolic_verification']}, "
-                   f"factual={config['use_factual_verification']}")
+        # Step 3: Configure LATS parameters based on complexity
+        lats_config = self._build_lats_config(query_type, complexity, context)
+        logger.info(f"  LATS Config: depth={lats_config['max_tree_depth']}, "
+                   f"simulations={lats_config['num_simulations']}, "
+                   f"cache={lats_config['use_tree_cache']}")
         
-        # Step 4: Generate reasoning for decision (for observability)
-        reasoning = self._explain_decision(query, query_type, strategy, config)
+        # Step 4: Determine confidence and reasoning
+        confidence = self._calculate_routing_confidence(query_type, scores, context)
+        reasoning = self._explain_decision(query, query_type, worker_specialty, complexity)
+        logger.info(f"  Confidence: {confidence:.2f}")
         logger.info(f"  Reasoning: {reasoning}")
         
         routing_time = (time.time() - start_time) * 1000
@@ -195,11 +197,12 @@ class Router:
         
         return RoutingDecision(
             query_type=query_type,
-            strategy=strategy,
-            **config,
+            worker_specialty=worker_specialty,
+            confidence=confidence,
             reasoning=reasoning,
             secondary_types=secondary_types,
-            complexity_score=complexity
+            complexity_score=complexity,
+            **lats_config
         )
     
     def record_outcome(self, decision: RoutingDecision, result: Dict[str, Any]):
@@ -207,7 +210,7 @@ class Router:
         
         Args:
             decision: The routing decision that was made
-            result: The result from the orchestrator (includes metrics, verification)
+            result: The result from the worker (includes metrics, verification)
         """
         if not self.learning_enabled:
             return
@@ -215,31 +218,28 @@ class Router:
         outcome = RoutingOutcome(
             query=result.get("query", ""),
             query_type=decision.query_type,
-            strategy=decision.strategy,
+            strategy=ReasoningStrategy.BALANCED,  # Deprecated but kept for compatibility
             decision=decision,
             
-            success=len(result.get("verification_errors", [])) == 0,
-            accuracy_score=self._calculate_accuracy(result),
-            latency_ms=result.get("metrics", {}).get("total_time_ms", 0),
-            cost=result.get("metrics", {}).get("local_cost", 0),
+            success=result.get("success", False),
+            accuracy_score=result.get("confidence", 0.0),
+            latency_ms=result.get("execution_time", 0) * 1000,  # Convert to ms
+            cost=result.get("cost", 0.0),
             
-            symbolic_passed=result.get("verification_details", {}).get("symbolic_checks", 0) == 
-                           result.get("verification_details", {}).get("symbolic_passed", 0),
-            factual_passed=result.get("verification_details", {}).get("factual_checks", 0) == 
-                          result.get("verification_details", {}).get("factual_passed", 0),
-            reflection_iterations=result.get("metrics", {}).get("reflection_time_ms", 0) > 0,
+            symbolic_passed=result.get("verification_passed", False),
+            factual_passed=result.get("verification_passed", False),
+            reflection_iterations=0,  # Not applicable in LATS model
             
             timestamp=time.time()
         )
         
         logger.info("=" * 60)
         logger.info("ROUTING OUTCOME")
+        logger.info(f"  Worker: {decision.worker_specialty}")
         logger.info(f"  Success: {outcome.success}")
-        logger.info(f"  Accuracy: {outcome.accuracy_score:.2f}")
+        logger.info(f"  Confidence: {outcome.accuracy_score:.2f}")
         logger.info(f"  Latency: {outcome.latency_ms:.2f}ms")
         logger.info(f"  Cost: ${outcome.cost:.6f}")
-        logger.info(f"  Symbolic verification: {'PASS' if outcome.symbolic_passed else 'FAIL'}")
-        logger.info(f"  Factual verification: {'PASS' if outcome.factual_passed else 'FAIL'}")
         logger.info("=" * 60)
         
         # Append to outcomes log
@@ -247,7 +247,7 @@ class Router:
             f.write(json.dumps(asdict(outcome), default=str) + "\n")
         
         # Update performance stats
-        self._update_stats(outcome)
+        self._update_stats_worker(outcome, decision.worker_specialty)
     
     def get_performance_summary(self) -> Dict[str, Any]:
         """Get summary of routing performance across strategies."""
@@ -509,79 +509,112 @@ class Router:
         
         return min(complexity, 1.0)
     
-    def _select_strategy(self, query_type: QueryType, context: Optional[Dict]) -> ReasoningStrategy:
-        """Select reasoning strategy based on query type and learned performance."""
+    def _select_worker(self, query_type: QueryType, context: Optional[Dict]) -> str:
+        """Select worker agent based on query type and learned performance."""
         
         # Check if we have learned performance data for this query type
         type_key = query_type.value
         if type_key in self.performance_stats:
             stats = self.performance_stats[type_key]
-            # Pick strategy with best accuracy based on historical performance
-            best_strategy = max(stats["strategies"].items(), 
-                              key=lambda x: x[1].get("accuracy", 0))
-            # Convert lowercase key to uppercase enum
-            return ReasoningStrategy[best_strategy[0].upper()]
+            # Pick worker with best accuracy based on historical performance
+            if "workers" in stats and stats["workers"]:
+                best_worker = max(stats["workers"].items(), 
+                                key=lambda x: x[1].get("accuracy", 0))
+                return best_worker[0]
         
-        # No historical data - use optimized strategy mapping
-        strategy_map = {
-            QueryType.MATH: ReasoningStrategy.SYMBOLIC_HEAVY,
-            QueryType.LOGIC: ReasoningStrategy.BALANCED,
-            QueryType.CODE: ReasoningStrategy.DEEP,
-            QueryType.FACTUAL: ReasoningStrategy.FACTUAL_HEAVY,
-            QueryType.CREATIVE: ReasoningStrategy.FAST,
-            QueryType.ANALYSIS: ReasoningStrategy.BALANCED,
-            QueryType.UNKNOWN: ReasoningStrategy.BALANCED
+        # No historical data - use optimized worker mapping
+        worker_map = {
+            QueryType.MATH: "math",
+            QueryType.LOGIC: "logic",
+            QueryType.CODE: "code",
+            QueryType.FACTUAL: "factual",
+            QueryType.CREATIVE: "creative",
+            QueryType.ANALYSIS: "analysis",
+            QueryType.UNKNOWN: "logic"  # Default to logic for unknown queries
         }
         
-        return strategy_map[query_type]
+        return worker_map[query_type]
     
-    def _build_config(self, query_type: QueryType, strategy: ReasoningStrategy, 
-                     context: Optional[Dict]) -> Dict[str, Any]:
-        """Build reasoning configuration for the selected strategy."""
+    def _build_lats_config(self, query_type: QueryType, complexity: float,
+                          context: Optional[Dict]) -> Dict[str, Any]:
+        """Build LATS configuration based on query type and complexity.
         
-        configs = {
-            ReasoningStrategy.SYMBOLIC_HEAVY: {
-                "max_reflection_iterations": 2,
-                "use_symbolic_verification": True,
-                "use_factual_verification": False,
-                "confidence_threshold": 0.85
-            },
-            ReasoningStrategy.FACTUAL_HEAVY: {
-                "max_reflection_iterations": 1,
-                "use_symbolic_verification": False,
-                "use_factual_verification": True,
-                "confidence_threshold": 0.80
-            },
-            ReasoningStrategy.BALANCED: {
-                "max_reflection_iterations": 2,
-                "use_symbolic_verification": True,
-                "use_factual_verification": True,
-                "confidence_threshold": 0.75
-            },
-            ReasoningStrategy.FAST: {
-                "max_reflection_iterations": 0,
-                "use_symbolic_verification": True,
-                "use_factual_verification": False,
-                "confidence_threshold": 0.70
-            },
-            ReasoningStrategy.DEEP: {
-                "max_reflection_iterations": 3,
-                "use_symbolic_verification": True,
-                "use_factual_verification": True,
-                "confidence_threshold": 0.90
-            }
+        Args:
+            query_type: Type of query
+            complexity: Complexity score (0-1)
+            context: Optional context
+            
+        Returns:
+            Dictionary with LATS parameters
+        """
+        # Base configuration
+        config = {
+            "use_tree_cache": True,
+            "max_tree_depth": 5,
+            "num_simulations": 10
         }
         
-        return configs.get(strategy, configs[ReasoningStrategy.BALANCED])
+        # Adjust based on complexity
+        if complexity > 0.7:
+            # High complexity: deeper search, more simulations
+            config["max_tree_depth"] = 7
+            config["num_simulations"] = 20
+        elif complexity < 0.3:
+            # Low complexity: shallower search, fewer simulations
+            config["max_tree_depth"] = 3
+            config["num_simulations"] = 5
+        
+        # Query-type specific adjustments
+        if query_type == QueryType.MATH:
+            # Math benefits from deeper search
+            config["max_tree_depth"] += 2
+        elif query_type == QueryType.CODE:
+            # Code generation needs many simulations
+            config["num_simulations"] += 10
+        elif query_type == QueryType.CREATIVE:
+            # Creative doesn't need deep search
+            config["max_tree_depth"] = max(3, config["max_tree_depth"] - 2)
+            config["num_simulations"] = max(3, config["num_simulations"] - 5)
+        
+        return config
+    
+    def _calculate_routing_confidence(self, query_type: QueryType, scores: Dict[QueryType, float],
+                                     context: Optional[Dict]) -> float:
+        """Calculate confidence in routing decision.
+        
+        Args:
+            query_type: Selected query type
+            scores: All query type scores
+            context: Optional context
+            
+        Returns:
+            Confidence score (0-1)
+        """
+        # Base confidence is the score for selected type
+        confidence = scores.get(query_type, 0.0)
+        
+        # Reduce confidence if multiple types have similar scores
+        sorted_scores = sorted(scores.values(), reverse=True)
+        if len(sorted_scores) >= 2:
+            # If second-best score is close, reduce confidence
+            score_gap = sorted_scores[0] - sorted_scores[1]
+            if score_gap < 0.2:
+                confidence *= 0.8
+        
+        # Boost confidence if we have historical data
+        type_key = query_type.value
+        if type_key in self.performance_stats:
+            stats = self.performance_stats[type_key]
+            if stats.get("count", 0) > 10:
+                confidence = min(confidence * 1.1, 1.0)
+        
+        return confidence
     
     def _explain_decision(self, query: str, query_type: QueryType, 
-                         strategy: ReasoningStrategy, config: Dict) -> str:
+                         worker_specialty: str, complexity: float) -> str:
         """Generate human-readable explanation of routing decision."""
-        return (f"Classified as {query_type.value} query, "
-                f"selected {strategy.value} strategy "
-                f"(reflection={config['max_reflection_iterations']}, "
-                f"symbolic={config['use_symbolic_verification']}, "
-                f"factual={config['use_factual_verification']})")
+        return (f"Classified as {query_type.value} query (complexity: {complexity:.2f}), "
+                f"routing to {worker_specialty} worker with LATS-based reasoning")
     
     def _calculate_accuracy(self, result: Dict[str, Any]) -> float:
         """Calculate accuracy score from result."""
@@ -628,6 +661,42 @@ class Router:
         
         # Update running averages
         stats = self.performance_stats[type_key]["strategies"][strategy_key]
+        n = stats["count"]
+        
+        stats["accuracy"] = (stats["accuracy"] * n + outcome.accuracy_score) / (n + 1)
+        stats["avg_latency"] = (stats["avg_latency"] * n + outcome.latency_ms) / (n + 1)
+        stats["avg_cost"] = (stats["avg_cost"] * n + outcome.cost) / (n + 1)
+        stats["count"] += 1
+        
+        self.performance_stats[type_key]["count"] += 1
+        
+        # Save to disk
+        with open(self.stats_file, "w") as f:
+            json.dump(self.performance_stats, f, indent=2)
+    
+    def _update_stats_worker(self, outcome: RoutingOutcome, worker_specialty: str):
+        """Update performance statistics for worker-based routing."""
+        type_key = outcome.query_type.value
+        
+        if type_key not in self.performance_stats:
+            self.performance_stats[type_key] = {
+                "count": 0,
+                "workers": {}
+            }
+        
+        if "workers" not in self.performance_stats[type_key]:
+            self.performance_stats[type_key]["workers"] = {}
+        
+        if worker_specialty not in self.performance_stats[type_key]["workers"]:
+            self.performance_stats[type_key]["workers"][worker_specialty] = {
+                "count": 0,
+                "accuracy": 0.0,
+                "avg_latency": 0.0,
+                "avg_cost": 0.0
+            }
+        
+        # Update running averages
+        stats = self.performance_stats[type_key]["workers"][worker_specialty]
         n = stats["count"]
         
         stats["accuracy"] = (stats["accuracy"] * n + outcome.accuracy_score) / (n + 1)

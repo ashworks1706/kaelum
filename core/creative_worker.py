@@ -11,9 +11,9 @@ import time
 import re
 from typing import Dict, Any, Optional, List
 
-from kaelum.core.config import KaelumConfig
-from kaelum.core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from kaelum.core.reasoning import LLMClient, Message
+from core.config import KaelumConfig
+from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from core.reasoning import LLMClient, Message
 
 
 class CreativeWorker(WorkerAgent):

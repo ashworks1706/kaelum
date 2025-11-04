@@ -138,7 +138,7 @@ Output example (final result):
 - Minimal usage pattern:
 
 ```python
-from kaelum.core.lats import LATS
+from core.lats import LATS
 
 def simulator(node): return evaluate(node)
 def expand_fn(parent): return next_state
@@ -195,5 +195,5 @@ python -m pytest -q
 
 3. Start developing:
 
-- Implement a policy by subclassing `kaelum.core.router_policy.RouterPolicy`.
+- Implement a policy by subclassing `core.router_policy.RouterPolicy`.
 - Use `kaelum/runtime/orchestrator.py` as the environment for evaluation.
