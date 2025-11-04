@@ -1,26 +1,23 @@
 """KaelumAI - Local reasoning models as cognitive middleware for commercial LLMs."""
 
-__version__ = "1.5.0"
+__version__ = "2.0.0"
 
 from typing import Optional, Dict, Any
 from core.config import KaelumConfig, LLMConfig
 from kaelum.runtime.orchestrator import KaelumOrchestrator
-from core.tools import get_kaelum_function_schema
 
-# Infrastructure
+# Core Infrastructure
 from core.metrics import CostTracker
-from core.registry import ModelRegistry, ModelSpec, get_registry
 from core.router import Router, QueryType, ReasoningStrategy
-from core.neural_router import NeuralRouter
-from core.neural_router_trainer import NeuralRouterTrainer
 
-# Global orchestrator with verification + reflection
+# Global orchestrator with complete pipeline:
+# Router → Worker (LATS + Cache) → Verification → Reflection
 _orchestrator: Optional[KaelumOrchestrator] = None
 
 
 def set_reasoning_model(
     base_url: str = "http://localhost:11434/v1",
-    model: str = "TinyLlama/TinyLlama-1.1B-Chat-v0.3",
+    model: str = "qwen2.5:3b",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 2048,
@@ -29,31 +26,32 @@ def set_reasoning_model(
     use_factual_verification: bool = False,
     enable_routing: bool = True,
     debug_verification: bool = False,
-    rag_adapter = None,
-    reasoning_system_prompt: Optional[str] = None,
-    reasoning_user_template: Optional[str] = None,
 ):
-    """
-    Configure reasoning model with verification and reflection.
+    """Configure reasoning model with verification and reflection.
+    
+    Kaelum Architecture:
+    1. Router: Intelligently routes query to expert worker (math/logic/code/factual/creative)
+    2. Worker: Uses LATS (tree search) + caching for multi-step reasoning
+    3. Verification: Checks correctness (symbolic math, logic, etc.)
+    4. Reflection: If verification fails, improves reasoning and retries (max iterations)
     
     Args:
-        base_url: API endpoint (default: vLLM at localhost:8000/v1)
-        model: Model name (full HuggingFace path for vLLM)
+        base_url: API endpoint (Ollama: localhost:11434/v1, vLLM: localhost:8000/v1)
+        model: Model name (e.g., 'qwen2.5:3b', 'Qwen/Qwen2.5-3B-Instruct')
         api_key: API key if required (optional for local servers)
         temperature: Sampling temperature (0.0-2.0)
         max_tokens: Max tokens to generate
-        max_reflection_iterations: Self-correction iterations (0-5)
+        max_reflection_iterations: Max self-correction iterations (0-5)
         use_symbolic_verification: Enable math verification with SymPy
-        use_factual_verification: Enable RAG-based fact checking
-        enable_routing: Enable adaptive strategy selection (Phase 2)
+        use_factual_verification: Enable factual checking
+        enable_routing: Enable intelligent worker selection
         debug_verification: Enable detailed debug logging for verification
-        rag_adapter: RAG adapter instance (required if use_factual_verification=True)
-        reasoning_system_prompt: Custom system prompt for reasoning model
-        reasoning_user_template: Custom user prompt template. Use {query} placeholder.
     """
     global _orchestrator
 
-    print("Setting reasoning model to:", model)
+    print(f"Initializing Kaelum v{__version__}")
+    print(f"Model: {model}")
+    print(f"Architecture: Router → Worker (LATS) → Verify → Reflect")
     
     config = KaelumConfig(
         reasoning_llm=LLMConfig(
@@ -70,35 +68,33 @@ def set_reasoning_model(
     )
     
     _orchestrator = KaelumOrchestrator(
-        config, 
-        rag_adapter=rag_adapter,
-        reasoning_system_prompt=reasoning_system_prompt,
-        reasoning_user_template=reasoning_user_template,
+        config,
         enable_routing=enable_routing,
     )
 
 
 def enhance(query: str) -> str:
-    """
-    Enhance reasoning for a query using LATS-based worker agents.
+    """Enhance reasoning for a query using the complete Kaelum pipeline.
     
     Architecture:
-    1. Router classifies query and selects specialist worker
-    2. Worker uses LATS (MCTS) tree search for multi-step reasoning
-    3. Returns verified answer with reasoning trace
+    1. Router → Classifies query and selects expert worker
+    2. Worker → Uses LATS (MCTS tree search) + caching for multi-step reasoning
+    3. Verification → Checks reasoning correctness (symbolic math, logic, etc.)
+    4. Reflection → If verification fails, improves reasoning and retries
+    5. Loop until verification passes or max iterations reached
     
     Args:
         query: User's question
     
     Returns:
-        Answer with reasoning trace
+        Answer with reasoning trace and verification status
     """
     global _orchestrator
     
     if _orchestrator is None:
         set_reasoning_model()
     
-    # Run through Router → Worker → LATS pipeline
+    # Run through complete pipeline
     result = _orchestrator.infer(query, stream=False)
     
     # Format output cleanly
@@ -106,10 +102,15 @@ def enhance(query: str) -> str:
     trace = result.get("reasoning_trace", [])
     worker = result.get("worker", "unknown")
     confidence = result.get("confidence", 0.0)
+    verification = result.get("verification_passed", False)
+    iterations = result.get("iterations", 1)
     cache_hit = result.get("cache_hit", False)
     
     output = f"{answer}\n\n"
-    output += f"Worker: {worker} | Confidence: {confidence:.2f}"
+    output += f"Worker: {worker} | Confidence: {confidence:.2f} | "
+    output += f"Verification: {'✓ PASSED' if verification else '✗ FAILED'}"
+    if iterations > 1:
+        output += f" | Iterations: {iterations}"
     if cache_hit:
         output += " | 🎯 Cache Hit"
     output += "\n\nReasoning:"
@@ -142,23 +143,24 @@ def enhance_stream(query: str):
 
 
 def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, Any]:
-    """
-    Function for commercial LLMs to call for reasoning enhancement.
-    Uses Router → Worker → LATS pipeline for verified multi-step reasoning.
+    """Function for commercial LLMs to call for reasoning enhancement.
+    
+    Uses complete Kaelum pipeline:
+    Router → Worker (LATS + Cache) → Verification → Reflection
     
     Args:
         query: The question or problem that needs reasoning enhancement
         domain: Optional domain hint (math, logic, code, science, general)
     
     Returns:
-        Dictionary with reasoning trace and suggested answer structure
+        Dictionary with reasoning trace, answer, verification status
     """
     global _orchestrator
     
     if _orchestrator is None:
         set_reasoning_model()
     
-    # Run through worker-based LATS reasoning
+    # Run through complete pipeline
     result = _orchestrator.infer(query, stream=False)
     
     # Format for function calling response
@@ -168,24 +170,12 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
         "suggested_approach": result.get("answer", ""),
         "worker_used": result.get("worker", "unknown"),
         "confidence": result.get("confidence", 0.0),
+        "verification_passed": result.get("verification_passed", False),
+        "iterations": result.get("iterations", 1),
         "cache_hit": result.get("cache_hit", False),
         "domain": domain,
-        "note": "These reasoning steps were generated using LATS (Language Agent Tree Search) with MCTS exploration"
+        "note": "Reasoning generated using Kaelum: Router → Worker (LATS) → Verification → Reflection"
     }
-
-
-# Export function schemas for LLM integration
-def get_function_schema(format: str = "openai") -> Dict[str, Any]:
-    """
-    Get the function schema for integrating Kaelum with commercial LLMs.
-    
-    Args:
-        format: "openai" (default, works for GPT-4, Claude) or "gemini"
-    
-    Returns:
-        Function schema that can be passed to the LLM
-    """
-    return get_kaelum_function_schema()
 
 
 __all__ = [
@@ -194,20 +184,12 @@ __all__ = [
     "enhance_stream", 
     "set_reasoning_model",
     "kaelum_enhance_reasoning",
-    "get_function_schema",
     
     # Infrastructure
     "CostTracker",
-    "ModelRegistry",
-    "ModelSpec",
-    "get_registry",
     
-    # Routing (Phase 2)
+    # Routing
     "Router",
     "QueryType",
     "ReasoningStrategy",
-    
-    # Neural Routing (Kaelum Brain)
-    "NeuralRouter",
-    "NeuralRouterTrainer",
 ]

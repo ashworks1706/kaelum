@@ -11,18 +11,32 @@ class ReflectionEngine:
         self.llm = llm_client
         self.max_iterations = max_iterations
 
-    def enhance_reasoning(self, query: str, initial_trace: List[str]) -> List[str]:
-        """Enhance reasoning through reflection."""
+    def enhance_reasoning(self, query: str, initial_trace: List[str], verification_issues: List[str] = None) -> List[str]:
+        """Enhance reasoning through reflection based on verification failures.
+        
+        Args:
+            query: Original query
+            initial_trace: Initial reasoning steps
+            verification_issues: List of issues found by verification (optional)
+            
+        Returns:
+            Improved reasoning steps
+        """
         current_trace = initial_trace
         
-        for iteration in range(self.max_iterations):
-            issues = self._verify_trace(query, current_trace)
-            
-            if not issues:
-                break
-            
-            if iteration < self.max_iterations - 1:
-                current_trace = self._improve_trace(query, current_trace, issues)
+        # If specific verification issues provided, use them for targeted improvement
+        if verification_issues and len(verification_issues) > 0:
+            current_trace = self._improve_trace(query, current_trace, verification_issues)
+        else:
+            # Otherwise do general reflection
+            for iteration in range(self.max_iterations):
+                issues = self._verify_trace(query, current_trace)
+                
+                if not issues:
+                    break
+                
+                if iteration < self.max_iterations - 1:
+                    current_trace = self._improve_trace(query, current_trace, issues)
         
         return current_trace
     

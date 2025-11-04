@@ -1,9 +1,9 @@
-"""FactualWorker - Specialized worker for factual queries with RAG integration.
+"""FactualWorker - Specialized worker for factual queries.
 
 This worker handles factual queries by:
-1. Retrieving relevant information from knowledge sources
-2. Verifying facts against retrieved context
-3. Providing sourced, accurate answers
+1. Analyzing the question to identify what facts are needed
+2. Reasoning through available knowledge
+3. Providing accurate, well-reasoned answers
 """
 
 import asyncio
@@ -14,21 +14,18 @@ from typing import Dict, Any, Optional, List
 from core.config import KaelumConfig
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import LLMClient, Message
-from core.rag_adapter import RAGAdapter
 
 
 class FactualWorker(WorkerAgent):
-    """Worker specialized in factual queries with RAG support."""
+    """Worker specialized in factual queries."""
     
-    def __init__(self, config: Optional[KaelumConfig] = None, rag_adapter: Optional[RAGAdapter] = None):
+    def __init__(self, config: Optional[KaelumConfig] = None):
         """Initialize FactualWorker.
         
         Args:
             config: Kaelum configuration
-            rag_adapter: Optional RAG adapter for knowledge retrieval
         """
         super().__init__(config)
-        self.rag_adapter = rag_adapter
         self.factual_keywords = [
             'what is', 'who is', 'when did', 'where is', 'how many',
             'define', 'explain', 'describe', 'tell me about',

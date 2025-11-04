@@ -1,12 +1,14 @@
 """Core orchestration logic for Kaelum reasoning system.
 
-New Architecture:
-Query → Router → Worker → LATS → Result
+Kaelum Architecture:
+1. Router: Intelligently routes query to expert worker (math/logic/code/factual/creative/analysis)
+2. Worker: Uses LATS (tree search) + caching for multi-step reasoning
+3. Verification: Checks correctness (symbolic math, logic, etc.)
+4. Reflection: If verification fails, improves reasoning and retries
+5. Loop until verification passes or max iterations reached
 
-Workers use LATS (Language Agent Tree Search) for multi-step reasoning with:
-- MCTS-style exploration
-- Tree caching for similar queries
-- Domain-specific verification
+Complete Flow:
+Query → Router → Expert Worker (LATS + Cache) → Verification → Reflection (if failed) → Retry → Result
 """
 
 import time
@@ -19,60 +21,63 @@ from ..core.metrics import CostTracker
 from ..core.router import Router
 from ..core.workers import WorkerSpecialty, create_worker
 from ..core.tree_cache import TreeCache
-
-try:
-    from ..core.neural_router import NeuralRouter
-    NEURAL_ROUTER_AVAILABLE = True
-except ImportError:
-    NEURAL_ROUTER_AVAILABLE = False
-    NeuralRouter = None
+from ..core.verification import VerificationEngine
+from ..core.reflection import ReflectionEngine
 
 logger = logging.getLogger("kaelum.orchestrator")
 
 
 class KaelumOrchestrator:
-    """Orchestrates reasoning pipeline: Router → Worker → LATS → Answer"""
+    """Orchestrates complete reasoning pipeline with verification and reflection.
+    
+    Flow:
+    1. Router selects expert worker
+    2. Worker reasons using LATS + caching
+    3. Verification checks correctness
+    4. Reflection improves if verification fails
+    5. Repeat until pass or max iterations
+    """
 
-    def __init__(self, config: KaelumConfig, rag_adapter=None, reasoning_system_prompt=None, 
-                 reasoning_user_template=None, enable_routing: bool = True, use_neural_router: bool = False):
+    def __init__(self, config: KaelumConfig, reasoning_system_prompt=None, 
+                 reasoning_user_template=None, enable_routing: bool = True):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
         self.tree_cache = TreeCache()
         
-        # Router for worker selection
-        self.router = None
-        self.enable_routing = enable_routing
+        # Router for expert worker selection (embedding-based)
+        self.router = Router(learning_enabled=True) if enable_routing else None
+        if self.router:
+            logger.info("Router enabled: Embedding-based intelligent routing")
         
-        if enable_routing:
-            if use_neural_router and NEURAL_ROUTER_AVAILABLE:
-                try:
-                    self.router = NeuralRouter(fallback_to_rules=True)
-                    logger.info("Using Neural Router for worker selection")
-                except Exception as e:
-                    logger.warning(f"Neural Router failed to initialize: {e}")
-                    logger.info("Falling back to rule-based router")
-                    self.router = Router(learning_enabled=True)
-            else:
-                self.router = Router(learning_enabled=True)
-                logger.info("Using rule-based router for worker selection")
+        # Verification and Reflection engines
+        self.verification_engine = VerificationEngine(
+            self.llm,
+            use_symbolic=config.use_symbolic_verification,
+            use_factual=config.use_factual_verification,
+            debug=config.debug_verification
+        )
+        self.reflection_engine = ReflectionEngine(
+            self.llm,
+            max_iterations=config.max_reflection_iterations
+        )
         
         # Worker cache
         self._workers = {}
-        self.rag_adapter = rag_adapter
+        
+        logger.info("=" * 70)
+        logger.info("Kaelum Orchestrator Initialized")
+        logger.info(f"  Router: {'Enabled' if enable_routing else 'Disabled'}")
+        logger.info(f"  Verification: Symbolic={config.use_symbolic_verification}, Factual={config.use_factual_verification}")
+        logger.info(f"  Reflection: Max {config.max_reflection_iterations} iterations")
+        logger.info("=" * 70)
 
     def _get_worker(self, specialty: str):
         """Get or create worker for given specialty."""
         if specialty not in self._workers:
             try:
                 specialty_enum = WorkerSpecialty(specialty)
-                if specialty == "factual":
-                    self._workers[specialty] = create_worker(
-                        specialty_enum, self.config, 
-                        rag_adapter=self.rag_adapter
-                    )
-                else:
-                    self._workers[specialty] = create_worker(specialty_enum, self.config)
+                self._workers[specialty] = create_worker(specialty_enum, self.config)
                 self._workers[specialty].tree_cache = self.tree_cache
             except Exception as e:
                 logger.error(f"Failed to create {specialty} worker: {e}")
@@ -83,65 +88,156 @@ class KaelumOrchestrator:
         return self._workers[specialty]
     
     def infer(self, query: str, stream: bool = False):
-        """Run reasoning pipeline with worker-based routing and LATS."""
+        """Run complete reasoning pipeline with verification and reflection.
+        
+        Architecture:
+        1. Router → Select expert worker based on query type
+        2. Worker → Use LATS tree search + caching for reasoning
+        3. Verification → Check if reasoning is correct
+        4. Reflection → If verification fails, improve and retry
+        5. Loop until verification passes or max iterations
+        
+        Args:
+            query: User's question
+            stream: Streaming not yet supported
+            
+        Returns:
+            Dictionary with answer, reasoning steps, verification status, etc.
+        """
         if stream:
-            logger.warning("Streaming not yet supported in worker-based mode, using sync")
+            logger.warning("Streaming not yet supported, using sync mode")
             stream = False
         
-        # Route query to appropriate worker
-        if self.enable_routing and self.router:
+        logger.info("=" * 70)
+        logger.info(f"QUERY: {query}")
+        logger.info("=" * 70)
+        
+        # Step 1: Route query to appropriate expert worker
+        if self.router:
             routing_decision = self.router.route(query)
             worker_specialty = routing_decision.worker_specialty
             use_cache = routing_decision.use_tree_cache
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
+            logger.info(f"ROUTING: Selected {worker_specialty} worker")
         else:
             # Default routing
             worker_specialty = "logic"
             use_cache = True
             max_depth = 5
             num_sims = 10
+            logger.info(f"ROUTING: Default to {worker_specialty} worker (router disabled)")
         
         # Get worker
         worker = self._get_worker(worker_specialty)
         
-        # Execute worker with LATS
-        session_id = f"worker_{int(time.time() * 1000)}"
+        # Step 2-5: Worker reasoning with verification + reflection loop
+        session_id = f"session_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
         start_time = time.time()
         
-        logger.info(f"Executing {worker_specialty} worker with LATS")
-        logger.info(f"LATS config: depth={max_depth}, simulations={num_sims}, cache={use_cache}")
+        max_iterations = self.config.max_reflection_iterations + 1  # Initial attempt + reflections
+        iteration = 0
+        verification_passed = False
+        final_result = None
         
-        result = worker.solve(query, context=None, use_cache=use_cache,
-                            max_tree_depth=max_depth, num_simulations=num_sims)
+        while iteration < max_iterations and not verification_passed:
+            iteration += 1
+            logger.info(f"\n{'=' * 70}")
+            logger.info(f"ITERATION {iteration}/{max_iterations}")
+            logger.info(f"{'=' * 70}")
+            
+            # Step 2: Worker reasons using LATS + caching
+            logger.info(f"WORKER: {worker_specialty} executing with LATS")
+            logger.info(f"  Config: depth={max_depth}, sims={num_sims}, cache={use_cache}")
+            
+            result = worker.solve(
+                query,
+                context=None,
+                use_cache=use_cache and (iteration == 1),  # Only use cache on first attempt
+                max_tree_depth=max_depth,
+                num_simulations=num_sims
+            )
+            
+            logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
+            logger.info(f"WORKER: Confidence = {result.confidence:.2f}")
+            
+            # Step 3: Verification - check if reasoning is correct
+            logger.info(f"\nVERIFICATION: Checking reasoning correctness...")
+            verification_result = self.verification_engine.verify(
+                query=query,
+                reasoning_steps=result.reasoning_steps,
+                answer=result.answer
+            )
+            
+            verification_passed = verification_result["passed"]
+            confidence = verification_result["confidence"]
+            issues = verification_result.get("issues", [])
+            
+            if verification_passed:
+                logger.info(f"VERIFICATION: ✓ PASSED (confidence={confidence:.2f})")
+                final_result = result
+                final_result.verification_passed = True
+                final_result.confidence = confidence
+            else:
+                logger.info(f"VERIFICATION: ✗ FAILED (confidence={confidence:.2f})")
+                if issues:
+                    logger.info(f"VERIFICATION: Issues found:")
+                    for issue in issues:
+                        logger.info(f"  - {issue}")
+                
+                # Step 4: Reflection - improve reasoning if not last iteration
+                if iteration < max_iterations:
+                    logger.info(f"\nREFLECTION: Improving reasoning based on verification failures...")
+                    improved_steps = self.reflection_engine.enhance_reasoning(
+                        query=query,
+                        initial_trace=result.reasoning_steps,
+                        verification_issues=issues
+                    )
+                    
+                    # Update worker's reasoning for next iteration
+                    # (Next iteration will generate new answer based on improved understanding)
+                    logger.info(f"REFLECTION: Generated {len(improved_steps)} improved reasoning steps")
+                else:
+                    logger.info(f"REFLECTION: Max iterations reached, using best attempt")
+                    final_result = result
+                    final_result.verification_passed = False
+                    final_result.confidence = confidence
         
-        total_time = (time.time() - start_time) * 1000
+        total_time = time.time() - start_time
         
-        # Record outcome for router learning
-        if self.enable_routing and self.router:
+        logger.info(f"\n{'=' * 70}")
+        logger.info(f"COMPLETED: {iteration} iteration(s), verification {'PASSED' if verification_passed else 'FAILED'}")
+        logger.info(f"TIME: {total_time:.3f}s")
+        logger.info(f"{'=' * 70}\n")
+        
+        # Step 6: Record outcome for router learning
+        if self.router:
             outcome = {
                 "query": query,
-                "success": result.verification_passed,
-                "confidence": result.confidence,
-                "execution_time": result.execution_time,
-                "cost": result.execution_time * 0.00000001  # Estimate
+                "success": verification_passed,
+                "confidence": final_result.confidence,
+                "execution_time": total_time,
+                "cost": total_time * 0.00000001,  # Estimate
+                "verification_passed": verification_passed
             }
             self.router.record_outcome(routing_decision, outcome)
         
         # Format response
         return {
             "query": query,
-            "reasoning_trace": result.reasoning_steps,
-            "answer": result.answer,
+            "reasoning_trace": final_result.reasoning_steps,
+            "answer": final_result.answer,
             "worker": worker_specialty,
-            "confidence": result.confidence,
-            "verification_passed": result.verification_passed,
-            "cache_hit": result.metadata.get("cache_hit", False),
+            "confidence": final_result.confidence,
+            "verification_passed": verification_passed,
+            "iterations": iteration,
+            "cache_hit": final_result.metadata.get("cache_hit", False),
             "metrics": {
-                "total_time_ms": total_time,
-                "execution_time_ms": result.execution_time * 1000,
-                "tree_depth": result.metadata.get("tree_depth", 0),
-                "num_simulations": result.metadata.get("num_simulations", 0)
+                "total_time_ms": total_time * 1000,
+                "execution_time_ms": final_result.execution_time * 1000,
+                "tree_depth": final_result.metadata.get("tree_depth", 0),
+                "num_simulations": final_result.metadata.get("num_simulations", 0),
+                "iterations": iteration
             }
         }

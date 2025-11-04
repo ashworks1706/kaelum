@@ -177,11 +177,12 @@ class FactualVerifier:
 
 
 class VerificationEngine:
-    """Combines symbolic and factual verification."""
+    """Combines symbolic and factual verification for worker reasoning."""
 
-    def __init__(self, use_symbolic: bool = True, use_factual_check: bool = False, rag_adapter=None, debug: bool = False):
+    def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
+        self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
-        self.factual_verifier = FactualVerifier(rag_adapter) if use_factual_check else None
+        self.factual_verifier = None  # RAG verification removed for simplicity
         self.debug = debug
     
     def _log_debug(self, message: str):
@@ -249,3 +250,38 @@ class VerificationEngine:
         self._log_debug(f"Errors found: {len(errors)}\n")
 
         return errors, details
+    
+    def verify(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
+        """Verify worker reasoning and answer.
+        
+        Args:
+            query: Original query
+            reasoning_steps: List of reasoning steps from worker
+            answer: Final answer from worker
+            
+        Returns:
+            Dictionary with:
+                - passed: bool - whether verification passed
+                - confidence: float - confidence in the answer (0-1)
+                - issues: List[str] - list of issues found
+                - details: dict - detailed verification results
+        """
+        # Run symbolic/factual verification on reasoning steps
+        errors, details = self.verify_trace(reasoning_steps)
+        
+        # Calculate confidence based on verification results
+        if details["total_steps"] == 0:
+            confidence = 0.5  # No steps to verify, uncertain
+        else:
+            # Confidence based on percentage of steps that passed verification
+            confidence = details["verified_steps"] / details["total_steps"]
+        
+        # Overall pass/fail based on whether any errors found
+        passed = len(errors) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": errors,
+            "details": details
+        }
