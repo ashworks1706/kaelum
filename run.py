@@ -148,9 +148,7 @@ set_reasoning_model(
     max_tokens=1024,
     use_symbolic_verification=True,
     use_factual_verification=False,
-    max_reflection_iterations=2,
-    reasoning_system_prompt=reasoning_system,
-    reasoning_user_template=reasoning_template,
+    debug_verification=True  # Enable debug logging for math verification
 )
 
 

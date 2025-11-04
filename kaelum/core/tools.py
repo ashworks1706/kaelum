@@ -34,6 +34,6 @@ def get_kaelum_function_schema() -> Dict[str, Any]:
                     "enum": ["math", "logic", "code", "science", "general"]
                 }
             },
-            "required": ["query"]
+            "required": ["query", "domain"]
         }
     }

@@ -15,7 +15,7 @@ _orchestrator: Optional[KaelumOrchestrator] = None
 
 
 def set_reasoning_model(
-    base_url: str = "http://localhost:8000/v1",
+    base_url: str = "http://localhost:11434/v1",
     model: str = "TinyLlama/TinyLlama-1.1B-Chat-v0.3",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
@@ -24,6 +24,7 @@ def set_reasoning_model(
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
     enable_routing: bool = False,
+    debug_verification: bool = False,
     rag_adapter = None,
     reasoning_system_prompt: Optional[str] = None,
     reasoning_user_template: Optional[str] = None,
@@ -41,11 +42,14 @@ def set_reasoning_model(
         use_symbolic_verification: Enable math verification with SymPy
         use_factual_verification: Enable RAG-based fact checking
         enable_routing: Enable adaptive strategy selection (Phase 2)
+        debug_verification: Enable detailed debug logging for verification
         rag_adapter: RAG adapter instance (required if use_factual_verification=True)
         reasoning_system_prompt: Custom system prompt for reasoning model
         reasoning_user_template: Custom user prompt template. Use {query} placeholder.
     """
     global _orchestrator
+
+    print("Setting reasoning model to:", model)
     
     config = KaelumConfig(
         reasoning_llm=LLMConfig(
@@ -58,6 +62,7 @@ def set_reasoning_model(
         max_reflection_iterations=max_reflection_iterations,
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
+        debug_verification=debug_verification,
     )
     
     _orchestrator = KaelumOrchestrator(
