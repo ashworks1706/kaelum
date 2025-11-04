@@ -141,27 +141,36 @@ class MathWorker(WorkerAgent):
         return WorkerSpecialty.MATH
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        query_lower = query.lower()
+        from sentence_transformers import SentenceTransformer, util
         
-        math_keywords = ["calculate", "solve", "equation", "derivative", "integral",
-                        "sum", "multiply", "divide", "add", "subtract", "mean", "median",
-                        "standard deviation", "probability", "algebra", "geometry", "calculus"]
-        math_operators = ["+", "-", "×", "*", "/", "=", "^"]
-        
-        score = 0.0
-        
-        for keyword in math_keywords:
-            if keyword in query_lower:
-                score += 0.3
-                
-        for op in math_operators:
-            if op in query:
-                score += 0.2
-                
-        if any(c.isdigit() for c in query):
-            score += 0.2
+        if not hasattr(self, '_encoder'):
+            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
             
-        return min(score, 1.0)
+            math_exemplars = [
+                "Calculate the derivative of x squared",
+                "Solve the equation 2x + 5 = 15",
+                "What is the integral of sin(x)?",
+                "Find the mean of these numbers: 5, 10, 15, 20",
+                "Compute 25 multiplied by 17",
+                "What is the probability of rolling a 6?",
+                "Simplify the expression 3x + 2x - 5",
+                "Calculate the standard deviation of this dataset"
+            ]
+            self._math_embeddings = self._encoder.encode(math_exemplars, convert_to_tensor=True)
+        
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._math_embeddings)[0]
+        max_similarity = float(similarities.max())
+        
+        math_symbols = sum(c in query for c in '+-*/=^√∫∂∑')
+        if math_symbols > 2:
+            max_similarity = min(max_similarity + 0.15, 1.0)
+        
+        has_numbers = sum(c.isdigit() for c in query) > 2
+        if has_numbers:
+            max_similarity = min(max_similarity + 0.1, 1.0)
+        
+        return max_similarity
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
@@ -221,7 +230,9 @@ class MathWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                is_final = any(word in next_step.lower() for word in ["answer is", "result is", "equals", "="])
+                has_answer_indicators = ('=' in next_step or 
+                                        next_step.lower().startswith(('therefore', 'thus', 'answer:', 'result:')))
+                is_final = depth >= max_tree_depth - 1 or has_answer_indicators
                 
                 return {
                     "query": query,
@@ -301,29 +312,33 @@ class LogicWorker(WorkerAgent):
         return WorkerSpecialty.LOGIC
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        query_lower = query.lower()
+        from sentence_transformers import SentenceTransformer, util
         
-        logic_keywords = ["if", "then", "therefore", "because", "implies", "prove",
-                         "assume", "syllogism", "valid", "fallacy", "deduce", "conclude",
-                         "premise", "argument", "contradiction", "mortal", "human"]
-        logic_patterns = ["all are", "all .* are", "some are", "no are", "if and only if"]
-        
-        score = 0.0
-        
-        for keyword in logic_keywords:
-            if keyword in query_lower:
-                score += 0.25
-                
-        if "all " in query_lower and " are" in query_lower:
-            score += 0.3
-        for pattern in logic_patterns:
-            if pattern in query_lower:
-                score += 0.2
-                
-        if "if" in query_lower and any(word in query_lower for word in ["then", "therefore", "implies"]):
-            score += 0.3
+        if not hasattr(self, '_encoder'):
+            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
             
-        return min(score, 1.0)
+            logic_exemplars = [
+                "All humans are mortal. Socrates is human. Is Socrates mortal?",
+                "If it rains, then the ground is wet. It's raining. What can we conclude?",
+                "Prove that this argument is valid",
+                "All dogs are animals. All animals need food. Therefore, all dogs need food.",
+                "Assume X is true. If X implies Y, what follows?",
+                "Is this reasoning sound: If A then B, B is true, therefore A is true?",
+                "Deduce the conclusion from these premises",
+                "Identify the fallacy in this argument"
+            ]
+            self._logic_embeddings = self._encoder.encode(logic_exemplars, convert_to_tensor=True)
+        
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._logic_embeddings)[0]
+        max_similarity = float(similarities.max())
+        
+        logical_structures = sum(1 for phrase in ['if', 'then', 'therefore', 'all', 'some', 'no'] 
+                                if phrase in query.lower())
+        if logical_structures >= 3:
+            max_similarity = min(max_similarity + 0.15, 1.0)
+        
+        return max_similarity
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
@@ -380,7 +395,8 @@ class LogicWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                is_conclusion = any(word in next_step.lower() for word in ["therefore", "thus", "conclude", "answer is"])
+                has_conclusion_indicators = next_step.lower().startswith(('therefore', 'thus', 'conclude', 'conclusion:', 'answer:'))
+                is_conclusion = depth >= max_tree_depth - 1 or has_conclusion_indicators
                 
                 return {
                     "query": query,

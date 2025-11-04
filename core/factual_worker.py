@@ -11,53 +11,33 @@ from core.reasoning import LLMClient, Message
 class FactualWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None):
         super().__init__(config)
-        self.factual_keywords = [
-            'what is', 'who is', 'when did', 'where is', 'how many',
-            'define', 'explain', 'describe', 'tell me about',
-            'fact', 'information', 'data', 'statistics', 'history',
-            'capital', 'population', 'year', 'date', 'location',
-            'definition', 'meaning', 'called', 'known as'
-        ]
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        query_lower = query.lower()
-        score = 0.0
+        from sentence_transformers import SentenceTransformer, util
         
-        # Check for factual question patterns (higher weight)
-        question_patterns = [
-            r'\bwhat\s+is\b',
-            r'\bwho\s+is\b',
-            r'\bwhen\s+did\b',
-            r'\bwhere\s+is\b',
-            r'\bhow\s+many\b',
-            r'\bwhich\s+\w+\b',
-        ]
+        if not hasattr(self, '_encoder'):
+            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            factual_exemplars = [
+                "What is the capital of France?",
+                "Who invented the telephone?",
+                "When did World War II end?",
+                "Where is the Great Wall of China located?",
+                "How many planets are in the solar system?",
+                "Define photosynthesis",
+                "Explain the theory of relativity",
+                "Tell me about the Renaissance period",
+                "What are the symptoms of influenza?",
+                "Describe the water cycle"
+            ]
+            self._factual_embeddings = self._encoder.encode(factual_exemplars, convert_to_tensor=True)
         
-        for pattern in question_patterns:
-            if re.search(pattern, query_lower):
-                score += 0.5
-                break
-        
-        # Check for factual keywords
-        keyword_count = sum(1 for kw in self.factual_keywords if kw in query_lower)
-        score += min(keyword_count * 0.2, 0.4)
-        
-        # Check for specific factual indicators
-        if any(ind in query_lower for ind in ['capital', 'population', 'year', 'date']):
-            score += 0.25
-        
-        # Check for definition requests (higher weight)
-        if 'define' in query_lower or 'definition' in query_lower or 'meaning' in query_lower:
-            score += 0.4
-        
-        # Penalize if it looks like other types
-        if any(word in query_lower for word in ['solve', 'calculate', 'prove', 'write code']):
-            score *= 0.5
-        
-        return min(score, 1.0)
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._factual_embeddings)[0]
+        return float(similarities.max())
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))
@@ -101,20 +81,31 @@ class FactualWorker(WorkerAgent):
         )
     
     def _classify_factual_query(self, query: str) -> str:
-        query_lower = query.lower()
+        from sentence_transformers import SentenceTransformer, util
         
-        if any(kw in query_lower for kw in ['define', 'definition', 'meaning', 'what is', 'what are']):
-            return 'definition'
-        elif any(kw in query_lower for kw in ['history', 'when', 'year', 'date']):
-            return 'historical'
-        elif any(kw in query_lower for kw in ['where', 'location', 'place']):
-            return 'geographical'
-        elif any(kw in query_lower for kw in ['how many', 'population', 'number', 'statistics']):
-            return 'quantitative'
-        elif any(kw in query_lower for kw in ['who', 'person', 'people']):
-            return 'biographical'
-        else:
-            return 'general'
+        if not hasattr(self, '_type_encoder'):
+            self._type_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            type_exemplars = {
+                'definition': "What is photosynthesis? Define machine learning.",
+                'historical': "When did the Renaissance begin? What year did World War II end?",
+                'geographical': "Where is Mount Everest located? What is the capital of Japan?",
+                'quantitative': "How many planets are in our solar system? What is the population of China?",
+                'biographical': "Who invented the telephone? Tell me about Marie Curie.",
+                'general': "Explain the water cycle. Describe how airplanes fly."
+            }
+            
+            self._type_names = list(type_exemplars.keys())
+            self._type_embeddings = self._type_encoder.encode(
+                list(type_exemplars.values()), 
+                convert_to_tensor=True
+            )
+        
+        query_embedding = self._type_encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._type_embeddings)[0]
+        max_idx = int(similarities.argmax())
+        
+        return self._type_names[max_idx]
     
     def _build_prompt(
         self,
@@ -173,31 +164,47 @@ class FactualWorker(WorkerAgent):
         sources: List[str],
         response: str
     ) -> float:
-        confidence = 0.5
+        from sentence_transformers import SentenceTransformer, util
         
-        if query_type in ['definition', 'biographical']:
-            confidence += 0.2
-        elif query_type == 'quantitative':
-            if re.search(r'\d+', response):
-                confidence += 0.15
+        if not hasattr(self, '_conf_encoder'):
+            self._conf_encoder = SentenceTransformer('all-MiniLM-L6-v2')
         
-        if len(response) < 50:
-            confidence -= 0.1
+        if not response or len(response) < 20:
+            return 0.3
         
-        return min(max(confidence, 0.0), 1.0)
+        words = response.split()
+        if len(words) < 5:
+            return 0.4
+        
+        response_parts = response.split('.')[:3]
+        if len(response_parts) < 2:
+            return 0.5
+        
+        has_numbers = bool(re.search(r'\d+', response))
+        has_specifics = len(response) > 100
+        
+        base_confidence = 0.6
+        if has_numbers:
+            base_confidence += 0.1
+        if has_specifics:
+            base_confidence += 0.1
+        if len(sources) > 0:
+            base_confidence += 0.1
+        
+        return min(base_confidence, 0.95)
     
     async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
+        from sentence_transformers import SentenceTransformer, util
+        
         if not answer or len(answer.strip()) < 10:
             return False
         
-        query_words = set(query.lower().split())
-        answer_words = set(answer.lower().split())
+        if not hasattr(self, '_verif_encoder'):
+            self._verif_encoder = SentenceTransformer('all-MiniLM-L6-v2')
         
-        common_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'who', 'when', 'where', 'how'}
-        query_keywords = query_words - common_words
+        query_embedding = self._verif_encoder.encode(query, convert_to_tensor=True)
+        answer_embedding = self._verif_encoder.encode(answer, convert_to_tensor=True)
         
-        overlap = len(query_keywords & answer_words)
-        if overlap == 0 and len(query_keywords) > 0:
-            return False
+        similarity = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
         
-        return True
+        return similarity > 0.3

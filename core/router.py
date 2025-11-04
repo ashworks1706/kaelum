@@ -246,42 +246,38 @@ class Router:
     def _extract_features(self, query: str, context: Optional[Dict] = None) -> NeuralRoutingFeatures:
         embedding = self.encoder.encode(query, convert_to_numpy=True)
         
-        q_lower = query.lower()
         words = query.split()
         word_count = len(words)
-        
-        has_code = any(x in q_lower for x in ["code", "function", "class", "debug", "implement"])
-        has_math = any(x in q_lower for x in ["calculate", "solve", "equation", "derivative", "integral"])
-        has_logic = any(x in q_lower for x in ["if", "then", "therefore", "prove", "logic"])
         
         num_numbers = sum(c.isdigit() for c in query)
         num_symbols = sum(not c.isalnum() and not c.isspace() for c in query)
         num_upper = sum(c.isupper() for c in query)
         num_punct = sum(c in '.,!?;:' for c in query)
-        question_words = sum(q_lower.count(w) for w in ["what", "why", "how", "when", "where", "who"])
         
         unique_words = len(set(w.lower() for w in words))
         lexical_diversity = unique_words / max(word_count, 1)
         avg_word_length = sum(len(w) for w in words) / max(word_count, 1)
         
-        complexity = min(1.0, (
-            0.2 * (word_count / 50) +
-            0.2 * (avg_word_length / 10) +
-            0.2 * (1 - lexical_diversity) +
-            0.2 * (num_numbers / 20) +
-            0.2 * (num_symbols / 20)
-        ))
+        math_symbols = sum(c in query for c in '+-*/=^√∫∂∑∏')
+        code_symbols = sum(c in query for c in '{}[]();')
+        
+        structural_complexity = (
+            (word_count / 100.0) * 0.3 +
+            lexical_diversity * 0.3 +
+            (avg_word_length / 15.0) * 0.2 +
+            (num_symbols / 30.0) * 0.2
+        )
         
         return NeuralRoutingFeatures(
             embedding=embedding,
             query_length=len(query),
             word_count=word_count,
-            has_numbers=num_numbers > 0,
-            has_math_symbols=any(c in query for c in '+-*/=^'),
-            has_code_keywords=has_code,
-            has_logic_keywords=has_logic,
-            question_words=question_words,
-            complexity_score=complexity,
+            has_numbers=num_numbers > 2,
+            has_math_symbols=math_symbols > 0,
+            has_code_keywords=code_symbols > 2,
+            has_logic_keywords=num_punct > 3,
+            question_words=0,
+            complexity_score=min(structural_complexity, 1.0),
             avg_word_length=avg_word_length,
             uppercase_ratio=num_upper / max(len(query), 1),
             punctuation_count=num_punct,
@@ -290,18 +286,24 @@ class Router:
         )
     
     def _classify_query_type(self, query: str) -> QueryType:
-        q_lower = query.lower()
+        worker_to_type = {
+            "math": QueryType.MATH,
+            "logic": QueryType.LOGIC,
+            "code": QueryType.CODE,
+            "factual": QueryType.FACTUAL,
+            "creative": QueryType.CREATIVE,
+            "analysis": QueryType.ANALYSIS
+        }
         
-        if any(x in q_lower for x in ["code", "function", "debug", "implement", "algorithm"]):
-            return QueryType.CODE
-        elif any(x in q_lower for x in ["calculate", "solve", "prove", "equation", "theorem"]):
-            return QueryType.MATH
-        elif any(x in q_lower for x in ["fact", "history", "definition", "explain", "what is"]):
-            return QueryType.FACTUAL
-        elif any(x in q_lower for x in ["story", "poem", "creative", "imagine", "write"]):
-            return QueryType.CREATIVE
-        else:
-            return QueryType.UNKNOWN
+        features = self._extract_features(query)
+        self.policy_network.eval()
+        with torch.no_grad():
+            feature_tensor = features.to_tensor().unsqueeze(0).to(self.device)
+            outputs = self.policy_network(feature_tensor)
+            worker_idx = torch.argmax(outputs['worker_logits'], dim=-1).item()
+            worker = self.idx_to_worker[worker_idx]
+        
+        return worker_to_type.get(worker, QueryType.UNKNOWN)
     
     def _load_model(self, path: str):
         checkpoint = torch.load(path, map_location=self.device)

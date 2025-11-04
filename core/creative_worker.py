@@ -11,72 +11,35 @@ from core.reasoning import LLMClient, Message
 class CreativeWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None):
         super().__init__(config)
-        # Store higher temperature for creative tasks
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
-        
-        self.creative_keywords = [
-            'write', 'create', 'generate', 'imagine', 'design', 'brainstorm',
-            'invent', 'compose', 'draft', 'suggest', 'propose', 'come up with',
-            'story', 'poem', 'essay', 'article', 'blog', 'creative',
-            'idea', 'concept', 'alternative', 'different', 'unique', 'novel'
-        ]
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CREATIVE
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        query_lower = query.lower()
-        score = 0.0
+        from sentence_transformers import SentenceTransformer, util
         
-        # Check for creative action verbs
-        creative_verbs = [
-            'write', 'create', 'generate', 'imagine', 'design', 'compose',
-            'draft', 'brainstorm', 'invent', 'suggest', 'come up with'
-        ]
+        if not hasattr(self, '_encoder'):
+            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            creative_exemplars = [
+                "Write a short story about a dragon",
+                "Create a poem about autumn",
+                "Generate ideas for a marketing campaign",
+                "Brainstorm unique product names",
+                "Imagine a futuristic city and describe it",
+                "Compose a dialogue between two characters",
+                "Design a creative solution to reduce plastic waste",
+                "Come up with alternative uses for a paperclip",
+                "Write a creative essay on the importance of art",
+                "Suggest unique wedding themes"
+            ]
+            self._creative_embeddings = self._encoder.encode(creative_exemplars, convert_to_tensor=True)
         
-        for verb in creative_verbs:
-            if re.search(rf'\b{verb}\b', query_lower):
-                score += 0.4
-                break
-        
-        # Check for creative content types
-        content_types = [
-            'story', 'poem', 'essay', 'article', 'blog', 'letter',
-            'script', 'dialogue', 'narrative', 'creative', 'fiction'
-        ]
-        
-        for content in content_types:
-            if content in query_lower:
-                score += 0.35
-                break
-        
-        # Check for keywords indicating exploration
-        if any(kw in query_lower for kw in ['idea', 'concept', 'brainstorm', 'possibilities']):
-            score += 0.25
-        
-        # Check for diversity/alternative requests
-        if any(kw in query_lower for kw in ['different', 'alternative', 'unique', 'novel', 'various']):
-            score += 0.2
-        
-        # Penalize if it looks like other types
-        penalties = {
-            'solve': 0.6,
-            'calculate': 0.6,
-            'prove': 0.6,
-            'verify': 0.6,
-            'what is': 0.7,
-            'define': 0.7,
-            'debug': 0.7,
-            'fix': 0.7
-        }
-        
-        for keyword, penalty_factor in penalties.items():
-            if keyword in query_lower:
-                score *= penalty_factor
-                break
-        
-        return min(score, 1.0)
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._creative_embeddings)[0]
+        return float(similarities.max())
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))

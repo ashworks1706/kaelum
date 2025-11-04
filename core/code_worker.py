@@ -23,62 +23,32 @@ class CodeWorker(WorkerAgent):
         return WorkerSpecialty.CODE
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        query_lower = query.lower()
-        score = 0.0
+        from sentence_transformers import SentenceTransformer, util
         
-        # Strong code keywords
-        strong_keywords = [
-            'write code', 'generate code', 'implement', 'program', 'script',
-            'function', 'class', 'method', 'algorithm', 'debug', 'fix bug',
-            'fix', 'syntax error', 'optimize code', 'refactor', 'test case', 'unit test'
-        ]
+        if not hasattr(self, '_encoder'):
+            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
+            
+            code_exemplars = [
+                "Write a Python function to sort a list",
+                "Implement a binary search algorithm",
+                "Debug this JavaScript code",
+                "Create a class for user authentication",
+                "Optimize this SQL query",
+                "Refactor this code to use async/await",
+                "Write unit tests for this function",
+                "Fix the syntax error in this code"
+            ]
+            self._code_embeddings = self._encoder.encode(code_exemplars, convert_to_tensor=True)
         
-        for keyword in strong_keywords:
-            if keyword in query_lower:
-                score += 0.51
-                break
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
+        similarities = util.cos_sim(query_embedding, self._code_embeddings)[0]
+        max_similarity = float(similarities.max())
         
-        # Programming language mentions (with word boundaries)
-        language_patterns = {
-            'python': r'\bpython\b',
-            'javascript': r'\b(javascript|js)\b',
-            'typescript': r'\b(typescript|ts)\b',
-            'java': r'\bjava\b',
-            'c++': r'\bc\+\+|cpp\b',
-            'c': r'\bc\s',
-            'go': r'\b(golang|go)\b',
-            'rust': r'\brust\b',
-            'ruby': r'\bruby\b',
-            'php': r'\bphp\b',
-            'swift': r'\bswift\b',
-            'kotlin': r'\bkotlin\b'
-        }
+        code_chars = sum(c in query for c in '{}[]();')
+        if code_chars > 5:
+            max_similarity = min(max_similarity + 0.15, 1.0)
         
-        for lang, pattern in language_patterns.items():
-            if re.search(pattern, query_lower):
-                score += 0.51
-                break
-        
-        # Code patterns (actual code snippets)
-        code_patterns = [
-            r'def\s+\w+',           # Python function
-            r'function\s+\w+',      # JS function
-            r'class\s+\w+',         # Class definition
-            r'for\s+\w+\s+in',      # For loop
-            r'if\s+\w+\s*[=!<>]',   # If statement
-            r'return\s+\w+',        # Return statement
-        ]
-        
-        for pattern in code_patterns:
-            if re.search(pattern, query):
-                score += 0.35
-                break
-        
-        # Code blocks (backticks or indentation)
-        if '```' in query or '\n    ' in query:
-            score += 0.2
-        
-        return min(score, 1.0)
+        return max_similarity
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))

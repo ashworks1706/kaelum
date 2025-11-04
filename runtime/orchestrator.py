@@ -114,7 +114,7 @@ class KaelumOrchestrator:
         
         # Step 1: Route query to appropriate expert worker
         if self.router:
-            routing_decision = self.router.route(query)
+            routing_decision = self.router.route(query) # neural network to extract keywords and semantic depth to determine complexity of the query
             worker_specialty = routing_decision.worker_specialty
             use_cache = routing_decision.use_tree_cache
             max_depth = routing_decision.max_tree_depth
