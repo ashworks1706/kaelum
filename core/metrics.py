@@ -1,19 +1,14 @@
-"""Cost tracking and metrics infrastructure."""
-
 from typing import Dict, Any, Optional
 from datetime import datetime
 import json
 
 
 class CostTracker:
-    """Track and compare costs across commercial and local models."""
-    
     def __init__(self):
         self.sessions = {}
         self.current_session = None
     
     def start_session(self, session_id: str, metadata: Optional[Dict[str, Any]] = None):
-        """Start a new tracking session."""
         self.current_session = session_id
         self.sessions[session_id] = {
             "start_time": datetime.now().isoformat(),
@@ -32,7 +27,6 @@ class CostTracker:
         cost: float,
         session_id: Optional[str] = None
     ):
-        """Log a single inference."""
         sid = session_id or self.current_session
         if not sid or sid not in self.sessions:
             return
@@ -50,7 +44,6 @@ class CostTracker:
         session["total_latency_ms"] += latency_ms
     
     def get_session_metrics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get metrics for a session."""
         sid = session_id or self.current_session
         if not sid or sid not in self.sessions:
             return {}
@@ -76,9 +69,8 @@ class CostTracker:
     def calculate_savings(
         self,
         session_id: Optional[str] = None,
-        commercial_rate_per_1m: float = 0.10  # Gemini 2.0 Flash blended rate
+        commercial_rate_per_1m: float = 0.10
     ) -> Dict[str, Any]:
-        """Calculate cost savings vs commercial LLM."""
         metrics = self.get_session_metrics(session_id)
         if not metrics:
             return {}
@@ -98,7 +90,6 @@ class CostTracker:
         }
     
     def export_session(self, session_id: Optional[str] = None) -> str:
-        """Export session data as JSON."""
         sid = session_id or self.current_session
         if not sid or sid not in self.sessions:
             return "{}"
