@@ -1,5 +1,3 @@
-"""Self-reflection and reasoning improvement engine."""
-
 from typing import List
 from core.reasoning import LLMClient, Message
 

@@ -1,11 +1,3 @@
-"""CreativeWorker - Specialized worker for creative and exploratory tasks.
-
-This worker handles creative queries by:
-1. Generating diverse, novel responses
-2. Exploring multiple possibilities
-3. Balancing creativity with coherence
-"""
-
 import asyncio
 import time
 import re

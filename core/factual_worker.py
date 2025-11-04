@@ -1,11 +1,3 @@
-"""FactualWorker - Specialized worker for factual queries.
-
-This worker handles factual queries by:
-1. Analyzing the question to identify what facts are needed
-2. Reasoning through available knowledge
-3. Providing accurate, well-reasoned answers
-"""
-
 import asyncio
 import time
 import re
