@@ -239,7 +239,7 @@ class RouterMetricsCollector:
         query_types = metrics.get("by_query_type", {})
         
         if query_type not in query_types:
-            return "balanced"  # Default fallback
+            return "balanced"  # Default for unknown query types
         
         return query_types[query_type]["most_used_strategy"]
     
