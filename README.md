@@ -173,6 +173,24 @@ def infer(query):
 
 ## 📦 Installation
 
+### **Step 1: Install Ollama (Recommended)**
+
+```bash
+# Linux/Mac
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows: Download from https://ollama.com/download
+```
+
+Pull a model:
+```bash
+ollama pull qwen2.5:3b  # Recommended (3GB)
+# or ollama pull qwen2.5:1.5b  # Faster (1GB)
+# or ollama pull qwen2.5:7b  # More accurate (5GB)
+```
+
+### **Step 2: Install Kaelum**
+
 ```bash
 # Clone repository
 git clone https://github.com/ashworks1706/KaelumAI.git
@@ -186,9 +204,25 @@ source .venv/bin/activate.fish  # or .venv/bin/activate for bash
 pip install -r requirements.txt
 ```
 
+### **Step 3: Configure (Optional)**
+
+Copy `.env.example` to `.env` and adjust if needed:
+```bash
+cp .env.example .env
+```
+
+Default configuration works with Ollama out-of-the-box.
+
+### **Step 4: Test**
+
+```bash
+python example.py
+```
+
 ### **Requirements:**
 
 - Python 3.8+
+- **LLM Backend:** Ollama (recommended) or any OpenAI-compatible API
 - **Core:**
   - `torch` - Neural router
   - `sympy` - Symbolic verification
