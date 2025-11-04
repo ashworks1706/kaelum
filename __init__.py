@@ -11,7 +11,7 @@ from kaelum.core.tools import get_kaelum_function_schema
 from kaelum.core.metrics import CostTracker
 from kaelum.core.registry import ModelRegistry, ModelSpec, get_registry
 from kaelum.core.router import Router, QueryType, ReasoningStrategy
-from kaelum.core.neural_router import NeuralRouter
+from core.neural_router import NeuralRouter
 from kaelum.core.neural_router_trainer import NeuralRouterTrainer
 
 # Global orchestrator with verification + reflection

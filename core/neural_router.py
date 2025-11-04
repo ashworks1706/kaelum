@@ -16,59 +16,10 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-    import logging
-    logger = logging.getLogger("kaelum.neural_router")
-    logger.warning("PyTorch not installed. Neural router will use rule-based fallback.")
-    logger.info("Install with: pip install torch")
-    # Provide tiny stubs for `nn` and `F` so class definitions that reference
-    # `nn.Module`, `nn.Linear`, etc. won't raise at import time when torch is
-    # not installed. These stubs are inert and will raise if actually used.
-    try:
-        import types
-    except Exception:
-        types = None
-
-    class _DummyModule:
-        pass
-
-    class _DummyLinear:
-        def __init__(self, *a, **k):
-            pass
-
-    class _DummyLayerNorm:
-        def __init__(self, *a, **k):
-            pass
-
-    def _dummy_relu(x):
-        return x
-
-    class _DummyDropout:
-        def __init__(self, *a, **k):
-            pass
-
-    if types is not None:
-        nn = types.SimpleNamespace(
-            Linear=_DummyLinear,
-            LayerNorm=_DummyLayerNorm,
-            ReLU=_dummy_relu,
-            Dropout=_DummyDropout,
-            Sequential=lambda *args, **kwargs: None,
-            Module=_DummyModule,
-        )
-        F = types.SimpleNamespace(
-            softmax=lambda x, dim=-1: x,
-            sigmoid=lambda x: x,
-        )
-    else:
-        nn = None
-        F = None
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+TORCH_AVAILABLE = True
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -78,7 +29,7 @@ except ImportError:
 
 # Import base router components
 from .router import (
-    QueryType, ReasoningStrategy, RoutingDecision, RoutingOutcome, Router
+    QueryType, ReasoningStrategy, RoutingDecision, RoutingOutcome
 )
 
 logger = logging.getLogger("kaelum.neural_router")
@@ -275,27 +226,19 @@ class NeuralRouter:
     decisions based on query characteristics and historical performance.
     """
     
-    def __init__(
-        self,
-        model_path: Optional[str] = None,
-        data_dir: str = ".kaelum/neural_routing",
-        fallback_to_rules: bool = True,
-        device: str = "cpu"
-    ):
+    def __init__(self, model_path: Optional[str] = None, data_dir: str = ".kaelum/neural_routing", device: str = "cpu"):
         """Initialize neural router.
-        
+
         Args:
             model_path: Path to saved model checkpoint
             data_dir: Directory for training data and checkpoints
-            fallback_to_rules: Use rule-based router if neural model unavailable
             device: Device for inference ('cpu' or 'cuda')
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.fallback_to_rules = fallback_to_rules
-        self.device = device if TORCH_AVAILABLE else "cpu"
-        
+
+        self.device = device
+
         # Strategy mapping
         self.strategy_idx_to_enum = [
             ReasoningStrategy.SYMBOLIC_HEAVY,
@@ -304,46 +247,35 @@ class NeuralRouter:
             ReasoningStrategy.FAST,
             ReasoningStrategy.DEEP,
         ]
-        
+
         # Initialize components
         self.encoder = None
         self._embedding_attempted = False
         # Don't load embeddings at init - do it lazily on first use
         logger.info("Neural router initialized (embeddings will load on first use)")
-        
+
         self.policy_network = None
         self.model_loaded = False
-        
-        if TORCH_AVAILABLE:
-            # Initialize policy network
-            self.policy_network = PolicyNetwork(
-                input_dim=398,  # 384 (embedding) + 14 (categorical)
-                hidden_dim=256,
-                num_strategies=5
-            )
-            
-            # Load model if path provided
-            if model_path and Path(model_path).exists():
-                self._load_model(model_path)
-            else:
-                # Try loading from default location
-                default_path = self.data_dir / "neural_router.pt"
-                if default_path.exists():
-                    self._load_model(str(default_path))
-        
-        # Fallback rule-based router
-        self.rule_router = None
-        if fallback_to_rules:
-            self.rule_router = Router(learning_enabled=True, data_dir=str(self.data_dir.parent / "routing"))
-        
-        logger.info("=" * 60)
-        logger.info("Neural Router (Kaelum Brain) initialized")
-        logger.info(f"PyTorch available: {TORCH_AVAILABLE}")
+
+        # Initialize policy network (requires PyTorch)
+        self.policy_network = PolicyNetwork(
+            input_dim=398,  # 384 (embedding) + 14 (categorical)
+            hidden_dim=256,
+            num_strategies=5,
+        )
+
+        # Load model if a checkpoint exists
+        if model_path and Path(model_path).exists():
+            self._load_model(model_path)
+        else:
+            default_path = self.data_dir / "neural_router.pt"
+            if default_path.exists():
+                self._load_model(str(default_path))
+
+        logger.info("Neural Router initialized")
         logger.info(f"Model loaded: {self.model_loaded}")
         logger.info(f"Embeddings available: {EMBEDDINGS_AVAILABLE}")
-        logger.info(f"Fallback to rules: {fallback_to_rules}")
         logger.info(f"Device: {self.device}")
-        logger.info("=" * 60)
     
     def route(self, query: str, context: Optional[Dict] = None) -> RoutingDecision:
         """Route a query using neural policy network.
@@ -360,34 +292,12 @@ class NeuralRouter:
         logger.info("-" * 60)
         logger.info(f"NEURAL ROUTING: {query[:100]}...")
         
-        # Use neural model if available
-        if self.model_loaded and TORCH_AVAILABLE and self.encoder:
-            try:
-                decision = self._neural_route(query, context)
-                routing_time = (time.time() - start_time) * 1000
-                logger.info(f"  Neural routing time: {routing_time:.2f}ms")
-                logger.info("-" * 60)
-                return decision
-            except Exception as e:
-                logger.warning(f"Neural routing failed: {e}")
-                logger.info("Falling back to rule-based router")
-        
-        # Fallback to rule-based
-        if self.rule_router:
-            logger.info("Using rule-based router (neural model not available)")
-            return self.rule_router.route(query, context)
-        else:
-            # Ultimate fallback: balanced strategy
-            logger.warning("No routing available - using default balanced strategy")
-            return RoutingDecision(
-                query_type=QueryType.UNKNOWN,
-                strategy=ReasoningStrategy.BALANCED,
-                max_reflection_iterations=2,
-                use_symbolic_verification=True,
-                use_factual_verification=True,
-                confidence_threshold=0.75,
-                reasoning="Default strategy (no routing available)"
-            )
+        # Always use the neural policy to route; errors will propagate to caller.
+        decision = self._neural_route(query, context)
+        routing_time = (time.time() - start_time) * 1000
+        logger.info(f"  Neural routing time: {routing_time:.2f}ms")
+        logger.info("-" * 60)
+        return decision
     
     def _neural_route(self, query: str, context: Optional[Dict]) -> RoutingDecision:
         """Perform neural routing using policy network.
@@ -404,10 +314,10 @@ class NeuralRouter:
         
         # Step 2: Convert to tensor
         x = features.to_tensor().unsqueeze(0)  # Add batch dimension
-        
+
         if self.device == "cuda":
             x = x.cuda()
-        
+
         # Step 3: Get prediction from neural network
         prediction = self.policy_network.predict_routing(x)
         
@@ -559,8 +469,8 @@ class NeuralRouter:
             model_path: Path to save model (default: data_dir/neural_router.pt)
             training_info: Optional training metadata
         """
-        if not TORCH_AVAILABLE or self.policy_network is None:
-            logger.warning("Cannot save model: PyTorch or policy network not available")
+        if self.policy_network is None:
+            logger.warning("Cannot save model: policy network not initialized")
             return
         
         if model_path is None:
@@ -587,6 +497,15 @@ class NeuralRouter:
             decision: Routing decision made
             result: Result from orchestrator
         """
-        # Delegate to rule-based router's outcome recording
-        if self.rule_router:
-            self.rule_router.record_outcome(decision, result)
+        # Persist outcome to data_dir/outcomes.jsonl for later offline training.
+        try:
+            out_path = self.data_dir / "outcomes.jsonl"
+            record = {
+                'timestamp': time.time(),
+                'decision': asdict(decision),
+                'result': result,
+            }
+            with open(out_path, 'a', encoding='utf-8') as fh:
+                fh.write(json.dumps(record, default=str) + "\n")
+        except Exception as e:
+            logger.warning(f"Failed to record outcome: {e}")

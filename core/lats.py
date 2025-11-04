@@ -63,9 +63,21 @@ class LATS:
     swapped out with agent-specific rollouts.
     """
 
-    def __init__(self, root_state: Dict[str, Any], root_id: str = "root"):
+    def __init__(self, root_state: Dict[str, Any], root_id: str = "root", *,
+                 simulator: Optional[callable] = None,
+                 expand_fn: Optional[callable] = None):
+        """Create a LATS tree.
+
+        Args:
+            root_state: initial state for root node
+            root_id: id for root
+            simulator: optional callable(node) -> float. If not provided, simulate() must be called with an explicit simulator.
+            expand_fn: optional callable(parent_node) -> child_state. If not provided, expand must be called with an explicit child_state.
+        """
         self.root = LATSNode(id=root_id, state=root_state)
         self.nodes: Dict[str, LATSNode] = {self.root.id: self.root}
+        self.simulator = simulator
+        self.expand_fn = expand_fn
 
     def uct_score(self, parent: LATSNode, child: LATSNode, c: float = 1.414) -> float:
         if child.visits == 0:
@@ -93,17 +105,25 @@ class LATS:
         self.nodes[child_id] = node
         return node
 
-    def simulate(self, node: LATSNode) -> float:
-        """Placeholder simulation. Replace with agent rollouts or learned model.
+    def simulate(self, node: LATSNode, simulator: Optional[callable] = None) -> float:
+        """Run a simulation/rollout for a node and return scalar reward.
 
-        Returns a scalar reward/value.
+        The simulation must be provided by the caller (either as `simulator`
+        argument or when the LATS instance was created with `simulator=`).
+        This function will raise NotImplementedError if no simulator is available.
         """
-        # Simple heuristic: random value biased by a small heuristic in state
-        bias = 0.0
-        if isinstance(node.state, dict):
-            bias = float(node.state.get('heuristic', 0.0))
-        # Simulate a noisy outcome
-        return float(max(0.0, min(1.0, bias + random.gauss(0.5, 0.15))))
+        sim = simulator or self.simulator
+        if sim is None:
+            raise NotImplementedError(
+                "LATS.simulate requires a simulator callable. "
+                "Provide it as LATS(simulator=...) or pass it to simulate(node, simulator=...)."
+            )
+        # Delegate to caller-provided simulator
+        reward = sim(node)
+        try:
+            return float(reward)
+        except Exception as e:
+            raise RuntimeError(f"Simulator must return a numeric reward: {e}")
 
     def backpropagate(self, node: LATSNode, reward: float) -> None:
         cur = node
@@ -122,18 +142,35 @@ class LATS:
         best = max(node.children, key=lambda c: (c.value / max(1, c.visits)))
         return best
 
-    def choose(self, exploit: float = 0.9) -> LATSNode:
-        """High-level choose action: with probability exploit pick best_child, else run a sim and expand."""
+    def choose(self, exploit: float = 0.9, *, expand_fn: Optional[callable] = None, simulator: Optional[callable] = None) -> LATSNode:
+        """High-level choose action.
+
+        With probability `exploit`, returns the best child (if any).
+        Otherwise performs select->expand->simulate->backpropagate. Both `expand_fn`
+        and `simulator` must be supplied either as arguments here or when the
+        LATS instance was created. This method will raise a clear error if
+        required hooks are not provided.
+        """
         if random.random() < exploit:
             best = self.best_child()
             if best:
                 return best
-        # exploration path: perform a selection, expansion, simulation and backprop
+
         node = self.select()
-        # create a trivial new child state; in practice this should be produced by agent
-        new_state = {'heuristic': random.random()}
-        child = self.expand(node, new_state)
-        reward = self.simulate(child)
+
+        # Determine expansion function
+        exp = expand_fn or self.expand_fn
+        if exp is None:
+            raise NotImplementedError(
+                "LATS.choose requires an expand function to produce a child state. "
+                "Provide it as LATS(expand_fn=...) or pass expand_fn=... to choose()."
+            )
+
+        child_state = exp(node)
+        child = self.expand(node, child_state)
+
+        # Run simulation with provided simulator
+        reward = self.simulate(child, simulator=simulator)
         self.backpropagate(child, reward)
         return child
 

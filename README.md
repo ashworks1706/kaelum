@@ -1,458 +1,196 @@
-# 🧠 KaelumAI
+# Kaelum
 
-**Local reasoning models as cognitive middleware for commercial LLMs**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+Kaelum is a research framework for building reasoning systems with learned routing policies. The core idea is to treat the meta-control of the reasoning pipeline (which strategy to use, how much verification, when to reflect) as a learnable problem rather than a fixed heuristic. This repo provides a minimal, developer-focused scaffold for experimentation.
 
 ---
 
-## 🧩 Overview
+## Highlights
 
-KaelumAI is a **reasoning middleware** that enhances commercial LLMs (GPT-4, Gemini, Claude) by offloading complex reasoning to lightweight local models. When a commercial LLM encounters a difficult problem, it calls Kaelum, which generates verified reasoning traces using specialized local models (3-8B), dramatically reducing costs while improving accuracy.
-
-### Why This Architecture?
-
-1. **💰 Cost Effective**: Reasoning on local models costs ~$0.0001 per 1M tokens vs $0.10+ for commercial LLMs (100-1000x savings)
-2. **⚡ Fast**: Small local models (3-8B) inference in <200ms with proper optimization
-3. **🔒 Private**: Reasoning computation happens locally - sensitive logic never leaves your infrastructure
-4. **🎯 Accurate**: Verified reasoning steps reduce hallucinations by 30-50% (internal benchmarks)
-5. **🔧 Flexible**: Works with ANY commercial LLM that supports function calling
-6. **📊 Observable**: Every reasoning step is auditable, traceable, and debuggable
-
+- Learned neural router that selects reasoning strategies per query.  
+- Parallel verification layers: symbolic (SymPy), factual (RAG), consistency checks.  
+- Localized reflection that fixes only failing steps (bounded iterations).  
+- LATS: lightweight, domain-agnostic tree search (caller provides simulator & expander).  
+- Outcome logging for offline supervised / bandit training of the router.
 
 ---
 
-## �🚀 Quick Start
+## Quick concepts
 
-### Installation
+- Generate → Verify → Reflect:
+  1. Reasoner produces a step-tagged trace (LLM).
+  2. Verifiers evaluate each step (symbolic / factual / consistency).
+  3. Confidence engine aggregates scores; if low, Reflexor attempts localized corrections.
+  4. Router (neural or baseline) decides strategy before execution.
+
+- LATS (Local Agent Tree Search): MCTS-style search without built-in simulation — the developer must provide `simulator(node) -> float` and `expand_fn(parent_node) -> child_state`.
+
+---
+
+## Key files (concise)
+
+- `kaelum/__init__.py` — public API and helpers.  
+- `kaelum/core/neural_router.py` — feature extraction, PyTorch PolicyNetwork, NeuralRouter, outcome recording.  
+- `kaelum/core/router_policy.py` — abstract `RouterPolicy` interface.  
+- `kaelum/core/router.py` — enums & data structures (QueryType, ReasoningStrategy, RoutingDecision).  
+- `kaelum/runtime/orchestrator.py` — orchestration and environment wiring.  
+- `kaelum/core/reasoning.py` — LLM interface and structured reasoning traces.  
+- `kaelum/core/verification.py` — symbolic, factual, consistency checks.  
+- `kaelum/core/reflection.py` — localized self-correction logic.  
+- `kaelum/core/lats.py` — LATS tree search implementation (requires caller-provided simulator/expander).  
+- `kaelum/core/neural_router_trainer.py` — training utilities for the policy network.  
+
+---
+
+## Requirements & setup
+
+Minimum:
+
+- Python 3.8+  
+- PyTorch (required for neural router)  
+- SymPy (symbolic verifier)  
+- sentence-transformers (optional, falls back to zero embeddings)
+
+Quick install (example):
 
 ```bash
-git clone https://github.com/ashworks1706/KaelumAI.git
-cd KaelumAI
-pip install -e .
-
-python -m vllm.entrypoints.openai.api_server \
-           --model TinyLlama/TinyLlama-1.1B-Chat-v0.3 \
-           --port 8000 \
-           --gpu-memory-utilization 0.7 \
-           --max-num-seqs 32 \
-           --max-model-len 1024 \
-           --chat-template "{% for message in messages %}{{ message['role'] + ': ' + message['content'] + '\n' }}{% endfor %}assistant: "
+python -m venv .venv
+# fish:
+source .venv/bin/activate.fish
+# or bash:
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
+
+Sanity import:
+
+```bash
+python -c "import kaelum; print('import OK')"
+```
+
+Note: the code assumes PyTorch is present. If you need importability without PyTorch, add a guard in `neural_router.py`.
 
 ---
 
-## 🧠 Core Modules (Runtime Kernel)
+## Neural Router (overview)
 
-| Module                      | Purpose                                                                           | Notes/Tech                                |
-| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------- |
-| **Reasoner**          | Wraps the base LLM and yields a**step-tagged reasoning trace**              | Any 3–8B via Ollama/vLLM/API             |
-| **Verifier**          | **Symbolic** (SymPy), **Factual** (RAG), **Consistency** checks | Parallelizable; returns per-step scores   |
-| **Reflexor**          | Self-reflection prompts driven by low confidence or failed checks                 | Bounded iterations; localized corrections |
-| **Confidence Engine** | Aggregates verifier scores + entropy/variance into a single confidence            | Pluggable scoring policy                  |
-| **Router** ✨         | Learns optimal reasoning strategies per query type           | ✅ Phase 1: Rule-based + learning; 🔨 Phase 2: Neural policy (1–2B)    |
+- Input: 398-dim feature vector (384-dim embedding + ~14 handcrafted features).  
+- Model: lightweight MLP (residuals, multi-head outputs).  
+- Output: routing decision (strategy choice, reflection depth, verification flags, confidence threshold).  
+- Training: outcomes appended to `data_dir/outcomes.jsonl` for offline supervised/bandit training.
 
----
-
-## 🔄 How Kaelum Works
-
-### Complete Workflow
-
-```
-User Application (LangChain, Custom Script, etc.)
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  Kaelum Public API (kaelum/__init__.py)             │
-│  • set_reasoning_model()                            │
-│  • kaelum_enhance_reasoning()                       │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────────────┐
-│  MCP Orchestrator - Main Coordinator                │
-│  Workflow: Generate → Verify → Reflect → Return     │
-└─────────────────┬───────────────────────────────────┘
-                  │
-        # Kaelum — Reasoning framework (routing-first)
-
-        This repository is now a minimal developer-focused scaffold for building a reasoning framework that specializes in routing queries to expert agents (MoE-style), with an eventual RL policy and per-agent search (LATS/MCTS-like) for intra-agent decision making.
-
-        This is intentionally small and developer-focused: no marketing, no production infra, just code you can iterate on for research and prototypes.
-
-        Goals
-        - Provide a lightweight environment to explore routing policies (supervised, contextual-bandit, RL).
-        - Keep an execution engine (orchestrator + agents + verifiers) to act as the environment for training.
-        - Add a simple policy interface so different routing approaches can be plugged in.
-
-        Quick dev steps
-        1. Create a virtualenv and install the project dependencies:
-
-        ```fish
-        python -m venv .venv
-        source .venv/bin/activate.fish
-        pip install -r requirements.txt
-        ```
-
-        2. Run unit tests (if present):
-
-        ```fish
-        # optional - run pytest if you keep tests
-        python -m pytest -q
-        ```
-
-        3. Start developing:
-           - Implement a policy by adding a class that implements `kaelum.core.router_policy.RouterPolicy`.
-           - Use `kaelum/runtime/orchestrator.py` as the environment to evaluate routing decisions.
-
-        What changed in this slimmed repo
-        - Removed CLI examples and auxiliary Docker/compose files to keep the repo focused on research/development.
-        - Added a minimal `RouterPolicy` interface under `kaelum/core/` (see `kaelum/core/router_policy.py`).
-
-        Roadmap (suggested)
-        - Phase 0: Add `RouterPolicy` interface and a supervised/bandit baseline.
-        - Phase 1: Build an environment wrapper around the orchestrator to collect episodes and rewards.
-        - Phase 2: Prototype per-agent LATS (lightweight MCTS) for intra-agent exploration/exploitation.
-        - Phase 3: Train and iterate on RL policies (PPO / contextual bandits first) with safe rollouts and rule fallbacks.
-
-        If you want I can scaffold a contextual‑bandit baseline next (one small file + training harness) and wire the logging for replay buffer collection.
-                Recalculate $38.97 × 0.08"
-3. LLM generates corrected step
-4. Re-verify corrected reasoning
-5. Continue or try again (max 2 iterations)
-```
-
-**Output:**
-```python
-reflection_result = {
-    "corrected_steps": [...],
-    "corrections_made": 1,
-    "confidence": 0.95
-}
-```
-
----
-
-#### **Step 5: Generate Final Answer** (`ReasoningGenerator.generate_answer()`)
+Record outcomes after each run:
 
 ```python
-Input:
-  Query: "If I buy 3 items..."
-  Reasoning: 
-    1. Calculate price: $38.97
-    2. Calculate tax: $3.12
-    3. Add tax: $42.09
-    
-LLM generates:
-  "The total cost is $42.09"
+router = NeuralRouter(model_path=None, data_dir='.kaelum/neural_routing', device='cpu')
+decision = router.route('Calculate the derivative of x^2 + 3x', context={})
+# exec decision via orchestrator...
+result = {'success': True, 'latency_ms': 245, 'confidence': 0.92}
+router.record_outcome(decision, result)
 ```
 
 ---
 
-#### **Step 6: Return Complete Result**
+## Reasoning, Verification & Reflection (concise)
 
-```python
-{
-    "reasoning_steps": [
-        "Calculate price: 3 × $12.99 = $38.97",
-        "Calculate tax: $38.97 × 0.08 = $3.12",
-        "Add tax to price: $38.97 + $3.12 = $42.09"
-    ],
-    "verification": {
-        "passed": True,
-        "checks": {"symbolic_math": True, "consistency": True, "logic_chain": True}
-    },
-    "reflection": None,  # Not needed - verification passed
-    "final_answer": "The total cost is $42.09"
-}
-```
-
----
-
-
-## 🧱 Architecture Components
-
-### Core Files & Their Roles
-
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `kaelum/__init__.py` | Public API | `set_reasoning_model()`, `kaelum_enhance_reasoning()` |
-| `kaelum/core/mcp.py` | Main orchestrator | Coordinates Generate → Verify → Reflect workflow |
-| `kaelum/core/reasoning.py` | LLM communication | `LLMClient`, `ReasoningGenerator` |
-| `kaelum/core/verification.py` | Validation engine | Symbolic, consistency, logic checks |
-| `kaelum/core/reflection.py` | Error correction | Self-correction with bounded iterations |
-| `kaelum/plugins/reasoning.py` | Reasoning plugin | Async reasoning with metrics |
-| `kaelum/plugins/planning.py` | Planning plugin (Phase 2) | Task decomposition |
-| `kaelum/plugins/routing.py` | Router plugin (Phase 2) | Tool selection |
-| `kaelum/core/metrics.py` | Cost tracking | Real-time cost analysis |
-| `kaelum/core/registry.py` | Model management | Domain-specific model registry |
-
-### Plugin System Architecture
-
-```python
-# Base plugin interface
-class KaelumPlugin(ABC):
-    @abstractmethod
-    async def process(self, input_data: Any) -> Any:
-        """Process input and return result."""
-        pass
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        """Return plugin metrics (tokens, latency, cost)."""
-        pass
-
-# Example: Reasoning Plugin
-reasoning = ReasoningPlugin(
-    model_id="Qwen/Qwen2.5-7B-Instruct",
-    base_url="http://localhost:8000/v1"
-)
-result = await reasoning.process("Solve 2+2")
-```
-
-**Design principles:** 
-- Small-model first (3-8B optimized)
-- Parallel verification layers
-- Bounded reflection loops (max 2 iterations)
-- Observable traces for debugging
-- Sub-500ms latency target
-
----
-
-**Purpose:**
-The Reasoner is the heart of Kaelum’s inference pipeline. It wraps the base LLM (e.g., Llama 3.2 3B, Qwen 2.5 7B, or Mistral 7B) and standardizes how it produces reasoning traces. Instead of asking the model to “just give an answer,” Kaelum prompts it to *think out loud* in a structured way.
-
-**How it works:**
-When a query comes in, the Reasoner builds a prompt that instructs the model to reason step-by-step and label each step with a unique ID (`[Step 1]`, `[Step 2]`, etc.). These are parsed into a JSON-like trace:
-
+Reasoner
+- Produces structured step-tagged traces, e.g.:
 ```json
 {
   "query": "Solve: 2x + 6 = 10",
-  "steps": [
-    {"id": "s1", "text": "Subtract 6 from both sides → 2x = 4"},
-    {"id": "s2", "text": "Divide both sides by 2 → x = 2"}
-  ],
+  "steps": [{"id": "s1", "text": "Subtract 6 → 2x = 4"}, {"id": "s2", "text": "Divide by 2 → x = 2"}],
   "draft_answer": "x = 2"
 }
 ```
 
-This structured reasoning trace becomes the **observable cognitive state** for Kaelum — a deterministic representation of the model’s internal chain-of-thought.
+Verifier
+- Runs three parallel checks per step:
+  - Symbolic (SymPy)
+  - Factual (RAG + similarity)
+  - Consistency (internal coherence)
+- Each verifier returns a confidence score; the Confidence Engine aggregates them (weighted fusion).
 
-**Design Rationale:**
-By externalizing reasoning, Kaelum gains control over what happens *between* steps — something black-box LLMs hide. The Reasoner never assumes the model is right; it simply creates an interpretable plan for the next modules to evaluate.
+Reflexor
+- If aggregate confidence < threshold, it pinpoints failing steps and re-prompts the LLM to correct only those steps (bounded iterations, typically ≤2).
 
-##### Our LLM List for this step (so far)
-
-| Name                             | CoT Score (/10) | Latency Score (/10) | Cost Score (/10) | Tool Use Score (/10) | Speciality              | Reason                                                                                                  |
-| -------------------------------- | --------------- | ------------------- | ---------------- | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Llama 3.2 0.5 B**        | 3.5             | **10**        | **10**     | 3                    | ultra-light baseline    | Tests minimal reasoning floor; blazing fast but very weak logic.                                        |
-| **Qwen 2.5 0.5 B**         | 4.2             | 9.5                 | 9.5              | 4                    | ultra-cheap generalist  | Slightly smarter than Llama 0.5 B; strong structural formatting.                                        |
-| **TinyLlama 1.1 B**        | 4.6             | 9.2                 | 9.3              | 4                    | efficient micro-model   | 1 B-scale open model (Apache 2.0); optimized for speed & low VRAM; solid baseline for controller tests. |
-| **Llama 3.2 1.5 B**        | 4.8             | 9                   | 9                | 4                    | small generalist        | Cheap & fast; useful baseline for reasoning-vs-latency curves.                                          |
-| **Qwen 2.5 1.5 B**         | 5.4             | 9                   | 9                | 5                    | small balanced          | Better CoT than Llama 1.5 B; possible controller fine-tune sandbox.                                     |
-| **Phi-3 Mini**             | 6.5             | 8                   | 8.5              | 6                    | efficient mid-size      | Ideal Kaelum-Lite model: sub-4 GB VRAM, fast, good logic for cost.                                      |
-| **Mistral 7 B Instruct**   | 7.5             | 7                   | 7                | 7                    | general reasoning       | Stable Apache-2.0 baseline; balanced across reasoning and cost.                                         |
-| **Qwen 2.5 7 B Instruct**  | **8.4**   | 6.8                 | 7                | **8**          | generalist + math       | ⭐**Recommended base** — best reasoning & tool-use trade-off.                                    |
-| **Mathstral 7 B**          | 8.1             | 6.5                 | 6.5              | 5                    | math specialist         | Excels on GSM8K/MATH; perfect for Kaelum’s symbolic check mode.                                        |
-| **DeepSeek-Math 7 B**      | 7.9             | 6.5                 | 6.5              | 5                    | math specialist         | GRPO-trained math head; complementary to Mathstral.                                                     |
-| **Llama 3.1 8 B Instruct** | **8.6**   | 6                   | 6                | **8**          | high-quality generalist | Strongest small-model reasoning; slightly heavier VRAM (≈ 8 GB Q4).                                    |
-| **Gemma 2 9 B**            | 8.5             | 5.8                 | 5.5              | 8                    | Google-tier quality     | Upper-bound reference for local inference performance ceiling.                                          |
-
----
-
-### 🔍 **2. Verifier — The Cognitive Filter Layer**
-
-**Purpose:**
-The Verifier is the first module that *judges* reasoning instead of generating it.
-It validates every step in the trace through **symbolic**, **factual**, and **consistency** checks — producing granular confidence scores.
-
-**How it works:**
-After receiving a reasoning trace, the Verifier spawns independent processes or async tasks:
-
-1. **Symbolic Verification:**
-
-   * Parses mathematical or logical expressions (e.g., equations, inequalities, variable definitions).
-   * Uses **SymPy** or equivalent CAS to check correctness.
-   * Detects computational or algebraic inconsistencies.
-   * Deterministic (no model required).
-2. **Factual Verification:**
-
-   * Extracts factual statements or claims from reasoning steps.
-   * Retrieves relevant evidence via a **RAG adapter** (ChromaDB, Qdrant, local documents).
-   * Computes semantic similarity (via cross-encoders or embedding cosine similarity).
-   * Returns a factual confidence score and optional citations.
-3. **Consistency Verification:**
-
-   * Checks whether intermediate steps logically align with previous ones.
-   * Compares variable values, assumptions, and final conclusions.
-   * Optionally runs short self-consistency tests (e.g., generate 2–3 reasoning variants and compare).
-
-**Design Rationale:**
-Verification is the core of Kaelum’s philosophy — the LLM’s output must be *proven* correct, not assumed correct.
-By splitting verification across symbolic, factual, and consistency axes, Kaelum decomposes “truth” into testable parts.
-This design allows lightweight verifiers to run **in parallel**, yielding near-constant inference latency.
-
-**Output Example:**
+Output example (final result):
 
 ```json
 {
-  "symbolic": {"score": 0.98, "ok": true},
-  "factual": {"score": 0.85, "ok": true},
-  "consistency": {"score": 0.91, "ok": true}
+  "reasoning_steps": [...],
+  "verification": {"passed": true, "checks": {"symbolic": true, "factual": true, "consistency": true}},
+  "reflection": null,
+  "final_answer": "The total cost is $42.09"
 }
 ```
 
 ---
 
-### 🔁 **3. Reflexor — Self-Reflection and Correction**
+## LATS (Local Agent Tree Search)
 
-**Purpose:**
-The Reflexor acts as Kaelum’s *self-awareness mechanism*. It handles cases where verification confidence is too low — meaning the reasoning might be wrong or incomplete. Instead of blindly retrying, the Reflexor *analyzes its own trace*, identifies weak steps, and attempts localized correction.
+- Purpose: per-agent exploration (MCTS-like).
+- Important: LATS is domain-agnostic and requires:
+  - `simulator(node) -> float` (evaluate node, return reward)
+  - `expand_fn(parent_node) -> child_state` (generate child states)
+- Minimal usage pattern:
 
-**How it works:**
+```python
+from kaelum.core.lats import LATS
 
-1. The Confidence Engine signals low confidence (e.g., <0.7).
-2. The Reflexor pinpoints failing steps (from Verifier output).
-3. It prompts the LLM again — but not with the original question. Instead, it asks:
+def simulator(node): return evaluate(node)
+def expand_fn(parent): return next_state
 
-   > “You reasoned X, but verification failed at Step 2 (symbolic mismatch). Re-examine that step and correct it.”
-   >
-4. The LLM reprocesses *only that step* (and dependent ones).
-5. The Verifier rechecks the corrected trace, updating confidence.
+tree = LATS(root_state={'step':0}, simulator=simulator, expand_fn=expand_fn)
+node = tree.select()
+child = tree.expand(node, expand_fn(node))
+reward = tree.simulate(child)
+tree.backpropagate(child, reward)
+best = tree.best_child()
+```
 
-This process repeats for a bounded number of iterations (usually ≤2) to prevent runaway loops.
+LATS intentionally avoids embedding simulation logic so the search model is explicit and testable.
 
-**Design Rationale:**
-Most self-reflection systems (e.g., Reflexion, CRITIC) perform *entire query restarts*, wasting compute and time.
-Kaelum’s Reflexor focuses correction at the *point of failure*, making it precise, interpretable, and latency-safe.
-It functions as an **error-correction lens** rather than a rethinking mechanism.
+---
 
-### 📈 **4. Confidence Engine — Scoring and Termination Policy**
+## Design decisions (brief)
 
-**Purpose:**
-The Confidence Engine aggregates all verification results into a single scalar score between 0 and 1.
-This score represents Kaelum’s **belief** in the correctness of the reasoning.
-It determines whether to stop (accept answer) or continue (trigger Reflexor).
+- Learned routing instead of static heuristics: adapts to task distributions, costs, and model capabilities.  
+- Localized reflection: correct only failing steps to save compute and preserve valid work.  
+- Offline training of router: avoids inference-time RL complexity; logs outcomes for safe, batched learning.  
+- Small-model first: target 3–8B models, quantization and caching for low cost.
 
-**How it works:**
+---
 
-* Inputs: symbolic, factual, and consistency scores; optional model entropy and token-level variance.
-* Applies a weighted aggregation policy:
+## Development notes & next steps
 
-  ```python
-  confidence = (
-      0.6 * symbolic_score +
-      0.3 * factual_score +
-      0.1 * consistency_score
-  )
-  ```
-* Optionally adjusts based on model’s logit entropy (uncertainty) or prior calibration from historical traces.
-* Logs every confidence vector and final decision for training the future controller model.
+Suggested roadmap:
+1. Implement a training harness to read `outcomes.jsonl` and train the PolicyNetwork.  
+2. Add benchmarks (GSM8K, ToolBench) for routing accuracy.  
+3. Improve feature engineering and experiment with contextual bandits before full RL.  
+4. Add deterministic LATS tests and fixture-based router tests.
 
-**Design Rationale:**
-Confidence here is *not a heuristic guess* — it’s a measurable fusion of verifier outputs.
-This provides interpretability (“why Kaelum trusted this answer”) and creates a **ground truth dataset** for later training the **Kaelum Brain** (controller model).
+If desired, a small contextual-bandit baseline and a replay-buffer logging scaffold can be added next.
 
+---
 
-### 🧠 **5. Router (Neural Router / Kaelum Brain) — ✅ IMPLEMENTED**
+## Quick dev steps
 
-**Purpose:**
-The Router (or Kaelum Brain) is the **meta-controller** that learns *how Kaelum should think*.
-Instead of fixed heuristics (e.g., "if confidence < 0.7 → reflect once"), it dynamically decides which tools, agents, or reasoning depths to use per query.
-
-**How it works:**
-
-* Takes as input: query metadata, embeddings, query type scores, and historical performance.
-* Predicts optimal inference strategy using a learned policy network.
-* Learns from logged data over time — effectively **a policy model** controlling the runtime itself.
-
-**Design Rationale:**
-This converts Kaelum from a static reasoning engine into an *adaptive system* that improves as it operates.
-It becomes capable of trading speed vs. accuracy per task, making it context-aware and cost-efficient.
-
-**Tech (implemented):**
-
-* Model: Lightweight MLP with residual connections (256-dim hidden, multi-head outputs).
-* Input features: 398-dim (384 query embedding + 14 categorical features).
-* Output: routing actions (strategy choice, reflection depth, verification flags, confidence threshold).
-* Training data: collected routing outcomes (real or synthetic).
-
-**Example Behavior:**
-
-* Detects "math" → routes to symbolic_heavy strategy.
-* Detects "factual question" → uses factual_heavy with RAG verification.
-* Detects "code problem" → uses deep strategy with max reflection.
-
-**Quick Start:**
-
+1. Create venv and install deps:
 ```bash
-# Train the neural router
-python -m kaelum.cli_neural_router train --generate-synthetic 500 --epochs 50
-
-# Use with Kaelum
-python example_neural_router.py
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-See [docs/NEURAL_ROUTER.md](docs/NEURAL_ROUTER.md) for full documentation.
-
----
-
-| Module                          | Purpose                                                                                       | Notes/Tech                                                                        |
-| ------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Reasoner**              | Generates structured reasoning traces from base LLMs; makes internal thought visible.         | Supports Ollama/vLLM; JSON/step-tag formatting; deterministic decoding.           |
-| **Verifier**              | Performs symbolic, factual, and consistency validation; the “truth filter.”                 | Async tasks; SymPy, vector RAG, self-consistency sampling.                        |
-| **Reflexor**              | Localized self-correction loop for failed reasoning steps.                                    | Runs short re-prompts; bounded iterations; avoids full re-generation.             |
-| **Confidence Engine**     | Aggregates verifier results into a confidence score and decides whether to accept or reflect. | Weighted score fusion; entropy-aware calibration; logs decisions.                 |
-| **Router (Kaelum Brain)** | ✅ Learns adaptive inference policies — tool choice, depth, reflection strategy.                | Lightweight MLP (256-dim); trained on routing outcomes; multi-head outputs. |
-
----
-
-Together, these modules form Kaelum’s **cognitive runtime loop** —
-a closed feedback system that reasons, verifies, corrects, and learns *without retraining the base LLM*.
-
----
-
-## 🧮 Benchmark Focus (internal targets)
-
-| Metric                | Target                           | Meaning                      |
-| --------------------- | -------------------------------- | ---------------------------- |
-| Reasoning Accuracy    | **+30→50% vs baseline**   | GSM8K / MATH subset          |
-| Tool/Routing Accuracy | **≥85%**                  | ToolBench-style tasks        |
-| Hallucination Rate    | **<10%**                   | TruthfulQA mini / HalluEval  |
-| Latency Overhead      | **<500 ms**                | Verifier + reflection budget |
-| Cost / 1k queries     | **< $0.10** (local models) | 4-bit quantization + caching |
-
-**Harness layout (planned):**
-
-```
-/benchmarks
-  /gsm8k       # math eval
-  /toolbench   # function/tool eval
-  /truthfulqa  # hallucination eval
-  runner.py    # unified CLI, CSV/JSON output
-```
-
----
-
-* **Inference-time verification** (symbolic/factual) **before** answer is accepted.
-* **Bounded self-reflection** that is latency-aware and localized to failing steps.
-* **Model-agnostic runtime** (plug in Qwen/Llama/Mistral or an API).
-* **Small-model optimization** (3–8B, quantized, local GPU/CPU friendly).
-* **Auditable traces** suitable for debugging, compliance, and eventual controller training.
-
----
-
-
-## 🧪 Testing
-
+2. Run tests (if available):
 ```bash
-# Run customer service demo
-python run_langchain.py
-
-# Test basic reasoning
-python example.py
-
-# Run benchmarks (coming soon)
-python benchmarks/runner.py --suite gsm8k
+python -m pytest -q
 ```
+
+3. Start developing:
+- Implement a policy by subclassing `kaelum.core.router_policy.RouterPolicy`.  
+- Use `kaelum/runtime/orchestrator.py` as the environment for evaluation.
+
+---
+
+This repository is a minimal research scaffold — not a production service, full training pipeline, or demonstration suite. It is intentionally small to make iteration and experimentation straightforward.
 

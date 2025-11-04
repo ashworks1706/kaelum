@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 try:
-    from kaelum.core.neural_router import NeuralRouter
+    from core.neural_router import NeuralRouter
     from kaelum.core.neural_router_trainer import NeuralRouterTrainer
     NEURAL_ROUTER_AVAILABLE = True
 except ImportError as e:
