@@ -9,12 +9,13 @@ The CodeWorker handles:
 
 import re
 import ast
+import asyncio
 import time
 from typing import Optional, Dict, List, Any
 
 from kaelum.core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from kaelum.core.config import KaelumConfig
-from kaelum.core.reasoning import LLMClient
+from kaelum.core.reasoning import LLMClient, Message
 
 
 class CodeWorker(WorkerAgent):
@@ -103,7 +104,23 @@ class CodeWorker(WorkerAgent):
         
         return min(score, 1.0)
     
-    async def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+        """Synchronous solve method (calls async version).
+        
+        Args:
+            query: The query to solve
+            context: Optional context
+            
+        Returns:
+            WorkerResult with code solution
+        """
+        return asyncio.run(self._solve_async(query, context))
+    
+    async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+        """Async solve method for parallel execution."""
+        return await self._solve_async(query, context)
+    
+    async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         """Solve a code-related query.
         
         Args:
@@ -129,7 +146,8 @@ class CodeWorker(WorkerAgent):
         reasoning_steps.append("Built specialized code generation prompt")
         
         # Generate code
-        response = await self.llm_client.generate(prompt)
+        messages = [Message(role="user", content=prompt)]
+        response = self.llm_client.generate(messages)
         reasoning_steps.append("Generated code solution")
         
         # Extract code from response

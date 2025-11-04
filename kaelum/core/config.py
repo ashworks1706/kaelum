@@ -8,12 +8,12 @@ class LLMConfig(BaseModel):
     """LLM configuration for any OpenAI-compatible endpoint."""
     
     base_url: str = Field(
-        default="http://localhost:11434/v1",
-        description="OpenAI-compatible API endpoint"
+        default="http://localhost:8000/v1",
+        description="OpenAI-compatible API endpoint (vLLM, Ollama, LM Studio)"
     )
     model: str = Field(
-        default="qwen2.5:7b",
-        description="Model name"
+        default="Qwen/Qwen2.5-3B-Instruct",
+        description="Model name - using smaller model for faster iteration"
     )
     api_key: Optional[str] = Field(
         default=None,

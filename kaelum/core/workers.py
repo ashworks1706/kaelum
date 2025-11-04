@@ -440,23 +440,37 @@ class LogicWorker(WorkerAgent):
 
 
 # Factory function to create workers
-def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None) -> WorkerAgent:
+def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None, **kwargs) -> WorkerAgent:
     """Create a worker agent for the given specialty.
     
     Args:
         specialty: The worker specialty to create
         config: Optional Kaelum configuration
+        **kwargs: Additional arguments for worker initialization (e.g., rag_adapter for FactualWorker)
         
     Returns:
         WorkerAgent instance
     """
+    # Import all worker types
+    from kaelum.core.code_worker import CodeWorker
+    from kaelum.core.factual_worker import FactualWorker
+    from kaelum.core.creative_worker import CreativeWorker
+    
     workers = {
         WorkerSpecialty.MATH: MathWorker,
         WorkerSpecialty.LOGIC: LogicWorker,
+        WorkerSpecialty.CODE: CodeWorker,
+        WorkerSpecialty.FACTUAL: FactualWorker,
+        WorkerSpecialty.CREATIVE: CreativeWorker,
     }
     
     worker_class = workers.get(specialty)
     if not worker_class:
         raise ValueError(f"No worker available for specialty: {specialty}")
-        
-    return worker_class(config)
+    
+    # Handle workers that need special initialization
+    if specialty == WorkerSpecialty.FACTUAL:
+        rag_adapter = kwargs.get('rag_adapter')
+        return worker_class(config, rag_adapter)
+    else:
+        return worker_class(config)
