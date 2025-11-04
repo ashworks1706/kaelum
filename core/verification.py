@@ -7,17 +7,6 @@ from .sympy_engine import SympyEngine
 
 
 class SymbolicVerifier:
-    """Verifies mathematical expressions using SymPy and custom calculus checks.
-
-    Responsibilities:
-      - Extract and equivalence-check algebraic equations.
-      - Detect derivative/integral transformation steps of the form:
-          d/dx(f(x)) = f'(x)
-          diff(f(x), x, y) = ∂²f/∂x∂y
-          integrate(f(x), x) = F(x) + C   (constant ignored)
-      - Gracefully ignore unparsable fragments (never hard-fail verification).
-    """
-
     # More specific patterns to avoid capturing incomplete fragments
     DERIVATIVE_PATTERN = re.compile(r"(?:d/d\w+|∂/∂\w+|diff)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
     INTEGRAL_PATTERN = re.compile(r"(?:integrate|∫)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
@@ -29,22 +18,15 @@ class SymbolicVerifier:
     )
     
     def __init__(self, debug: bool = False):
-        """Initialize verifier with optional debug logging."""
         self.debug = debug
         # Enable SympyEngine debug mode if verification debug is enabled
         SympyEngine.set_debug(debug)
     
     def _log_debug(self, message: str):
-        """Print debug message if debug mode is enabled."""
         if self.debug:
             print(f"  [SYMPY DEBUG] {message}")
 
     def verify_step(self, step: str) -> Tuple[bool, Optional[str]]:
-        """Verify a reasoning step for mathematical correctness.
-
-        Returns (is_valid, error_message) where error_message is None if ok.
-        Verification is conservative: only flags definite symbolic mismatches.
-        """
         self._log_debug(f"Verifying step: {step[:100]}...")
         
         # 1. Derivative checks
@@ -94,16 +76,6 @@ class SymbolicVerifier:
         return True, None
 
     def _extract_equations(self, text: str) -> List[str]:
-        """Extract mathematical equations from text.
-
-        Filters out:
-        - Markdown formatting (**bold**, _italic_)
-        - Currency symbols ($)
-        - Incomplete equation fragments
-        - Calculus transformations (handled separately)
-        
-        Only extracts complete arithmetic equations like "899 × 0.15 = 134.85"
-        """
         # Clean markdown formatting and normalize symbols
         cleaned = re.sub(r'\*\*|\*|__?', '', text)  # Remove markdown bold/italic
         cleaned = cleaned.replace('$', '')           # Remove currency symbols
@@ -140,7 +112,6 @@ class SymbolicVerifier:
         return equations
 
     def _verify_equation(self, equation: str) -> bool:
-        """Verify algebraic/symbolic equivalence for a single equation."""
         try:
             if '=' in equation:
                 left, right = equation.split('=', 1)
@@ -162,13 +133,10 @@ class SymbolicVerifier:
 
 
 class FactualVerifier:
-    """Verifies factual claims using RAG."""
-
     def __init__(self, rag_adapter=None):
         self.rag_adapter = rag_adapter
 
     def verify_step(self, step: str) -> Tuple[bool, float]:
-        """Verify a factual claim using RAG adapter."""
         if not self.rag_adapter:
             return True, 1.0
         
@@ -177,7 +145,6 @@ class FactualVerifier:
 
 
 class VerificationEngine:
-    """Combines symbolic and factual verification for worker reasoning."""
 
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
         self.llm_client = llm_client
@@ -186,12 +153,10 @@ class VerificationEngine:
         self.debug = debug
     
     def _log_debug(self, message: str):
-        """Print debug message if debug mode is enabled."""
         if self.debug:
             print(f"[VERIFICATION DEBUG] {message}")
 
     def verify_trace(self, trace: List[str]) -> Tuple[List[str], dict]:
-        """Verify reasoning trace and return errors plus detailed results."""
         self._log_debug(f"Starting verification of {len(trace)} steps")
         errors = []
         details = {
@@ -252,20 +217,6 @@ class VerificationEngine:
         return errors, details
     
     def verify(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
-        """Verify worker reasoning and answer.
-        
-        Args:
-            query: Original query
-            reasoning_steps: List of reasoning steps from worker
-            answer: Final answer from worker
-            
-        Returns:
-            Dictionary with:
-                - passed: bool - whether verification passed
-                - confidence: float - confidence in the answer (0-1)
-                - issues: List[str] - list of issues found
-                - details: dict - detailed verification results
-        """
         # Run symbolic/factual verification on reasoning steps
         errors, details = self.verify_trace(reasoning_steps)
         

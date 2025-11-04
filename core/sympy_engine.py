@@ -1,15 +1,4 @@
-"""SymPy utility engine for equivalence, solving, and multivariate calculus.
 
-The original implementation provided minimal single-variable diff/integrate helpers.
-This version expands capabilities to support:
-  - Equivalence checking with either '=' or '==' delimiters
-  - Solving equations for one or more target variables
-  - Multivariate differentiation: specify variables and (optional) orders
-  - Multivariate integration: multiple bounds and unbounded variables
-  - Generic evaluation of SymPy expressions containing diff()/integrate()/Derivative()/Integral()
-
-Public API methods are intentionally simple to call from verification code.
-"""
 
 from __future__ import annotations
 
@@ -19,25 +8,20 @@ from typing import Sequence, List, Tuple, Union, Optional
 
 
 class SympyEngine:
-    """Collection of static helpers wrapping SymPy functionality."""
-
     debug = False  # Class-level debug flag
     
     @classmethod
     def set_debug(cls, enabled: bool):
-        """Enable or disable debug logging."""
         cls.debug = enabled
     
     @classmethod
     def _log_debug(cls, message: str):
-        """Print debug message if debug mode is enabled."""
         if cls.debug:
             print(f"    [SYMPY ENGINE] {message}")
 
     # -------------------- Parsing Helpers --------------------
     @staticmethod
     def _normalize_equation(equation: str) -> Tuple[str, str]:
-        """Return (left, right) for an equation string using '=' or '=='."""
         if '==' in equation:
             left, right = equation.split('==', 1)
         elif '=' in equation:
@@ -53,7 +37,6 @@ class SympyEngine:
     # -------------------- Core Operations --------------------
     @classmethod
     def check_equivalence(cls, expression: str) -> bool:
-        """Check symbolic equivalence for 'A = B' or 'A == B'."""
         cls._log_debug(f"→ check_equivalence('{expression}')")
         left, right = cls._normalize_equation(expression)
         cls._log_debug(f"  Normalized: LHS='{left}' RHS='{right}'")
@@ -69,10 +52,6 @@ class SympyEngine:
 
     @classmethod
     def solve_equation(cls, equation: str, solve_for: Optional[Sequence[str]] = None):
-        """Solve an equation for the given variables (default: all free symbols).
-
-        Returns list/dict depending on SymPy solve outcome.
-        """
         left, right = cls._normalize_equation(equation)
         left_expr = cls._sympify(left)
         right_expr = cls._sympify(right)
@@ -91,13 +70,6 @@ class SympyEngine:
         expression: str,
         variables: Union[str, Sequence[str], Sequence[Tuple[str, int]]],
     ):
-        """Differentiate expression with respect to provided variables.
-
-        variables formats:
-          - 'x' (single var, first order)
-          - ['x', 'y'] (∂/∂x then ∂/∂y)
-          - [('x', 2), ('y', 1)] for higher-order derivatives.
-        """
         cls._log_debug(f"→ differentiate(expression='{expression}', variables={variables})")
         expr = cls._sympify(expression)
         cls._log_debug(f"  Parsed expression: {expr}")
@@ -127,14 +99,6 @@ class SympyEngine:
         expression: str,
         variables: Sequence[Union[str, Tuple[str, Union[int, float], Union[int, float]]]],
     ):
-        """Integrate expression over one or more variables.
-
-        variables formats:
-          - ['x'] (indefinite with respect to x)
-          - [('x', 0, 1)] definite integral from 0 to 1 wrt x
-          - mix of bounded and unbounded: ['x', ('y', 0, 2)]
-        Multiple entries produce nested integrals: integrate(integrate(expr, x), (y,0,2)).
-        """
         cls._log_debug(f"→ integrate(expression='{expression}', variables={variables})")
         expr = cls._sympify(expression)
         cls._log_debug(f"  Parsed expression: {expr}")
@@ -155,14 +119,6 @@ class SympyEngine:
 
     @classmethod
     def evaluate_calculus(cls, expression: str):
-        """Evaluate a calculus expression containing diff()/integrate()/Derivative()/Integral().
-
-        Example inputs:
-          diff(x**2 * y, x, y)
-          integrate(x*y, (x,0,1), y)
-          Derivative(sin(x*y), x, y)
-          Integral(exp(-x**2), (x, -sp.oo, sp.oo))
-        """
         sym_expr = sp.sympify(expression)
         if isinstance(sym_expr, (sp.Derivative, sp.Integral)):
             return sym_expr.doit()
@@ -177,11 +133,6 @@ class SympyEngine:
     # -------------------- Validation Helpers --------------------
     @classmethod
     def verify_derivative(cls, lhs: str, rhs: str) -> bool:
-        """Verify derivative step: lhs should be a derivative form and rhs its simplified result.
-
-        lhs examples accepted: d/dx(x**2), d/dx ( sin(x) ), diff(x**2, x)
-        We normalize lhs into a diff() call and compare with rhs expression.
-        """
         cls._log_debug(f"→ verify_derivative(lhs='{lhs}', rhs='{rhs}')")
         lhs = lhs.strip()
         rhs = rhs.strip()
@@ -237,7 +188,6 @@ class SympyEngine:
 
     @classmethod
     def verify_integral(cls, lhs: str, rhs: str) -> bool:
-        """Verify integral step for simple forms like ∫(expr)dx = result or integrate(expr, x)."""
         cls._log_debug(f"→ verify_integral(lhs='{lhs}', rhs='{rhs}')")
         lhs = lhs.strip()
         rhs = rhs.strip()

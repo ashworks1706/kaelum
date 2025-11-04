@@ -1,13 +1,3 @@
-"""Lightweight LATS (Local Agent Tree Search) prototype.
-
-This module provides a small, dependency-free tree search component that
-agents can use to build and persist reasoning trees. It is intentionally
-minimal: a few helpers for UCT-style selection, expansion, simulation
-(placeholder) and backpropagation. The goal is to provide a pluggable
-API agents can call during inference; later you can replace "simulate"
-with actual agent rollouts or learned value estimators.
-"""
-
 from __future__ import annotations
 
 import json
@@ -49,31 +39,9 @@ class LATSNode:
 
 
 class LATS:
-    """Simple tree search manager.
-
-    Usage pattern (example):
-        tree = LATS(root_state)
-        for _ in range(n_simulations):
-            node = tree.select()
-            child = tree.expand(node, new_state)
-            reward = tree.simulate(child)  # placeholder
-            tree.backpropagate(child, reward)
-
-    This design keeps simulate() as a hook that can be overridden or
-    swapped out with agent-specific rollouts.
-    """
-
     def __init__(self, root_state: Dict[str, Any], root_id: str = "root", *,
                  simulator: Optional[callable] = None,
                  expand_fn: Optional[callable] = None):
-        """Create a LATS tree.
-
-        Args:
-            root_state: initial state for root node
-            root_id: id for root
-            simulator: optional callable(node) -> float. If not provided, simulate() must be called with an explicit simulator.
-            expand_fn: optional callable(parent_node) -> child_state. If not provided, expand must be called with an explicit child_state.
-        """
         self.root = LATSNode(id=root_id, state=root_state)
         self.nodes: Dict[str, LATSNode] = {self.root.id: self.root}
         self.simulator = simulator
@@ -87,17 +55,14 @@ class LATS:
         return exploit + explore
 
     def select(self) -> LATSNode:
-        """Select node to expand using UCT from root."""
         node = self.root
         while node.children:
-            # choose child with max UCT
             scores = [self.uct_score(node, c) for c in node.children]
             max_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
             node = node.children[max_idx]
         return node
 
     def expand(self, parent: LATSNode, child_state: Dict[str, Any], child_id: Optional[str] = None) -> LATSNode:
-        """Add a child node to parent with given state."""
         if child_id is None:
             child_id = f"n{len(self.nodes)}"
         node = LATSNode(id=child_id, state=child_state, parent=parent)
@@ -106,19 +71,12 @@ class LATS:
         return node
 
     def simulate(self, node: LATSNode, simulator: Optional[callable] = None) -> float:
-        """Run a simulation/rollout for a node and return scalar reward.
-
-        The simulation must be provided by the caller (either as `simulator`
-        argument or when the LATS instance was created with `simulator=`).
-        This function will raise NotImplementedError if no simulator is available.
-        """
         sim = simulator or self.simulator
         if sim is None:
             raise NotImplementedError(
                 "LATS.simulate requires a simulator callable. "
                 "Provide it as LATS(simulator=...) or pass it to simulate(node, simulator=...)."
             )
-        # Delegate to caller-provided simulator
         reward = sim(node)
         try:
             return float(reward)
@@ -138,19 +96,10 @@ class LATS:
             node = self.root
         if not node.children:
             return None
-        # choose child with highest average value
         best = max(node.children, key=lambda c: (c.value / max(1, c.visits)))
         return best
 
     def choose(self, exploit: float = 0.9, *, expand_fn: Optional[callable] = None, simulator: Optional[callable] = None) -> LATSNode:
-        """High-level choose action.
-
-        With probability `exploit`, returns the best child (if any).
-        Otherwise performs select->expand->simulate->backpropagate. Both `expand_fn`
-        and `simulator` must be supplied either as arguments here or when the
-        LATS instance was created. This method will raise a clear error if
-        required hooks are not provided.
-        """
         if random.random() < exploit:
             best = self.best_child()
             if best:
@@ -158,7 +107,6 @@ class LATS:
 
         node = self.select()
 
-        # Determine expansion function
         exp = expand_fn or self.expand_fn
         if exp is None:
             raise NotImplementedError(
@@ -169,7 +117,6 @@ class LATS:
         child_state = exp(node)
         child = self.expand(node, child_state)
 
-        # Run simulation with provided simulator
         reward = self.simulate(child, simulator=simulator)
         self.backpropagate(child, reward)
         return child
@@ -187,7 +134,6 @@ class LATS:
             d = json.load(f)
         root = LATSNode.from_dict(d)
         tree = LATS(root_state=root.state, root_id=root.id)
-        # rebuild nodes mapping
         def walk(n: LATSNode):
             tree.nodes[n.id] = n
             for c in n.children:

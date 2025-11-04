@@ -17,14 +17,7 @@ from core.reasoning import LLMClient, Message
 
 
 class FactualWorker(WorkerAgent):
-    """Worker specialized in factual queries."""
-    
     def __init__(self, config: Optional[KaelumConfig] = None):
-        """Initialize FactualWorker.
-        
-        Args:
-            config: Kaelum configuration
-        """
         super().__init__(config)
         self.factual_keywords = [
             'what is', 'who is', 'when did', 'where is', 'how many',
@@ -35,19 +28,9 @@ class FactualWorker(WorkerAgent):
         ]
     
     def get_specialty(self) -> WorkerSpecialty:
-        """Return worker specialty."""
         return WorkerSpecialty.FACTUAL
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        """Determine if this worker can handle the query.
-        
-        Args:
-            query: The query to evaluate
-            context: Optional context
-            
-        Returns:
-            Confidence score between 0 and 1
-        """
         query_lower = query.lower()
         score = 0.0
         
@@ -85,31 +68,12 @@ class FactualWorker(WorkerAgent):
         return min(score, 1.0)
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Synchronous solve method (calls async version).
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with factual answer
-        """
         return asyncio.run(self._solve_async(query, context))
     
     async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Async solve method for parallel execution."""
         return await self._solve_async(query, context)
     
     async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve a factual query.
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with factual answer
-        """
         start_time = time.time()
         reasoning_steps = []
         
@@ -161,14 +125,6 @@ class FactualWorker(WorkerAgent):
         )
     
     def _classify_factual_query(self, query: str) -> str:
-        """Classify the type of factual query.
-        
-        Args:
-            query: The query text
-            
-        Returns:
-            Query type string
-        """
         query_lower = query.lower()
         
         if any(kw in query_lower for kw in ['define', 'definition', 'meaning', 'what is', 'what are']):
@@ -190,16 +146,6 @@ class FactualWorker(WorkerAgent):
         query_type: str,
         retrieved_context: Optional[List[str]]
     ) -> str:
-        """Build prompt for factual query.
-        
-        Args:
-            query: Original query
-            query_type: Type of factual query
-            retrieved_context: Retrieved documents from RAG
-            
-        Returns:
-            Formatted prompt
-        """
         prompt_parts = []
         
         # Base instruction
@@ -237,15 +183,6 @@ class FactualWorker(WorkerAgent):
         response: str,
         retrieved_context: Optional[List[str]]
     ) -> List[str]:
-        """Extract cited sources from response.
-        
-        Args:
-            response: Generated response
-            retrieved_context: Retrieved documents
-            
-        Returns:
-            List of source citations
-        """
         sources = []
         
         # Look for source citations like [Source 1], [1], (Source 1), etc.
@@ -272,17 +209,6 @@ class FactualWorker(WorkerAgent):
         sources: List[str],
         response: str
     ) -> float:
-        """Calculate confidence score.
-        
-        Args:
-            query_type: Type of query
-            retrieved_context: Retrieved documents
-            sources: Extracted source citations
-            response: Generated response
-            
-        Returns:
-            Confidence score (0-1)
-        """
         confidence = 0.5  # Base confidence
         
         # Bonus for RAG retrieval
@@ -308,21 +234,6 @@ class FactualWorker(WorkerAgent):
         return min(max(confidence, 0.0), 1.0)
     
     async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        """Verify factual answer.
-        
-        For factual queries, we check:
-        1. Answer is not empty
-        2. Answer is relevant to query
-        3. Sources are cited if RAG available
-        
-        Args:
-            query: Original query
-            answer: Generated answer
-            context: Optional context
-            
-        Returns:
-            True if verification passes
-        """
         # Basic checks
         if not answer or len(answer.strip()) < 10:
             return False

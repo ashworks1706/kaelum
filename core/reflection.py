@@ -5,23 +5,11 @@ from core.reasoning import LLMClient, Message
 
 
 class ReflectionEngine:
-    """Enhances reasoning through self-reflection."""
-
     def __init__(self, llm_client: LLMClient, max_iterations: int = 2):
         self.llm = llm_client
         self.max_iterations = max_iterations
 
     def enhance_reasoning(self, query: str, initial_trace: List[str], verification_issues: List[str] = None) -> List[str]:
-        """Enhance reasoning through reflection based on verification failures.
-        
-        Args:
-            query: Original query
-            initial_trace: Initial reasoning steps
-            verification_issues: List of issues found by verification (optional)
-            
-        Returns:
-            Improved reasoning steps
-        """
         current_trace = initial_trace
         
         # If specific verification issues provided, use them for targeted improvement
@@ -41,7 +29,6 @@ class ReflectionEngine:
         return current_trace
     
     def _verify_trace(self, query: str, trace: List[str]) -> List[str]:
-        """Verify reasoning trace for logical consistency."""
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(trace))
         
         messages = [
@@ -57,7 +44,6 @@ class ReflectionEngine:
         return [response.strip()]
     
     def _improve_trace(self, query: str, trace: List[str], issues: List[str]) -> List[str]:
-        """Improve reasoning trace based on issues."""
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(trace))
         issues_text = "\n".join(f"- {issue}" for issue in issues)
         

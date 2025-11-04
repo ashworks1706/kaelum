@@ -17,14 +17,7 @@ from core.reasoning import LLMClient, Message
 
 
 class CreativeWorker(WorkerAgent):
-    """Worker specialized in creative and exploratory reasoning."""
-    
     def __init__(self, config: Optional[KaelumConfig] = None):
-        """Initialize CreativeWorker.
-        
-        Args:
-            config: Kaelum configuration
-        """
         super().__init__(config)
         # Store higher temperature for creative tasks
         base_temp = self.config.reasoning_llm.temperature
@@ -38,19 +31,9 @@ class CreativeWorker(WorkerAgent):
         ]
     
     def get_specialty(self) -> WorkerSpecialty:
-        """Return worker specialty."""
         return WorkerSpecialty.CREATIVE
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        """Determine if this worker can handle the query.
-        
-        Args:
-            query: The query to evaluate
-            context: Optional context
-            
-        Returns:
-            Confidence score between 0 and 1
-        """
         query_lower = query.lower()
         score = 0.0
         
@@ -104,31 +87,12 @@ class CreativeWorker(WorkerAgent):
         return min(score, 1.0)
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Synchronous solve method (calls async version).
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with creative response
-        """
         return asyncio.run(self._solve_async(query, context))
     
     async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Async solve method for parallel execution."""
         return await self._solve_async(query, context)
     
     async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve a creative query.
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with creative response
-        """
         start_time = time.time()
         reasoning_steps = []
         
@@ -173,14 +137,7 @@ class CreativeWorker(WorkerAgent):
         )
     
     def _classify_creative_task(self, query: str) -> str:
-        """Classify the type of creative task.
         
-        Args:
-            query: The query text
-            
-        Returns:
-            Task type string
-        """
         query_lower = query.lower()
         
         if any(kw in query_lower for kw in ['story', 'narrative', 'fiction', 'tale']):
@@ -199,15 +156,6 @@ class CreativeWorker(WorkerAgent):
             return 'general_creative'
     
     def _build_creative_prompt(self, query: str, task_type: str) -> str:
-        """Build prompt for creative task.
-        
-        Args:
-            query: Original query
-            task_type: Type of creative task
-            
-        Returns:
-            Formatted prompt
-        """
         prompt_parts = []
         
         # Base instruction emphasizing creativity
@@ -237,15 +185,6 @@ class CreativeWorker(WorkerAgent):
         return "\n".join(prompt_parts)
     
     def _analyze_creativity(self, response: str, task_type: str) -> Dict[str, float]:
-        """Analyze creativity metrics of the response.
-        
-        Args:
-            response: Generated response
-            task_type: Type of creative task
-            
-        Returns:
-            Dictionary with creativity metrics
-        """
         metrics = {
             'diversity': 0.0,
             'coherence': 0.0
@@ -288,16 +227,6 @@ class CreativeWorker(WorkerAgent):
         task_type: str,
         metrics: Dict[str, float]
     ) -> float:
-        """Calculate confidence score.
-        
-        Args:
-            response: Generated response
-            task_type: Type of task
-            metrics: Creativity metrics
-            
-        Returns:
-            Confidence score (0-1)
-        """
         confidence = 0.4  # Base confidence for creative tasks
         
         # Bonus for good coherence
@@ -316,21 +245,6 @@ class CreativeWorker(WorkerAgent):
         return min(max(confidence, 0.0), 1.0)
     
     async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        """Verify creative answer.
-        
-        For creative tasks, we check:
-        1. Answer is not empty
-        2. Answer has reasonable length
-        3. Answer shows some structure/coherence
-        
-        Args:
-            query: Original query
-            answer: Generated answer
-            context: Optional context
-            
-        Returns:
-            True if verification passes
-        """
         # Basic checks
         if not answer or len(answer.strip()) < 20:
             return False

@@ -1,5 +1,3 @@
-"""Reasoning generation interface and LLM client abstraction."""
-
 import json
 from typing import Any, List, Optional
 
@@ -9,33 +7,23 @@ from core.config import LLMConfig
 
 
 class Message(BaseModel):
-    """A message in the conversation."""
     role: str = Field(description="Role: 'user', 'assistant', or 'system'")
     content: str = Field(description="Message content")
 
 
 class LLMClient:
-    """Client for any OpenAI-compatible API endpoint."""
-
     def __init__(self, config: LLMConfig):
         self.config = config
         self.base_url = config.base_url
         self.headers = self._get_headers()
 
     def _get_headers(self) -> dict:
-        """Get headers for API requests."""
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
         return headers
 
     def generate(self, messages: List[Message], stream: bool = False):
-        """Generate a response from the LLM.
-        
-        Args:
-            messages: List of messages
-            stream: If True, returns a generator that yields chunks. If False, returns complete string.
-        """
         url = f"{self.base_url}/chat/completions"
         
         payload = {
@@ -80,7 +68,6 @@ class LLMClient:
 
 
 class ReasoningGenerator:
-    """Generates reasoning traces using an LLM."""
 
     def __init__(self, llm_client: LLMClient, system_prompt=None, user_template=None):
         self.llm = llm_client
@@ -121,13 +108,6 @@ Present your reasoning as a numbered list."""
             return trace if trace else [response.strip()]
 
     def generate_answer(self, query: str, reasoning_trace: List[str], stream: bool = False):
-        """Generate final answer based on reasoning trace.
-        
-        Args:
-            query: User query
-            reasoning_trace: List of reasoning steps
-            stream: If True, yields chunks as they're generated
-        """
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(reasoning_trace))
 
         messages = [

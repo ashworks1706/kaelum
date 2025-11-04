@@ -1,11 +1,3 @@
-"""CodeWorker - Specialized worker for code generation and debugging.
-
-The CodeWorker handles:
-- Code generation in multiple languages
-- Debugging and error fixing
-- Code review and optimization
-- Algorithm implementation
-"""
 
 import re
 import ast
@@ -19,14 +11,8 @@ from core.reasoning import LLMClient, Message
 
 
 class CodeWorker(WorkerAgent):
-    """Worker specialized in code generation and debugging."""
     
     def __init__(self, config: Optional[KaelumConfig] = None):
-        """Initialize CodeWorker.
-        
-        Args:
-            config: Optional Kaelum configuration
-        """
         super().__init__(config)
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
@@ -34,19 +20,9 @@ class CodeWorker(WorkerAgent):
         }
     
     def get_specialty(self) -> WorkerSpecialty:
-        """Return CODE specialty."""
         return WorkerSpecialty.CODE
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        """Determine if this worker can handle the query.
-        
-        Args:
-            query: The query to evaluate
-            context: Optional context
-            
-        Returns:
-            Confidence score between 0 and 1
-        """
         query_lower = query.lower()
         score = 0.0
         
@@ -105,31 +81,12 @@ class CodeWorker(WorkerAgent):
         return min(score, 1.0)
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Synchronous solve method (calls async version).
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with code solution
-        """
         return asyncio.run(self._solve_async(query, context))
     
     async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Async solve method for parallel execution."""
         return await self._solve_async(query, context)
     
     async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        """Solve a code-related query.
-        
-        Args:
-            query: The query to solve
-            context: Optional context
-            
-        Returns:
-            WorkerResult with code solution
-        """
         start_time = time.time()
         reasoning_steps = []
         
@@ -182,14 +139,6 @@ class CodeWorker(WorkerAgent):
         )
     
     def _detect_language(self, query: str) -> Optional[str]:
-        """Detect programming language from query.
-        
-        Args:
-            query: The query text
-            
-        Returns:
-            Language name or None
-        """
         query_lower = query.lower()
         
         # First check for explicit language mentions (most reliable)
@@ -225,14 +174,6 @@ class CodeWorker(WorkerAgent):
         return None
     
     def _classify_task(self, query: str) -> str:
-        """Classify the type of coding task.
-        
-        Args:
-            query: The query text
-            
-        Returns:
-            Task type string
-        """
         query_lower = query.lower()
         
         if any(kw in query_lower for kw in ['debug', 'fix', 'error', 'bug']):
@@ -255,17 +196,6 @@ class CodeWorker(WorkerAgent):
         task_type: str,
         context: Optional[Dict]
     ) -> str:
-        """Build specialized prompt for code generation.
-        
-        Args:
-            query: Original query
-            language: Detected language
-            task_type: Type of task
-            context: Optional context
-            
-        Returns:
-            Formatted prompt
-        """
         prompt_parts = []
         
         # Task-specific instructions
@@ -311,14 +241,6 @@ class CodeWorker(WorkerAgent):
         return "\n".join(prompt_parts)
     
     def _extract_code(self, response: str) -> Optional[str]:
-        """Extract code block from LLM response.
-        
-        Args:
-            response: LLM response text
-            
-        Returns:
-            Extracted code or None
-        """
         # Try to extract from markdown code blocks
         code_block_pattern = r'```(?:\w+)?\n(.*?)```'
         matches = re.findall(code_block_pattern, response, re.DOTALL)
@@ -347,14 +269,6 @@ class CodeWorker(WorkerAgent):
         return None
     
     def _validate_python_syntax(self, code: str) -> bool:
-        """Validate Python code syntax.
-        
-        Args:
-            code: Python code string
-            
-        Returns:
-            True if syntax is valid
-        """
         try:
             ast.parse(code)
             return True
@@ -368,17 +282,6 @@ class CodeWorker(WorkerAgent):
         task_type: str,
         language: Optional[str]
     ) -> float:
-        """Calculate confidence score for the solution.
-        
-        Args:
-            code: Extracted code
-            syntax_valid: Whether syntax is valid
-            task_type: Type of task
-            language: Programming language
-            
-        Returns:
-            Confidence score (0-1)
-        """
         confidence = 0.5  # Base confidence
         
         # Adjust for code extraction
@@ -402,21 +305,6 @@ class CodeWorker(WorkerAgent):
         return min(max(confidence, 0.0), 1.0)
     
     async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        """Verify code solution.
-        
-        For code, we check:
-        1. Code block is present
-        2. Syntax is valid (for Python)
-        3. No obvious errors
-        
-        Args:
-            query: Original query
-            answer: Generated answer
-            context: Optional context
-            
-        Returns:
-            True if verification passes
-        """
         # Extract code
         code = self._extract_code(answer)
         if not code:
