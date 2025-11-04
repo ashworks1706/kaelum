@@ -23,8 +23,10 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    print("⚠️  PyTorch not installed. Neural router will use rule-based fallback.")
-    print("   Install with: pip install torch")
+    import logging
+    logger = logging.getLogger("kaelum.neural_router")
+    logger.warning("PyTorch not installed. Neural router will use rule-based fallback.")
+    logger.info("Install with: pip install torch")
 
 try:
     from sentence_transformers import SentenceTransformer

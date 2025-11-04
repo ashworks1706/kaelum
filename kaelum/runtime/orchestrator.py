@@ -1,6 +1,7 @@
 """Core orchestration logic for Kaelum reasoning system."""
 
 import time
+import logging
 from typing import Iterator, Dict, Any, Optional
 
 from ..core.config import KaelumConfig
@@ -16,6 +17,8 @@ try:
 except ImportError:
     NEURAL_ROUTER_AVAILABLE = False
     NeuralRouter = None
+
+logger = logging.getLogger("kaelum.orchestrator")
 
 
 class KaelumOrchestrator:
@@ -48,14 +51,14 @@ class KaelumOrchestrator:
             if use_neural_router and NEURAL_ROUTER_AVAILABLE:
                 try:
                     self.router = NeuralRouter(fallback_to_rules=True)
-                    print("✓ Using Neural Router (Kaelum Brain)")
+                    logger.info("Using Neural Router (Kaelum Brain)")
                 except Exception as e:
-                    print(f"⚠️  Neural Router failed to initialize: {e}")
-                    print("   Falling back to rule-based router")
+                    logger.warning(f"Neural Router failed to initialize: {e}")
+                    logger.info("Falling back to rule-based router")
                     self.router = Router(learning_enabled=True)
             else:
                 self.router = Router(learning_enabled=True)
-                print("✓ Using rule-based router")
+                logger.info("Using rule-based router")
 
     def infer(self, query: str, stream: bool = False):
         """Run reasoning pipeline with optional adaptive routing."""

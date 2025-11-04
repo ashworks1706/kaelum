@@ -20,8 +20,10 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    print("⚠️  PyTorch not installed. Cannot train neural router.")
-    print("   Install with: pip install torch")
+    import logging
+    logger = logging.getLogger("kaelum.neural_router_trainer")
+    logger.error("PyTorch not installed. Cannot train neural router.")
+    logger.info("Install with: pip install torch")
 
 from .neural_router import NeuralRouter, NeuralRoutingFeatures, PolicyNetwork
 from .router import QueryType, ReasoningStrategy, RoutingOutcome
