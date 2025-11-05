@@ -7,7 +7,7 @@ import numpy as np
 
 class LanguageDetector:
     def __init__(self):
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         
         self.language_profiles = {
             'python': {
@@ -16,9 +16,17 @@ class LanguageDetector:
                     "import numpy as np\nclass DataProcessor:\n    def __init__(self): pass",
                     "for item in items:\n    if item > 0:\n        result.append(item)",
                     "with open('file.txt') as f:\n    data = f.read()",
-                    "lambda x: x ** 2"
+                    "lambda x: x ** 2",
+                    "@decorator\ndef function():\n    pass",
+                    "async def fetch_data():\n    await process()"
                 ],
-                'ast_parser': self._try_parse_python
+                'ast_parser': self._try_parse_python,
+                'exclusion_patterns': [
+                    r'\bpublic\s+class\b',
+                    r'\bprivate\s+void\b',
+                    r'System\.out\.print',
+                    r'#include\s*<'
+                ]
             },
             'javascript': {
                 'exemplars': [
@@ -26,9 +34,16 @@ class LanguageDetector:
                     "const data = await fetch(url);",
                     "const result = array.map(x => x * 2);",
                     "class Component extends React.Component { }",
-                    "export default function App() { }"
+                    "export default function App() { }",
+                    "let value = async () => await api.call();"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+',
+                    r':\s*$',
+                    r'\bfn\s+\w+\s*\('
+                ]
             },
             'typescript': {
                 'exemplars': [
@@ -36,9 +51,15 @@ class LanguageDetector:
                     "type Result<T> = T | null;",
                     "function process<T>(data: T): T { return data; }",
                     "const value: number = 42;",
-                    "class Service implements IService { }"
+                    "class Service implements IService { }",
+                    "enum Status { Active, Inactive }"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+$',
+                    r'\bfn\s+\w+\s*\('
+                ]
             },
             'java': {
                 'exemplars': [
@@ -46,9 +67,16 @@ class LanguageDetector:
                     "private int calculate(int x) { return x + 1; }",
                     "List<String> items = new ArrayList<>();",
                     "@Override public String toString() { return \"\"; }",
-                    "public interface Service extends BaseService { }"
+                    "public interface Service extends BaseService { }",
+                    "import java.util.*;\npublic class Test {}"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+$',
+                    r'=>',
+                    r'\bfn\s+\w+\s*\('
+                ]
             },
             'cpp': {
                 'exemplars': [
@@ -56,9 +84,16 @@ class LanguageDetector:
                     "template<typename T> class Vector { };",
                     "std::vector<int> data = {1, 2, 3};",
                     "void process(const std::string& input) { }",
-                    "namespace app { class Service { }; }"
+                    "namespace app { class Service { }; }",
+                    "#include <vector>\nusing namespace std;"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+$',
+                    r'\bfunction\s+\w+\s*\(',
+                    r'\bfn\s+\w+\s*\('
+                ]
             },
             'go': {
                 'exemplars': [
@@ -66,9 +101,16 @@ class LanguageDetector:
                     "type User struct { Name string; Age int }",
                     "func (u *User) Process() error { return nil }",
                     "go func() { /* async */ }()",
-                    "defer file.Close()"
+                    "defer file.Close()",
+                    "import \"fmt\"\nfunc test() {}"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+$',
+                    r'\bfunction\s+\w+\s*\(',
+                    r'#include\s*<'
+                ]
             },
             'rust': {
                 'exemplars': [
@@ -76,9 +118,16 @@ class LanguageDetector:
                     "let mut data: Vec<i32> = vec![1, 2, 3];",
                     "impl MyTrait for MyStruct { }",
                     "pub struct Config { pub name: String }",
-                    "match result { Ok(v) => v, Err(e) => panic!() }"
+                    "match result { Ok(v) => v, Err(e) => panic!() }",
+                    "use std::collections::HashMap;"
                 ],
-                'ast_parser': None
+                'ast_parser': None,
+                'exclusion_patterns': [
+                    r'\bdef\s+\w+\s*\(',
+                    r'^\s*import\s+\w+$',
+                    r'\bfunction\s+\w+\s*\(',
+                    r'#include\s*<'
+                ]
             }
         }
         
@@ -154,14 +203,22 @@ class LanguageDetector:
         for lang, profile in self.language_profiles.items():
             score = 0.0
             
+            exclusion_patterns = profile.get('exclusion_patterns', [])
+            exclusion_penalty = sum(1 for pattern in exclusion_patterns if re.search(pattern, code, re.MULTILINE))
+            
+            if exclusion_penalty > 2:
+                scores[lang] = 0.0
+                continue
+            
             if profile['ast_parser']:
                 ast_result = profile['ast_parser'](code)
                 if ast_result['valid']:
                     score = ast_result['confidence']
-            else:
-                score = self._heuristic_score(code, lang)
+                    scores[lang] = score * (1.0 - exclusion_penalty * 0.2)
+                    continue
             
-            scores[lang] = score
+            heuristic_score = self._heuristic_score(code, lang)
+            scores[lang] = max(0.0, heuristic_score - exclusion_penalty * 0.15)
         
         return scores
     
@@ -177,50 +234,60 @@ class LanguageDetector:
     def _heuristic_score(self, code: str, lang: str) -> float:
         patterns = {
             'python': [
-                (r'\bdef\s+\w+\s*\([^)]*\)\s*:', 0.25),
-                (r'\bclass\s+\w+', 0.20),
-                (r'\bimport\s+\w+', 0.15),
-                (r'^\s{4}|\t', 0.10),
-                (r'\bfor\s+\w+\s+in\s+', 0.15),
-                (r'\bif\s+.*:\s*$', 0.10)
+                (r'\bdef\s+\w+\s*\([^)]*\)\s*:', 0.30, True),
+                (r'\bclass\s+\w+', 0.25, True),
+                (r'^\s*import\s+\w+', 0.20, True),
+                (r'^\s{4}[^\s]|\t[^\s]', 0.12, False),
+                (r'\bfor\s+\w+\s+in\s+', 0.18, True),
+                (r'\bif\s+.*:\s*$', 0.15, False),
+                (r'@\w+\s*\n\s*def', 0.20, True)
             ],
             'javascript': [
-                (r'\bfunction\s+\w+\s*\([^)]*\)\s*\{', 0.25),
-                (r'\b(const|let|var)\s+\w+\s*=', 0.20),
-                (r'=>', 0.15),
-                (r'\.(map|filter|reduce)\(', 0.15),
-                (r'async\s+function|await\s+', 0.15)
+                (r'\bfunction\s+\w+\s*\([^)]*\)\s*\{', 0.30, True),
+                (r'\b(const|let|var)\s+\w+\s*=', 0.25, True),
+                (r'=>', 0.20, True),
+                (r'\.(map|filter|reduce|forEach)\(', 0.20, True),
+                (r'\basync\s+function|\bawait\s+', 0.18, True),
+                (r'\bconsole\.log\(', 0.15, True)
             ],
             'typescript': [
-                (r'\binterface\s+\w+\s*\{', 0.30),
-                (r':\s*(string|number|boolean)', 0.25),
-                (r'\btype\s+\w+\s*=', 0.20),
-                (r'<[A-Z]\w*>', 0.15)
+                (r'\binterface\s+\w+\s*\{', 0.35, True),
+                (r':\s*(string|number|boolean|any)\b', 0.30, True),
+                (r'\btype\s+\w+\s*=', 0.25, True),
+                (r'<[A-Z]\w*>', 0.20, False),
+                (r'\benum\s+\w+\s*\{', 0.25, True)
             ],
             'java': [
-                (r'\b(public|private|protected)\s+class\s+\w+', 0.30),
-                (r'\b(public|private)\s+\w+\s+\w+\s*\([^)]*\)', 0.20),
-                (r'System\.out\.print', 0.15),
-                (r'\bnew\s+\w+\s*\(', 0.15),
-                (r'@\w+', 0.10)
+                (r'\b(public|private|protected)\s+class\s+\w+', 0.35, True),
+                (r'\b(public|private|protected)\s+\w+\s+\w+\s*\([^)]*\)', 0.25, True),
+                (r'System\.out\.print', 0.20, True),
+                (r'\bnew\s+\w+\s*\(', 0.18, True),
+                (r'@\w+\s*\n\s*(public|private)', 0.20, True),
+                (r'\bimport\s+java\.', 0.25, True)
             ],
             'cpp': [
-                (r'#include\s*<[^>]+>', 0.30),
-                (r'std::\w+', 0.25),
-                (r'\btemplate\s*<', 0.20),
-                (r'::', 0.10)
+                (r'#include\s*<[^>]+>', 0.35, True),
+                (r'std::\w+', 0.30, True),
+                (r'\btemplate\s*<', 0.25, True),
+                (r'::', 0.15, False),
+                (r'\bnamespace\s+\w+', 0.20, True),
+                (r'using\s+namespace\s+std', 0.25, True)
             ],
             'go': [
-                (r'\bpackage\s+\w+', 0.30),
-                (r'\bfunc\s+\w+\s*\([^)]*\)', 0.25),
-                (r':=', 0.20),
-                (r'\bdefer\s+', 0.15)
+                (r'\bpackage\s+\w+', 0.35, True),
+                (r'\bfunc\s+\w+\s*\([^)]*\)', 0.30, True),
+                (r':=', 0.25, True),
+                (r'\bdefer\s+', 0.20, True),
+                (r'\bgo\s+func', 0.25, True),
+                (r'\btype\s+\w+\s+struct', 0.25, True)
             ],
             'rust': [
-                (r'\bfn\s+\w+\s*\([^)]*\)', 0.30),
-                (r'\blet\s+mut\s+', 0.20),
-                (r'\bimpl\s+\w+', 0.20),
-                (r'println!\(', 0.15)
+                (r'\bfn\s+\w+\s*\([^)]*\)', 0.35, True),
+                (r'\blet\s+mut\s+', 0.25, True),
+                (r'\bimpl\s+\w+', 0.25, True),
+                (r'println!\(', 0.20, True),
+                (r'\bmatch\s+\w+\s*\{', 0.20, True),
+                (r'\buse\s+std::', 0.25, True)
             ]
         }
         
@@ -228,9 +295,18 @@ class LanguageDetector:
             return 0.0
         
         score = 0.0
-        for pattern, weight in patterns[lang]:
-            if re.search(pattern, code, re.MULTILINE):
-                score += weight
+        matched_unique = set()
+        
+        for pattern, weight, is_unique in patterns[lang]:
+            matches = re.findall(pattern, code, re.MULTILINE)
+            if matches:
+                if is_unique:
+                    if pattern not in matched_unique:
+                        score += weight
+                        matched_unique.add(pattern)
+                else:
+                    count = len(matches)
+                    score += weight * min(count / 3.0, 1.0)
         
         return min(score, 1.0)
     

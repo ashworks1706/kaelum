@@ -2,14 +2,23 @@ from typing import Dict, List
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import re
 
 
 class CompletenessDetector:
     
     def __init__(self):
-        self.nli_pipeline = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        self.qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2", device=-1)
+        try:
+            self.nli_pipeline = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
+        except:
+            self.nli_pipeline = None
+        
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        
+        try:
+            self.qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2", device=-1)
+        except:
+            self.qa_model = None
     
     def is_complete(self, query: str, response: str, context: List[str] = None) -> Dict:
         context = context or []
@@ -104,29 +113,42 @@ class CompletenessDetector:
     def _extract_aspects(self, query: str) -> List[str]:
         aspects = []
         
+        sentences = [s.strip() for s in re.split(r'[.!?]+', query) if s.strip()]
+        
+        if len(sentences) > 1:
+            for sent in sentences:
+                if len(sent) > 10:
+                    aspects.append(sent)
+        
+        conjunctions = re.split(r'\s+and\s+|\s*&\s*|\s*,\s*', query)
+        for part in conjunctions:
+            if len(part.strip()) > 15 and part.strip() not in aspects:
+                aspects.append(part.strip())
+        
+        question_words = ['what', 'why', 'how', 'when', 'where', 'who', 'which']
         query_lower = query.lower()
+        question_count = sum(1 for qw in question_words if qw in query_lower)
         
-        question_patterns = {
-            'what': "What is",
-            'why': "Why does",
-            'how': "How does",
-            'when': "When did",
-            'where': "Where is",
-            'who': "Who did"
-        }
-        
-        for qw, prefix in question_patterns.items():
-            if qw in query_lower:
-                aspects.append(f"{prefix} this happen")
-        
-        if 'and' in query or '&' in query:
-            parts = query.replace('&', 'and').split('and')
-            aspects.extend([p.strip() for p in parts if len(p.strip()) > 5])
+        if question_count > 1:
+            for qw in question_words:
+                pattern = fr'\b{qw}\b[^.!?]*[.!?]?'
+                matches = re.findall(pattern, query_lower, re.IGNORECASE)
+                for match in matches:
+                    if len(match) > 15:
+                        aspects.append(match)
         
         if not aspects:
             aspects = [query]
         
-        return aspects[:5]
+        unique_aspects = []
+        seen = set()
+        for aspect in aspects:
+            normalized = aspect.lower().strip()
+            if normalized not in seen:
+                unique_aspects.append(aspect)
+                seen.add(normalized)
+        
+        return unique_aspects[:5]
     
     def _check_coherence(self, response: str) -> float:
         sentences = [s.strip() for s in response.split('.') if s.strip()]

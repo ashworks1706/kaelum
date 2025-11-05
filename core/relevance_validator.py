@@ -2,6 +2,7 @@ import re
 from typing import Dict, Optional
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 class RelevanceValidator:
@@ -17,11 +18,14 @@ class RelevanceValidator:
     }
     
     def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = SentenceTransformer('all-mpnet-base-v2')
         try:
             self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
         except:
             self.cross_encoder = None
+        
+        self.tfidf = TfidfVectorizer(max_features=100, stop_words=None)
+        self._performance_cache = {}
     
     def validate(self, query: str, response: str, worker_type: str = 'default', 
                  context: str = '') -> Dict:
@@ -145,16 +149,21 @@ class RelevanceValidator:
         return adjustments.get(complexity, 0.0)
     
     def _advanced_token_overlap(self, query: str, response: str) -> float:
-        stop_words = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-            'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'be', 'been',
-            'being', 'this', 'that', 'these', 'those', 'it', 'its', 'has', 'have',
-            'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may',
-            'might', 'must', 'can'
-        }
+        try:
+            corpus = [query, response]
+            self.tfidf.fit(corpus)
+            query_vec = self.tfidf.transform([query]).toarray()[0]
+            response_vec = self.tfidf.transform([response]).toarray()[0]
+            
+            overlap = np.dot(query_vec, response_vec) / (
+                np.linalg.norm(query_vec) * np.linalg.norm(response_vec) + 1e-9
+            )
+            return float(overlap)
+        except:
+            pass
         
-        query_tokens = set(re.findall(r'\b\w{3,}\b', query.lower())) - stop_words
-        response_tokens = set(re.findall(r'\b\w{3,}\b', response.lower())) - stop_words
+        query_tokens = set(re.findall(r'\b\w{3,}\b', query.lower()))
+        response_tokens = set(re.findall(r'\b\w{3,}\b', response.lower()))
         
         if not query_tokens:
             return 0.0

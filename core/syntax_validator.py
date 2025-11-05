@@ -146,89 +146,117 @@ class SyntaxValidator:
         return {'is_valid': True, 'error': None}
     
     def _validate_balanced_syntax(self, code: str, language: str) -> Dict:
-        in_string = False
-        in_char = False
-        in_comment = False
-        in_multiline_comment = False
-        escape_next = False
-        
-        bracket_stack = []
+        stack = []
         bracket_pairs = {'(': ')', '[': ']', '{': '}'}
+        
+        state = {
+            'in_string': False,
+            'string_char': None,
+            'in_char': False,
+            'in_comment': False,
+            'in_multiline_comment': False,
+            'escape_next': False
+        }
         
         i = 0
         while i < len(code):
             char = code[i]
             
-            if escape_next:
-                escape_next = False
+            if state['escape_next']:
+                state['escape_next'] = False
                 i += 1
                 continue
             
-            if char == '\\' and (in_string or in_char):
-                escape_next = True
+            if char == '\\' and (state['in_string'] or state['in_char']):
+                state['escape_next'] = True
                 i += 1
                 continue
             
-            if not in_string and not in_char:
+            if not state['in_string'] and not state['in_char']:
                 if language in ['cpp', 'java', 'javascript', 'rust', 'go']:
                     if i + 1 < len(code) and code[i:i+2] == '//':
-                        in_comment = True
+                        state['in_comment'] = True
                         i += 2
                         continue
                     
                     if i + 1 < len(code) and code[i:i+2] == '/*':
-                        in_multiline_comment = True
+                        state['in_multiline_comment'] = True
                         i += 2
                         continue
                     
-                    if in_multiline_comment and i + 1 < len(code) and code[i:i+2] == '*/':
-                        in_multiline_comment = False
+                    if state['in_multiline_comment'] and i + 1 < len(code) and code[i:i+2] == '*/':
+                        state['in_multiline_comment'] = False
                         i += 2
                         continue
                 
                 if language == 'python' and char == '#':
-                    in_comment = True
+                    state['in_comment'] = True
             
-            if in_comment:
+            if state['in_comment']:
                 if char == '\n':
-                    in_comment = False
+                    state['in_comment'] = False
                 i += 1
                 continue
             
-            if in_multiline_comment:
+            if state['in_multiline_comment']:
                 i += 1
                 continue
             
-            if char == '"' and not in_char:
-                in_string = not in_string
-            elif char == "'" and not in_string:
-                in_char = not in_char
+            if char == '"' and not state['in_char']:
+                if language == 'python' and i + 2 < len(code) and code[i:i+3] == '"""':
+                    if state['in_string'] and state['string_char'] == '"""':
+                        state['in_string'] = False
+                        state['string_char'] = None
+                    else:
+                        state['in_string'] = True
+                        state['string_char'] = '"""'
+                    i += 3
+                    continue
+                else:
+                    if state['in_string'] and state['string_char'] == '"':
+                        state['in_string'] = False
+                        state['string_char'] = None
+                    else:
+                        state['in_string'] = True
+                        state['string_char'] = '"'
+            elif char == "'" and not state['in_string']:
+                if language == 'python' and i + 2 < len(code) and code[i:i+3] == "'''":
+                    if state['in_char'] and state['string_char'] == "'''":
+                        state['in_char'] = False
+                        state['string_char'] = None
+                    else:
+                        state['in_char'] = True
+                        state['string_char'] = "'''"
+                    i += 3
+                    continue
+                else:
+                    state['in_char'] = not state['in_char']
             
-            if not in_string and not in_char:
+            if not state['in_string'] and not state['in_char']:
                 if char in bracket_pairs:
-                    bracket_stack.append((char, i))
+                    stack.append((char, i))
                 elif char in bracket_pairs.values():
-                    if not bracket_stack:
+                    if not stack:
                         return {
                             'is_valid': False,
-                            'error': f'Unmatched closing bracket at position {i}',
+                            'error': f'Unmatched closing bracket "{char}" at position {i}',
                             'method': 'syntax_analysis'
                         }
-                    opening, pos = bracket_stack.pop()
+                    opening, pos = stack.pop()
                     if bracket_pairs[opening] != char:
                         return {
                             'is_valid': False,
-                            'error': f'Mismatched brackets: expected {bracket_pairs[opening]} but got {char} at position {i}',
+                            'error': f'Mismatched brackets: "{opening}" at {pos} closed with "{char}" at {i}',
                             'method': 'syntax_analysis'
                         }
             
             i += 1
         
-        if bracket_stack:
-            opening, pos = bracket_stack[-1]
+        if stack:
+            opening, pos = stack[-1]
             return {
                 'is_valid': False,
-                'error': f'Unclosed {opening} bracket at position {pos}',
+                'error': f'Unclosed "{opening}" bracket at position {pos}',
                 'method': 'syntax_analysis'
             }
         

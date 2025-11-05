@@ -8,11 +8,17 @@ import numpy as np
 class ConclusionDetector:
     def __init__(self):
         try:
-            self.classifier = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
+            self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli", device=-1)
+            self.use_zero_shot = True
         except:
-            self.classifier = None
+            try:
+                self.classifier = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
+                self.use_zero_shot = False
+            except:
+                self.classifier = None
+                self.use_zero_shot = False
         
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         
         self.conclusion_exemplars = [
             "Therefore, we can conclude that the hypothesis is correct.",
@@ -20,13 +26,29 @@ class ConclusionDetector:
             "Hence, the final answer is 42.",
             "Thus, we have proven the theorem.",
             "So the solution to the problem is x = 5.",
-            "Consequently, this approach is the most effective."
+            "Consequently, this approach is the most effective.",
+            "This proves that the statement is true.",
+            "The answer is therefore 10.",
+            "We conclude that this is the optimal solution."
+        ]
+        
+        self.non_conclusion_exemplars = [
+            "We need to explore various possibilities.",
+            "Let's consider the following approach.",
+            "The data shows interesting patterns.",
+            "First, we will analyze the input.",
+            "This requires further investigation."
         ]
         
         self.conclusion_embedding = self.encoder.encode(
-            " ".join(self.conclusion_exemplars),
+            self.conclusion_exemplars,
             convert_to_tensor=False
-        )
+        ).mean(axis=0)
+        
+        self.non_conclusion_embedding = self.encoder.encode(
+            self.non_conclusion_exemplars,
+            convert_to_tensor=False
+        ).mean(axis=0)
     
     def detect(self, text: str, context: List[str]) -> Dict[str, any]:
         if not text or not text.strip():
@@ -34,18 +56,12 @@ class ConclusionDetector:
         
         text_lower = text.lower().strip()
         
-        negation_patterns = [
-            r'\b(not|no|don\'t|doesn\'t|cannot|can\'t|didn\'t|never)\s+(?:\w+\s+){0,3}(therefore|thus|conclude|hence)\b',
-            r'\b(therefore|thus|conclude|hence)\s+(?:\w+\s+){0,3}(not|no|incorrect|wrong|false)\b'
-        ]
-        
-        is_negated = any(re.search(pattern, text_lower) for pattern in negation_patterns)
-        if is_negated:
+        if self._contains_strong_negation(text_lower):
             return {'is_conclusion': False, 'confidence': 0.0, 'reason': 'negated_conclusion'}
         
         semantic_signal = self._semantic_classification(text)
         structural_signal = self._structural_analysis(text, context)
-        marker_signal = self._marker_analysis(text)
+        marker_signal = self._marker_analysis_contextual(text)
         
         total_confidence = (
             semantic_signal * 0.50 +
@@ -54,7 +70,9 @@ class ConclusionDetector:
         )
         
         total_confidence = min(total_confidence, 1.0)
-        is_conclusion = total_confidence > 0.55
+        
+        threshold = self._adaptive_threshold(text, context)
+        is_conclusion = total_confidence > threshold
         
         return {
             'is_conclusion': is_conclusion,
@@ -66,14 +84,54 @@ class ConclusionDetector:
             }
         }
     
+    def _adaptive_threshold(self, text: str, context: List[str]) -> float:
+        base_threshold = 0.55
+        
+        words = text.split()
+        if len(words) < 10:
+            base_threshold += 0.1
+        elif len(words) > 30:
+            base_threshold -= 0.05
+        
+        if context and text == context[-1]:
+            base_threshold -= 0.05
+        
+        return max(0.45, min(0.70, base_threshold))
+    
+    def _contains_strong_negation(self, text: str) -> bool:
+        negation_contexts = [
+            r'\b(not|no|don\'t|doesn\'t|cannot|can\'t|didn\'t|never)\s+(?:\w+\s+){0,3}(therefore|thus|conclude|hence|answer|result|solution)\b',
+            r'\b(therefore|thus|conclude|hence|answer|result|solution)\s+(?:\w+\s+){0,3}(not|no|incorrect|wrong|false|invalid)\b',
+            r'\b(cannot|can\'t)\s+conclude\b',
+            r'\bno\s+(conclusion|answer|solution)\b'
+        ]
+        
+        return any(re.search(pattern, text) for pattern in negation_contexts)
+    
     def _semantic_classification(self, text: str) -> float:
         text_embedding = self.encoder.encode(text, convert_to_tensor=False)
         
-        similarity = np.dot(text_embedding, self.conclusion_embedding) / (
+        conclusion_sim = np.dot(text_embedding, self.conclusion_embedding) / (
             np.linalg.norm(text_embedding) * np.linalg.norm(self.conclusion_embedding) + 1e-9
         )
         
-        if self.classifier:
+        non_conclusion_sim = np.dot(text_embedding, self.non_conclusion_embedding) / (
+            np.linalg.norm(text_embedding) * np.linalg.norm(self.non_conclusion_embedding) + 1e-9
+        )
+        
+        contrastive_score = (conclusion_sim - non_conclusion_sim + 1.0) / 2.0
+        
+        if self.classifier and self.use_zero_shot:
+            try:
+                result = self.classifier(text, candidate_labels=["conclusion", "explanation", "question"], hypothesis_template="This text is a {}.")
+                
+                conclusion_idx = result['labels'].index('conclusion')
+                zero_shot_score = result['scores'][conclusion_idx]
+                
+                return float(0.5 * contrastive_score + 0.5 * zero_shot_score)
+            except:
+                pass
+        elif self.classifier:
             try:
                 hypothesis = "This text presents a final conclusion or result."
                 result = self.classifier(f"{text}", hypothesis)
@@ -89,11 +147,11 @@ class ConclusionDetector:
                     else:
                         nli_score = 0.0
                     
-                    return float(0.6 * similarity + 0.4 * nli_score)
+                    return float(0.5 * contrastive_score + 0.5 * nli_score)
             except:
                 pass
         
-        return float(similarity)
+        return float(contrastive_score)
     
     def _structural_analysis(self, text: str, context: List[str]) -> float:
         if not context:
@@ -117,6 +175,69 @@ class ConclusionDetector:
         pattern_signal = 0.4 if pattern_match else 0.0
         
         return min(0.6 * position_signal + 0.4 * pattern_signal, 1.0)
+    
+    def _marker_analysis_contextual(self, text: str) -> float:
+        text_lower = text.lower()
+        
+        marker_configs = {
+            'strong': {
+                'markers': ['therefore', 'thus', 'hence', 'consequently', 'it follows that', 'we can conclude'],
+                'base_weight': 0.30
+            },
+            'medium': {
+                'markers': ['so', 'in conclusion', 'to summarize', 'in summary', 'overall', 'finally'],
+                'base_weight': 0.20
+            },
+            'weak': {
+                'markers': ['ultimately', 'essentially', 'basically'],
+                'base_weight': 0.10
+            }
+        }
+        
+        max_score = 0.0
+        
+        for strength, config in marker_configs.items():
+            for marker in config['markers']:
+                if marker in text_lower:
+                    context_score = self._analyze_marker_context(text_lower, marker)
+                    adjusted_weight = config['base_weight'] * context_score
+                    max_score = max(max_score, adjusted_weight)
+        
+        return max_score
+    
+    def _analyze_marker_context(self, text: str, marker: str) -> float:
+        if marker not in text:
+            return 0.0
+        
+        marker_idx = text.find(marker)
+        
+        window_start = max(0, marker_idx - 40)
+        window_end = min(len(text), marker_idx + len(marker) + 40)
+        window = text[window_start:window_end]
+        
+        negation_patterns = [
+            r'\b(not|no|don\'t|doesn\'t|cannot|can\'t|never|won\'t|wouldn\'t)\b',
+            r'\b(but|however|although|though|unless|except)\b'
+        ]
+        
+        for pattern in negation_patterns:
+            matches = list(re.finditer(pattern, window))
+            for match in matches:
+                neg_pos = match.start()
+                marker_relative = marker_idx - window_start
+                
+                if abs(neg_pos - marker_relative) < 25:
+                    return 0.3
+        
+        confirmation_patterns = [
+            r'\b(answer|result|solution|proof|finding)\s+(is|are)\b',
+            r'\b(final|ultimate|definitive)\b',
+            r'[=:]'
+        ]
+        
+        has_confirmation = any(re.search(p, window) for p in confirmation_patterns)
+        
+        return 1.0 if has_confirmation else 0.7
     
     def _marker_analysis(self, text: str) -> float:
         text_lower = text.lower()

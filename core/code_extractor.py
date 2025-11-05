@@ -18,7 +18,7 @@ class CodeExtractor:
     FENCE_PATTERN = r'```(\w+)?\n(.*?)```'
     
     def __init__(self):
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         
         self.language_signatures = {
             'python': {
@@ -27,10 +27,12 @@ class CodeExtractor:
                     "import module\nclass MyClass:\n    def __init__(self):\n        pass"
                 ],
                 'strong_patterns': [
-                    (r'^\s*def\s+\w+\s*\([^)]*\)\s*:', 0.9),
-                    (r'^\s*class\s+\w+.*:', 0.9),
-                    (r'^\s*import\s+\w+', 0.85),
-                    (r'^\s*from\s+\w+\s+import', 0.85)
+                    (r'^\s*def\s+\w+\s*\([^)]*\)\s*:', 0.9, True),
+                    (r'^\s*class\s+\w+.*:', 0.9, True),
+                    (r'^\s*import\s+\w+', 0.85, True),
+                    (r'^\s*from\s+\w+\s+import', 0.85, True),
+                    (r'@\w+\s*\n\s*def', 0.80, True),
+                    (r'async\s+def\s+\w+', 0.85, True)
                 ],
                 'ast_validator': self._validate_python_ast
             },
@@ -40,9 +42,11 @@ class CodeExtractor:
                     "const data = async () => await fetch();"
                 ],
                 'strong_patterns': [
-                    (r'\bfunction\s+\w+\s*\([^)]*\)\s*\{', 0.85),
-                    (r'\b(const|let|var)\s+\w+\s*=', 0.75),
-                    (r'=>\s*\{', 0.80)
+                    (r'\bfunction\s+\w+\s*\([^)]*\)\s*\{', 0.85, True),
+                    (r'\b(const|let|var)\s+\w+\s*=', 0.75, False),
+                    (r'=>\s*\{', 0.80, False),
+                    (r'\basync\s+function|\bawait\s+', 0.80, True),
+                    (r'console\.log\(', 0.70, False)
                 ],
                 'ast_validator': None
             },

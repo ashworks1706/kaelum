@@ -6,10 +6,13 @@ from transformers import pipeline
 
 class CoherenceDetector:
     def __init__(self):
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        self.nli_pipeline = pipeline('text-classification', 
-                                     model='facebook/bart-large-mnli',
-                                     device=-1)
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        try:
+            self.nli_pipeline = pipeline('text-classification', 
+                                         model='facebook/bart-large-mnli',
+                                         device=-1)
+        except:
+            self.nli_pipeline = None
     
     def assess_coherence(self, text: str, task_type: str = 'general') -> Dict[str, float]:
         sentences = self._split_sentences(text)
@@ -47,6 +50,16 @@ class CoherenceDetector:
     def _measure_sentence_continuity(self, sentences: List[str]) -> float:
         if len(sentences) < 2:
             return 1.0
+        
+        if not self.nli_pipeline:
+            embeddings = self.encoder.encode(sentences, convert_to_tensor=False)
+            continuity_scores = []
+            for i in range(len(embeddings) - 1):
+                sim = np.dot(embeddings[i], embeddings[i + 1]) / (
+                    np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[i + 1]) + 1e-9
+                )
+                continuity_scores.append(sim)
+            return float(np.mean(continuity_scores)) if continuity_scores else 0.5
         
         continuity_scores = []
         for i in range(len(sentences) - 1):
