@@ -448,26 +448,6 @@ How Kaelum collects training data:
 
 ---
 
-## Project Layout (abridged)
-
-```
-Kaelum/
-├── core/
-│   ├── router.py
-│   ├── lats.py
-│   ├── workers.py
-│   ├── tree_cache.py
-│   ├── verification.py
-│   ├── reflection.py
-│   └── threshold_calibrator.py
-├── runtime/
-│   └── orchestrator.py
-├── requirements.txt
-└── README.md
-```
-
----
-
 ## Testing & Development
 
 ```bash
@@ -475,14 +455,6 @@ pip install pytest pytest-cov
 python -m pytest -v
 python -m pytest --cov=core --cov=runtime
 ```
-
-Contributing:
-
-1. Fork repo
-2. Create branch: git checkout -b feature-name
-3. Run tests and open a PR
-
----
 
 ## Performance & Limits
 
