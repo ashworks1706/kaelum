@@ -3,6 +3,8 @@ from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import re
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class CompletenessDetector:
@@ -19,6 +21,8 @@ class CompletenessDetector:
             self.qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2", device=-1)
         except:
             self.qa_model = None
+        
+        self.threshold_calibrator = ThresholdCalibrator()
     
     def is_complete(self, query: str, response: str, context: List[str] = None) -> Dict:
         context = context or []
@@ -39,7 +43,11 @@ class CompletenessDetector:
         if has_dangling:
             completeness_score *= 0.8
         
-        is_complete = completeness_score >= 0.65
+        optimal_threshold = self.threshold_calibrator.get_optimal_threshold(
+            "completeness_detection",
+            default=0.65
+        )
+        is_complete = completeness_score >= optimal_threshold
         
         missing_aspects = self._identify_missing_aspects(query, response)
         
@@ -198,3 +206,12 @@ class CompletenessDetector:
             pass
         
         return missing[:3]
+    
+    def record_outcome(self, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type="completeness_detection",
+            timestamp=time.time()
+        )

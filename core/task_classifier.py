@@ -2,6 +2,8 @@ from typing import Dict, List, Tuple
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class TaskClassifier:
@@ -9,6 +11,7 @@ class TaskClassifier:
         self.encoder = SentenceTransformer('all-mpnet-base-v2')
         self._calibrators = {}
         self._performance_history = {}
+        self.threshold_calibrator = ThresholdCalibrator()
         
         self.task_profiles = {
             "code": {
@@ -197,7 +200,25 @@ class TaskClassifier:
         
         return sorted_results
     
+    def record_outcome(self, domain: str, task_type: str, query: str, score: float, 
+                      threshold: float, was_correct: bool):
+        task_key = f"{domain}:{task_type}"
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=task_key,
+            timestamp=time.time()
+        )
+        self.update_performance(domain, task_type, query, was_correct)
+    
     def _get_adaptive_threshold(self, domain: str, task_type: str, query: str) -> float:
+        task_key = f"{domain}:{task_type}"
+        optimal_threshold = self.threshold_calibrator.get_optimal_threshold(task_key)
+        
+        if optimal_threshold != 0.5:
+            return optimal_threshold
+        
         base_threshold = self.task_profiles[domain][task_type]['base_threshold']
         
         words = query.split()

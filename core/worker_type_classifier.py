@@ -1,12 +1,15 @@
 from typing import Dict, List
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class WorkerTypeClassifier:
     
     def __init__(self):
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.threshold_calibrator = ThresholdCalibrator()
         
         self.worker_profiles = {
             'math': {
@@ -121,3 +124,19 @@ class WorkerTypeClassifier:
             'alternatives': alternatives,
             'all_scores': dict(sorted_workers)
         }
+    
+    def record_outcome(self, worker: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"worker:{worker}",
+            timestamp=time.time()
+        )
+    
+    def get_optimal_threshold(self, worker: str) -> float:
+        optimal = self.threshold_calibrator.get_optimal_threshold(
+            f"worker:{worker}",
+            default=self.worker_profiles.get(worker, {}).get('threshold', 0.5)
+        )
+        return optimal

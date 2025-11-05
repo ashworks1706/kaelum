@@ -1,11 +1,14 @@
 from typing import Dict, Tuple
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class DomainClassifier:
     def __init__(self):
         self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.threshold_calibrator = ThresholdCalibrator()
         
         self.domain_prototypes = {
             'code': [
@@ -118,3 +121,15 @@ class DomainClassifier:
         features['domain_ambiguity'] = sorted_domains[0][1] - sorted_domains[1][1] if len(sorted_domains) > 1 else 1.0
         
         return features
+    
+    def record_outcome(self, domain: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"domain:{domain}",
+            timestamp=time.time()
+        )
+    
+    def get_adaptive_threshold(self, domain: str, default: float = 0.5) -> float:
+        return self.threshold_calibrator.get_optimal_threshold(f"domain:{domain}", default)

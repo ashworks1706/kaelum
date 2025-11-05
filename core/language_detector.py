@@ -155,7 +155,7 @@ class LanguageDetector:
             scores = {lang: 0.1 for lang in self.language_profiles.keys()}
         
         if explicit_lang and explicit_lang in scores:
-            scores[explicit_lang] = max(scores[explicit_lang], 0.75)
+            scores[explicit_lang] = min(scores[explicit_lang] + 0.25, 0.95)
         
         semantic_scores = self._semantic_analysis(query, code)
         for lang, sem_score in semantic_scores.items():

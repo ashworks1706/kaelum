@@ -1,11 +1,14 @@
 from typing import Dict, List, Tuple
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class CreativeTaskClassifier:
     def __init__(self):
         self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.threshold_calibrator = ThresholdCalibrator()
         
         self.task_profiles = {
             'storytelling': {
@@ -113,7 +116,11 @@ class CreativeTaskClassifier:
             
             score = 0.65 * max_similarity + 0.35 * avg_top3
             
-            threshold = self._adaptive_threshold(profile['base_threshold'], query)
+            optimal_threshold = self.threshold_calibrator.get_optimal_threshold(
+                f"creative:{task}",
+                default=profile['base_threshold']
+            )
+            threshold = self._adaptive_threshold(optimal_threshold, query)
             
             if score >= threshold:
                 all_scores[task] = float(score)
@@ -145,3 +152,12 @@ class CreativeTaskClassifier:
             adjustment = 0.0
         
         return max(0.30, min(0.75, base_threshold + adjustment))
+    
+    def record_outcome(self, task: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"creative:{task}",
+            timestamp=time.time()
+        )

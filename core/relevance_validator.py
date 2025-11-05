@@ -3,6 +3,8 @@ from typing import Dict, Optional
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class RelevanceValidator:
@@ -26,15 +28,19 @@ class RelevanceValidator:
         
         self.tfidf = TfidfVectorizer(max_features=100, stop_words=None)
         self._performance_cache = {}
+        self.threshold_calibrator = ThresholdCalibrator()
     
     def validate(self, query: str, response: str, worker_type: str = 'default', 
                  context: str = '') -> Dict:
-        base_threshold = self.BASE_THRESHOLDS.get(worker_type.lower(), self.BASE_THRESHOLDS['default'])
+        optimal_threshold = self.threshold_calibrator.get_optimal_threshold(
+            f"relevance:{worker_type}",
+            default=self.BASE_THRESHOLDS.get(worker_type.lower(), self.BASE_THRESHOLDS['default'])
+        )
         
         complexity = self._assess_complexity(query)
         complexity_adjustment = self._get_complexity_adjustment(complexity)
         
-        dynamic_threshold = base_threshold + complexity_adjustment
+        dynamic_threshold = optimal_threshold + complexity_adjustment
         dynamic_threshold = max(0.25, min(0.70, dynamic_threshold))
         
         if self.cross_encoder:
@@ -188,3 +194,12 @@ class RelevanceValidator:
             bigram_overlap = 0.0
         
         return 0.7 * exact_overlap + 0.3 * bigram_overlap
+    
+    def record_outcome(self, worker_type: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"relevance:{worker_type}",
+            timestamp=time.time()
+        )

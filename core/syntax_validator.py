@@ -8,17 +8,13 @@ from typing import Dict, Optional, Tuple
 
 class SyntaxValidator:
     
-    SUPPORTED_LANGUAGES = ['python', 'javascript', 'typescript', 'java', 'cpp', 'go', 'rust']
+    SUPPORTED_LANGUAGES = ['python', 'javascript', 'typescript']
     
     def __init__(self):
         self._validators = {
             'python': self._validate_python,
             'javascript': self._validate_javascript,
-            'typescript': self._validate_javascript,
-            'java': self._validate_java,
-            'cpp': self._validate_cpp,
-            'go': self._validate_go,
-            'rust': self._validate_rust
+            'typescript': self._validate_javascript
         }
     
     def validate(self, code: str, language: str = 'python') -> Dict:
@@ -100,50 +96,7 @@ class SyntaxValidator:
         except Exception as e:
             return self._fallback_validate(code, language)
     
-    def _validate_java(self, code: str) -> Dict:
-        structural_check = self._validate_structure(code, {
-            'class': r'\bclass\s+\w+',
-            'method': r'(?:public|private|protected)?\s*(?:static\s+)?(?:void|int|String|boolean|double|float)\s+\w+\s*\('
-        })
-        
-        if not structural_check['is_valid']:
-            return structural_check
-        
-        return self._validate_balanced_syntax(code, 'java')
-    
-    def _validate_cpp(self, code: str) -> Dict:
-        if not re.search(r'#include\s*<[^>]+>|#include\s*"[^"]+"', code):
-            return {
-                'is_valid': False,
-                'error': 'Missing include directives',
-                'method': 'structural_analysis'
-            }
-        
-        return self._validate_balanced_syntax(code, 'cpp')
-    
-    def _validate_go(self, code: str) -> Dict:
-        if not re.search(r'package\s+\w+', code):
-            return {
-                'is_valid': False,
-                'error': 'Missing package declaration',
-                'method': 'structural_analysis'
-            }
-        
-        return self._validate_balanced_syntax(code, 'go')
-    
-    def _validate_rust(self, code: str) -> Dict:
-        return self._validate_balanced_syntax(code, 'rust')
-    
-    def _validate_structure(self, code: str, required_patterns: Dict[str, str]) -> Dict:
-        for name, pattern in required_patterns.items():
-            if not re.search(pattern, code):
-                return {
-                    'is_valid': False,
-                    'error': f'Missing {name} definition',
-                    'method': 'structural_analysis'
-                }
-        
-        return {'is_valid': True, 'error': None}
+
     
     def _validate_balanced_syntax(self, code: str, language: str) -> Dict:
         stack = []

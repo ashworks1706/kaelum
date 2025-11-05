@@ -3,6 +3,8 @@ from typing import Dict, List, Optional
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class ConclusionDetector:
@@ -19,6 +21,7 @@ class ConclusionDetector:
                 self.use_zero_shot = False
         
         self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.threshold_calibrator = ThresholdCalibrator()
         
         self.conclusion_exemplars = [
             "Therefore, we can conclude that the hypothesis is correct.",
@@ -85,18 +88,21 @@ class ConclusionDetector:
         }
     
     def _adaptive_threshold(self, text: str, context: List[str]) -> float:
-        base_threshold = 0.55
+        optimal_threshold = self.threshold_calibrator.get_optimal_threshold(
+            "conclusion_detection",
+            default=0.55
+        )
         
         words = text.split()
         if len(words) < 10:
-            base_threshold += 0.1
+            optimal_threshold += 0.1
         elif len(words) > 30:
-            base_threshold -= 0.05
+            optimal_threshold -= 0.05
         
         if context and text == context[-1]:
-            base_threshold -= 0.05
+            optimal_threshold -= 0.05
         
-        return max(0.45, min(0.70, base_threshold))
+        return max(0.45, min(0.70, optimal_threshold))
     
     def _contains_strong_negation(self, text: str) -> bool:
         negation_contexts = [
@@ -304,3 +310,12 @@ class ConclusionDetector:
                     return False
         
         return True
+    
+    def record_outcome(self, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type="conclusion_detection",
+            timestamp=time.time()
+        )

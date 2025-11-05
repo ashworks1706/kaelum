@@ -4,6 +4,8 @@ from collections import Counter
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class RepetitionDetector:
@@ -16,6 +18,7 @@ class RepetitionDetector:
             'lexical': 0.7,
             'phrase': 0.6
         }
+        self.threshold_calibrator = ThresholdCalibrator()
     
     def detect(self, text: str, context: str = '') -> Dict:
         intentional_score = self._detect_stylistic_patterns_ml(text)
@@ -60,7 +63,11 @@ class RepetitionDetector:
             'intentional': 0.4,
             'redundancy': 0.7
         }
-        base = base_thresholds.get(threshold_type, 0.5)
+        
+        optimal = self.threshold_calibrator.get_optimal_threshold(
+            f"repetition:{threshold_type}",
+            default=base_thresholds.get(threshold_type, 0.5)
+        )
         
         words = text.split()
         if len(words) < 50:
@@ -70,7 +77,7 @@ class RepetitionDetector:
         else:
             adjustment = 0.0
         
-        return max(0.2, min(0.9, base + adjustment))
+        return max(0.2, min(0.9, optimal + adjustment))
     
     def _detect_stylistic_patterns_ml(self, text: str) -> float:
         sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
@@ -304,3 +311,12 @@ class RepetitionDetector:
     
     def _get_matched_patterns(self, text: str) -> List[str]:
         return []
+    
+    def record_outcome(self, threshold_type: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"repetition:{threshold_type}",
+            timestamp=time.time()
+        )

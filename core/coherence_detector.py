@@ -2,6 +2,8 @@ from typing import List, Dict, Tuple
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
+import time
+from core.threshold_calibrator import ThresholdCalibrator
 
 
 class CoherenceDetector:
@@ -13,6 +15,7 @@ class CoherenceDetector:
                                          device=-1)
         except:
             self.nli_pipeline = None
+        self.threshold_calibrator = ThresholdCalibrator()
     
     def assess_coherence(self, text: str, task_type: str = 'general') -> Dict[str, float]:
         sentences = self._split_sentences(text)
@@ -135,3 +138,12 @@ class CoherenceDetector:
             'general': {'continuity': 0.35, 'topic': 0.35, 'flow': 0.3}
         }
         return weights.get(task_type, weights['general'])
+    
+    def record_outcome(self, task_type: str, score: float, threshold: float, was_correct: bool):
+        self.threshold_calibrator.record_decision(
+            score=score,
+            threshold=threshold,
+            actual_result=was_correct,
+            task_type=f"coherence:{task_type}",
+            timestamp=time.time()
+        )
