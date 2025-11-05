@@ -100,15 +100,9 @@ Monte Carlo Tree Search for reasoning exploration:
 6. Extract   → Best path becomes final reasoning
 ```
 
-**Why LATS?**
-
-- Explores multiple reasoning paths simultaneously
-- Balances exploration of new ideas vs exploitation of good paths
-- Finds optimal solution through tree search, not just greedy generation
-
 ### **4. Tree Cache (`core/tree_cache.py`)**
 
-Similarity-based caching for massive speedup:
+Similarity-based caching:
 
 ```python
 # For each query:
@@ -117,8 +111,6 @@ Similarity-based caching for massive speedup:
 3. If match found → return cached LATS tree (instant result)
 4. Else → run LATS search and cache successful trees
 ```
-
-**Performance:** 1000x faster for repeated/similar queries
 
 ### **5. Verification Engine (`core/verification.py`)**
 
@@ -131,8 +123,6 @@ Ground truth checking using SymPy:
 - Integrals: ∫(2x)dx = x^2 + C ✓
 - Equation solving: 2x + 6 = 10 → x = 2 ✓
 ```
-
-**NASA Principle:** Fail-fast, no defensive code, deterministic verification
 
 ### **6. Reflection Engine (`core/reflection.py`)**
 
@@ -272,21 +262,15 @@ python example.py
 
 ---
 
-## 🎮 Usage Examples
+## 🎮 Usage
 
 ### **Basic Usage**
 
 ```python
 from kaelum import enhance
 
-# Math query → MathWorker with SymPy verification
-print(enhance("Solve: 2x + 6 = 10"))
-
-# Logic query → LogicWorker with deductive reasoning
-print(enhance("All humans are mortal. Socrates is human. Is Socrates mortal?"))
-
-# Code query → CodeWorker with syntax validation
-print(enhance("Write a Python function to reverse a string"))
+result = enhance("Calculate 15% tip on $89.90")
+print(result)
 ```
 
 ### **Advanced Configuration**
@@ -327,29 +311,9 @@ orchestrator = KaelumOrchestrator(config, enable_routing=True)
 result = orchestrator.infer("Your query here")
 ```
 
-### **Programmatic API**
-
-```python
-from kaelum import kaelum_enhance_reasoning
-
-result = kaelum_enhance_reasoning(
-    query="What is the integral of 2x?",
-    domain="calculus"
-)
-
-print(f"Worker: {result['worker_used']}")
-print(f"Confidence: {result['confidence']:.2f}")
-print(f"Verification: {result['verification_passed']}")
-print(f"Iterations: {result['iterations']}")
-print(f"Cache Hit: {result['cache_hit']}")
-print("\nReasoning Steps:")
-for i, step in enumerate(result['reasoning_steps'], 1):
-    print(f"{i}. {step}")
-```
-
 ---
 
-## 🧪 How It Works: Step-by-Step Example
+## 🧪 Example: Step-by-Step Execution
 
 **Query:** "Calculate 15% tip on $89.90"
 
@@ -423,20 +387,6 @@ Store tree in cache:
 
 ---
 
-## 🏛️ Design Principles (NASA-Inspired)
-
-1. **Fail-Fast:** No defensive `try/except` blocks - let errors surface immediately
-2. **Deterministic:** Symbolic verification (SymPy) provides ground truth for math
-3. **Minimal:** Clean code without unnecessary abstractions or verbose comments
-4. **Expert Specialization:** LLM-based domain experts with specialized prompts
-5. **Shared Knowledge:** Global tree cache enables cross-domain learning
-6. **Tree Search:** MCTS exploration finds optimal reasoning paths
-7. **Verification First:** Check correctness before returning results
-8. **Self-Correction:** Reflection loop improves reasoning on failures
-9. **Configuration-Driven:** All prompts and settings in config, not hardcoded
-
----
-
 ## 📊 Performance
 
 | Metric                  | Value                     |
@@ -495,9 +445,8 @@ python -m pytest --cov=core --cov=runtime
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature-name`
-3. Follow NASA code style (minimal, no comments)
-4. Ensure SymPy verification passes
-5. Submit pull request
+3. Ensure tests pass
+4. Submit pull request
 
 ---
 
@@ -510,7 +459,6 @@ python -m pytest --cov=core --cov=runtime
 - [X] SymPy symbolic verification
 - [X] Reflection engine for self-correction
 - [X] **Configuration-driven worker prompts** (via .env)
-- [ ] Enhanced factual verification
 - [ ] Contextual bandit training for router
 - [ ] GSM8K/ToolBench benchmarks
 - [ ] Multi-turn conversation support
@@ -523,7 +471,7 @@ python -m pytest --cov=core --cov=runtime
 
 ```bibtex
 @software{kaelum2025,
-  title={Kaelum: NASA-Inspired Reasoning System},
+  title={Kaelum: Multi-Agent Reasoning System},
   author={Ash Works},
   year={2025},
   url={https://github.com/ashworks1706/KaelumAI}
@@ -535,15 +483,6 @@ python -m pytest --cov=core --cov=runtime
 ## 📄 License
 
 MIT License - see LICENSE file for details
-
----
-
-## 🙏 Acknowledgments
-
-- **LATS** - Inspired by AlphaGo's MCTS approach
-- **SymPy** - Symbolic mathematics library
-- **Sentence-Transformers** - Semantic embeddings
-- **NASA** - Fail-fast, deterministic design principles
 
 ---
 
