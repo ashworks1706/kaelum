@@ -73,17 +73,13 @@ class KaelumOrchestrator:
         logger.info("=" * 70)
 
     def _get_worker(self, specialty: str):
-        """Get or create worker for given specialty."""
         if specialty not in self._workers:
             try:
                 specialty_enum = WorkerSpecialty(specialty)
-                self._workers[specialty] = create_worker(specialty_enum, self.config)
-                self._workers[specialty].tree_cache = self.tree_cache
+                self._workers[specialty] = create_worker(specialty_enum, self.config, tree_cache=self.tree_cache)
             except Exception as e:
                 logger.error(f"Failed to create {specialty} worker: {e}")
-                # Fallback to logic worker
-                self._workers[specialty] = create_worker(WorkerSpecialty.LOGIC, self.config)
-                self._workers[specialty].tree_cache = self.tree_cache
+                self._workers[specialty] = create_worker(WorkerSpecialty.LOGIC, self.config, tree_cache=self.tree_cache)
         
         return self._workers[specialty]
     

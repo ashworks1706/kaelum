@@ -4,40 +4,33 @@ import re
 from typing import Dict, Any, Optional, List
 
 from core.config import KaelumConfig
+from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import LLMClient, Message
 
 
 class FactualWorker(WorkerAgent):
-    def __init__(self, config: Optional[KaelumConfig] = None):
-        super().__init__(config)
+    def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
+        super().__init__(config, tree_cache)
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
     
+    def get_system_prompt(self) -> str:
+        return """You are a factual knowledge and information expert specializing in:
+- Historical facts and events
+- Geographic information
+- Scientific knowledge
+- Definitions and explanations
+- Statistical data and figures
+- Biographical information
+- General knowledge and trivia
+
+Provide accurate, well-sourced factual information.
+Include relevant context and details. Cite sources when appropriate."""
+    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_encoder'):
-            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            factual_exemplars = [
-                "What is the capital of France?",
-                "Who invented the telephone?",
-                "When did World War II end?",
-                "Where is the Great Wall of China located?",
-                "How many planets are in the solar system?",
-                "Define photosynthesis",
-                "Explain the theory of relativity",
-                "Tell me about the Renaissance period",
-                "What are the symptoms of influenza?",
-                "Describe the water cycle"
-            ]
-            self._factual_embeddings = self._encoder.encode(factual_exemplars, convert_to_tensor=True)
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._factual_embeddings)[0]
-        return float(similarities.max())
+        return 1.0
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))

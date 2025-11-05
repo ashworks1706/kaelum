@@ -4,42 +4,35 @@ import re
 from typing import Dict, Any, Optional, List
 
 from core.config import KaelumConfig
+from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import LLMClient, Message
 
 
 class CreativeWorker(WorkerAgent):
-    def __init__(self, config: Optional[KaelumConfig] = None):
-        super().__init__(config)
+    def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
+        super().__init__(config, tree_cache)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CREATIVE
     
+    def get_system_prompt(self) -> str:
+        return """You are a creative writing and ideation expert specializing in:
+        - Story and narrative creation
+        - Poetry and prose composition
+        - Creative brainstorming
+        - Content generation (articles, blogs, essays)
+        - Character and dialogue development
+        - Innovative problem-solving
+        - Conceptual design and ideation
+
+        Provide imaginative, original, and engaging creative content.
+        Use vivid language and explore multiple perspectives."""
+    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_encoder'):
-            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            creative_exemplars = [
-                "Write a short story about a dragon",
-                "Create a poem about autumn",
-                "Generate ideas for a marketing campaign",
-                "Brainstorm unique product names",
-                "Imagine a futuristic city and describe it",
-                "Compose a dialogue between two characters",
-                "Design a creative solution to reduce plastic waste",
-                "Come up with alternative uses for a paperclip",
-                "Write a creative essay on the importance of art",
-                "Suggest unique wedding themes"
-            ]
-            self._creative_embeddings = self._encoder.encode(creative_exemplars, convert_to_tensor=True)
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._creative_embeddings)[0]
-        return float(similarities.max())
+        return 1.0
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))

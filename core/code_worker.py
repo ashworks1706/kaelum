@@ -6,14 +6,15 @@ import time
 from typing import Optional, Dict, List, Any
 
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from core.tree_cache import TreeCache
 from core.config import KaelumConfig
 from core.reasoning import LLMClient, Message
 
 
 class CodeWorker(WorkerAgent):
     
-    def __init__(self, config: Optional[KaelumConfig] = None):
-        super().__init__(config)
+    def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
+        super().__init__(config, tree_cache)
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
             'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'
@@ -22,33 +23,21 @@ class CodeWorker(WorkerAgent):
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CODE
     
+    def get_system_prompt(self) -> str:
+        return """You are a software engineering and programming expert specializing in:
+- Code generation (Python, JavaScript, Java, C++, Go, Rust, etc.)
+- Algorithm design and optimization
+- Data structures implementation
+- Code debugging and error fixing
+- Code refactoring and best practices
+- API design and integration
+- Testing and quality assurance
+
+Provide clear, well-commented code with explanations.
+Follow language-specific best practices and conventions."""
+    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_encoder'):
-            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            code_exemplars = [
-                "Write a Python function to sort a list",
-                "Implement a binary search algorithm",
-                "Debug this JavaScript code",
-                "Create a class for user authentication",
-                "Optimize this SQL query",
-                "Refactor this code to use async/await",
-                "Write unit tests for this function",
-                "Fix the syntax error in this code"
-            ]
-            self._code_embeddings = self._encoder.encode(code_exemplars, convert_to_tensor=True)
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._code_embeddings)[0]
-        max_similarity = float(similarities.max())
-        
-        code_chars = sum(c in query for c in '{}[]();')
-        if code_chars > 5:
-            max_similarity = min(max_similarity + 0.15, 1.0)
-        
-        return max_similarity
+        return 1.0
     
     def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
         return asyncio.run(self._solve_async(query, context))

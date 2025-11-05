@@ -51,15 +51,25 @@ class WorkerAgent(ABC):
                  tree_cache: Optional[TreeCache] = None):
         self.config = config or KaelumConfig()
         self.llm_client = LLMClient(self.config.reasoning_llm)
-        self.tree_cache = tree_cache or TreeCache()
+        self.tree_cache = tree_cache
         
     @abstractmethod
     def get_specialty(self) -> WorkerSpecialty:
         pass
     
-    @abstractmethod
+    def get_system_prompt(self) -> str:
+        specialty_map = {
+            WorkerSpecialty.MATH: self.config.worker_prompts.math,
+            WorkerSpecialty.LOGIC: self.config.worker_prompts.logic,
+            WorkerSpecialty.CODE: self.config.worker_prompts.code,
+            WorkerSpecialty.FACTUAL: self.config.worker_prompts.factual,
+            WorkerSpecialty.CREATIVE: self.config.worker_prompts.creative,
+            WorkerSpecialty.ANALYSIS: self.config.worker_prompts.analysis
+        }
+        return specialty_map.get(self.get_specialty(), "You are a helpful reasoning assistant.")
+    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        pass
+        return 1.0
     
     @abstractmethod
     def solve(self, query: str, context: Optional[Dict] = None,
@@ -68,9 +78,12 @@ class WorkerAgent(ABC):
         pass
     
     def _check_cache(self, query: str) -> Optional[WorkerResult]:
+        if not self.tree_cache:
+            return None
+            
         cached = self.tree_cache.retrieve(
             query,
-            worker_specialty=self.get_specialty().value,
+            worker_specialty=None,
             require_success=True
         )
         
@@ -133,44 +146,15 @@ class WorkerAgent(ABC):
 
 class MathWorker(WorkerAgent):
     
-    def __init__(self, config: Optional[KaelumConfig] = None):
-        super().__init__(config)
+    def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
+        super().__init__(config, tree_cache)
         self.sympy_engine = SympyEngine
         
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.MATH
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_encoder'):
-            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            math_exemplars = [
-                "Calculate the derivative of x squared",
-                "Solve the equation 2x + 5 = 15",
-                "What is the integral of sin(x)?",
-                "Find the mean of these numbers: 5, 10, 15, 20",
-                "Compute 25 multiplied by 17",
-                "What is the probability of rolling a 6?",
-                "Simplify the expression 3x + 2x - 5",
-                "Calculate the standard deviation of this dataset"
-            ]
-            self._math_embeddings = self._encoder.encode(math_exemplars, convert_to_tensor=True)
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._math_embeddings)[0]
-        max_similarity = float(similarities.max())
-        
-        math_symbols = sum(c in query for c in '+-*/=^√∫∂∑')
-        if math_symbols > 2:
-            max_similarity = min(max_similarity + 0.15, 1.0)
-        
-        has_numbers = sum(c.isdigit() for c in query) > 2
-        if has_numbers:
-            max_similarity = min(max_similarity + 0.1, 1.0)
-        
-        return max_similarity
+        return 1.0
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
@@ -225,8 +209,10 @@ class MathWorker(WorkerAgent):
                 prompt += "What is the first step to solve this?"
             
             try:
-                messages = [Message(role="system", content="You are a math expert. Provide ONE next reasoning step."), 
-                           Message(role="user", content=prompt)]
+                messages = [
+                    Message(role="system", content=self.get_system_prompt()), 
+                    Message(role="user", content=prompt)
+                ]
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
@@ -312,33 +298,7 @@ class LogicWorker(WorkerAgent):
         return WorkerSpecialty.LOGIC
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_encoder'):
-            self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            logic_exemplars = [
-                "All humans are mortal. Socrates is human. Is Socrates mortal?",
-                "If it rains, then the ground is wet. It's raining. What can we conclude?",
-                "Prove that this argument is valid",
-                "All dogs are animals. All animals need food. Therefore, all dogs need food.",
-                "Assume X is true. If X implies Y, what follows?",
-                "Is this reasoning sound: If A then B, B is true, therefore A is true?",
-                "Deduce the conclusion from these premises",
-                "Identify the fallacy in this argument"
-            ]
-            self._logic_embeddings = self._encoder.encode(logic_exemplars, convert_to_tensor=True)
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._logic_embeddings)[0]
-        max_similarity = float(similarities.max())
-        
-        logical_structures = sum(1 for phrase in ['if', 'then', 'therefore', 'all', 'some', 'no'] 
-                                if phrase in query.lower())
-        if logical_structures >= 3:
-            max_similarity = min(max_similarity + 0.15, 1.0)
-        
-        return max_similarity
+        return 1.0
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
@@ -390,8 +350,10 @@ class LogicWorker(WorkerAgent):
                 prompt += "Apply logical reasoning. What is the first step?"
             
             try:
-                messages = [Message(role="system", content="You are a logic expert. Apply formal deductive reasoning."),
-                           Message(role="user", content=prompt)]
+                messages = [
+                    Message(role="system", content=self.get_system_prompt()),
+                    Message(role="user", content=prompt)
+                ]
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
@@ -459,7 +421,7 @@ class LogicWorker(WorkerAgent):
         )
 
 
-def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None, **kwargs) -> WorkerAgent:
+def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None, **kwargs) -> WorkerAgent:
     from core.code_worker import CodeWorker
     from core.factual_worker import FactualWorker
     from core.creative_worker import CreativeWorker
@@ -476,4 +438,4 @@ def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = N
     if not worker_class:
         raise ValueError(f"No worker available for specialty: {specialty}")
     
-    return worker_class(config)
+    return worker_class(config, tree_cache)
