@@ -167,7 +167,7 @@ class Router:
         self.model_file = self.data_dir / "model.pt"
         self.outcomes = []
         
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=0.001)
         self.training_buffer = []

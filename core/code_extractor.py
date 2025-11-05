@@ -55,9 +55,11 @@ class CodeExtractor:
                     "public class Test {\n    public static void main(String[] args) {}\n}"
                 ],
                 'strong_patterns': [
-                    (r'\b(public|private)\s+class\s+\w+', 0.90),
-                    (r'\b(public|private|protected)\s+\w+\s+\w+\s*\(', 0.80),
-                    (r'System\.out\.print', 0.85)
+                    (r'\b(public|private)\s+class\s+\w+', 0.90, True),
+                    (r'\b(public|private|protected)\s+\w+\s+\w+\s*\(', 0.80, False),
+                    (r'System\.out\.print', 0.85, True),
+                    (r'\bimport\s+java\.', 0.80, True),
+                    (r'@\w+\s*\n\s*(public|private)', 0.85, True)
                 ],
                 'ast_validator': None
             },
@@ -66,9 +68,11 @@ class CodeExtractor:
                     "#include <iostream>\nint main() { std::cout << \"test\"; }"
                 ],
                 'strong_patterns': [
-                    (r'#include\s*<[^>]+>', 0.90),
-                    (r'std::\w+', 0.85),
-                    (r'\btemplate\s*<', 0.90)
+                    (r'#include\s*<[^>]+>', 0.90, True),
+                    (r'std::\w+', 0.85, False),
+                    (r'\btemplate\s*<', 0.90, True),
+                    (r'\bnamespace\s+\w+', 0.85, True),
+                    (r'using\s+namespace\s+std', 0.80, True)
                 ],
                 'ast_validator': None
             },
@@ -77,9 +81,11 @@ class CodeExtractor:
                     "package main\nfunc main() { fmt.Println(\"test\") }"
                 ],
                 'strong_patterns': [
-                    (r'^\s*package\s+\w+', 0.90),
-                    (r'\bfunc\s+\w+\s*\(', 0.85),
-                    (r':=', 0.70)
+                    (r'^\s*package\s+\w+', 0.90, True),
+                    (r'\bfunc\s+\w+\s*\(', 0.85, True),
+                    (r':=', 0.70, False),
+                    (r'\bdefer\s+', 0.80, True),
+                    (r'\bgo\s+func', 0.85, True)
                 ],
                 'ast_validator': None
             },
@@ -88,9 +94,12 @@ class CodeExtractor:
                     "fn main() { let x = 5; println!(\"{}\", x); }"
                 ],
                 'strong_patterns': [
-                    (r'\bfn\s+\w+\s*\(', 0.90),
-                    (r'\blet\s+mut\s+', 0.85),
-                    (r'\bimpl\s+\w+', 0.85)
+                    (r'\bfn\s+\w+\s*\(', 0.90, True),
+                    (r'\blet\s+mut\s+', 0.85, False),
+                    (r'\bimpl\s+\w+', 0.85, True),
+                    (r'println!\(', 0.80, False),
+                    (r'\bmatch\s+\w+\s*\{', 0.85, True),
+                    (r'\buse\s+std::', 0.80, True)
                 ],
                 'ast_validator': None
             }
@@ -213,10 +222,18 @@ class CodeExtractor:
         
         for lang, sig in self.language_signatures.items():
             score = 0.0
+            matched_unique = set()
             
-            for pattern, weight in sig['strong_patterns']:
-                if re.search(pattern, code, re.MULTILINE):
-                    score += weight
+            for pattern, weight, is_unique in sig['strong_patterns']:
+                matches = re.findall(pattern, code, re.MULTILINE)
+                if matches:
+                    if is_unique:
+                        if pattern not in matched_unique:
+                            score += weight
+                            matched_unique.add(pattern)
+                    else:
+                        count = len(matches)
+                        score += weight * min(count / 2.0, 1.0)
             
             if sig['ast_validator']:
                 if sig['ast_validator'](code):
@@ -228,7 +245,10 @@ class CodeExtractor:
         if len(code) > 30:
             semantic_scores = self._semantic_language_match(code)
             for lang, sem_score in semantic_scores.items():
-                scores[lang] = scores.get(lang, 0.0) * 0.6 + sem_score * 0.4
+                if lang in scores:
+                    scores[lang] = scores[lang] * 0.7 + sem_score * 0.3
+                else:
+                    scores[lang] = sem_score * 0.3
         
         if not scores:
             return None

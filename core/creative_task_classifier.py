@@ -5,31 +5,35 @@ from sentence_transformers import SentenceTransformer
 
 class CreativeTaskClassifier:
     def __init__(self):
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('all-mpnet-base-v2')
         
         self.task_profiles = {
             'storytelling': {
-                'threshold': 0.55,
+                'base_threshold': 0.55,
                 'exemplars': [
-                    'Write a story about a detective solving a mystery in Victorian London',
-                    'Create a narrative about space exploration and first contact with aliens',
-                    'Tell me a tale of adventure featuring a young hero on a quest',
-                    'Develop a plot for a mystery novel set in a small coastal town',
-                    'Write a short story with a twist ending about time travel'
+                    "Write a story about a detective solving a mystery in Victorian London",
+                    "Create a narrative about space exploration and first contact with aliens",
+                    "Tell me a tale of adventure featuring a young hero on a quest",
+                    "Develop a plot for a mystery novel set in a small coastal town",
+                    "Write a short story with a twist ending about time travel",
+                    "Craft a narrative with complex characters and deep emotions",
+                    "Create a story arc with rising action and climax"
                 ]
             },
             'poetry': {
-                'threshold': 0.60,
+                'base_threshold': 0.60,
                 'exemplars': [
-                    'Write a poem about nature and the changing seasons',
-                    'Create a haiku about the beauty of autumn leaves falling',
-                    'Compose a sonnet about love and longing across distance',
-                    'Make a limerick about a mischievous cat and its adventures',
-                    'Write free verse poetry exploring themes of identity'
+                    "Write a poem about nature and the changing seasons",
+                    "Create a haiku about the beauty of autumn leaves falling",
+                    "Compose a sonnet about love and longing across distance",
+                    "Make a limerick about a mischievous cat and its adventures",
+                    "Write free verse poetry exploring themes of identity",
+                    "Create metaphorical verses about human experience",
+                    "Compose rhythmic poetry with vivid imagery"
                 ]
             },
             'writing': {
-                'threshold': 0.50,
+                'base_threshold': 0.50,
                 'exemplars': [
                     'Write an essay on climate change and its global impact',
                     'Create a blog post about technology trends in healthcare',
@@ -39,7 +43,7 @@ class CreativeTaskClassifier:
                 ]
             },
             'ideation': {
-                'threshold': 0.55,
+                'base_threshold': 0.55,
                 'exemplars': [
                     'Brainstorm ideas for a tech startup in the education space',
                     'Suggest concepts for a viral marketing campaign targeting millennials',
@@ -49,7 +53,7 @@ class CreativeTaskClassifier:
                 ]
             },
             'design': {
-                'threshold': 0.55,
+                'base_threshold': 0.55,
                 'exemplars': [
                     'Design a user interface for a mobile banking application',
                     'Plan the architecture of a scalable microservices system',
@@ -59,7 +63,7 @@ class CreativeTaskClassifier:
                 ]
             },
             'dialogue': {
-                'threshold': 0.60,
+                'base_threshold': 0.60,
                 'exemplars': [
                     'Write dialogue between two characters arguing about philosophy',
                     'Create a conversation script for a job interview scenario',
@@ -69,7 +73,7 @@ class CreativeTaskClassifier:
                 ]
             },
             'general_creative': {
-                'threshold': 0.45,
+                'base_threshold': 0.45,
                 'exemplars': [
                     'Be creative with this task and think outside the box',
                     'Use your imagination to come up with something unique',
