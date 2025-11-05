@@ -120,6 +120,8 @@ class AnalysisWorker(WorkerAgent):
             self.tree_cache.store(query, tree, self.get_specialty().value,
                                  False, confidence)
         
+        avg_reward = tree.get_avg_reward()
+        
         return WorkerResult(
             answer=answer,
             confidence=confidence,
@@ -130,6 +132,7 @@ class AnalysisWorker(WorkerAgent):
             metadata={
                 'num_simulations': num_simulations,
                 'tree_depth': best_node.state.get("depth", 0),
-                'cache_hit': False
+                'cache_hit': False,
+                'avg_reward': avg_reward
             }
         )

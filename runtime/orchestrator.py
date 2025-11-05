@@ -115,18 +115,30 @@ class KaelumOrchestrator:
         logger.info(f"QUERY: {query}")
         logger.info("=" * 70)
         
-        # Step 1: Route query to appropriate expert worker
+        # Step 1: Check cache FIRST (before routing/detectors)
+        from sentence_transformers import SentenceTransformer
+        encoder = SentenceTransformer(self.config.embedding_model)
+        query_embedding = encoder.encode(query)
+        
+        cached_tree = self.tree_cache.get(query_embedding, similarity_threshold=0.85)
+        if cached_tree and cached_tree.get("quality") == "high":
+            logger.info("CACHE: ✓ HIT (high quality) - returning cached result")
+            cache_result = cached_tree["result"]
+            cache_result["cache_hit"] = True
+            cache_result["metrics"]["total_time_ms"] = 1
+            return cache_result
+        
+        # Step 2: Route query to appropriate expert worker (only on cache miss)
         if self.router:
-            routing_decision = self.router.route(query) # neural network to extract keywords and semantic depth to determine complexity of the query
+            routing_decision = self.router.route(query)
             worker_specialty = routing_decision.worker_specialty
-            use_cache = routing_decision.use_tree_cache
+            use_cache = False
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
             logger.info(f"ROUTING: Selected {worker_specialty} worker")
         else:
-            # Default routing
             worker_specialty = "logic"
-            use_cache = True
+            use_cache = False
             max_depth = 5
             num_sims = 10
             logger.info(f"ROUTING: Default to {worker_specialty} worker (router disabled)")
@@ -158,7 +170,7 @@ class KaelumOrchestrator:
             result = worker.solve(
                 query,
                 context=None,
-                use_cache=use_cache and (iteration == 1),  # Only use cache on first attempt
+                use_cache=False,
                 max_tree_depth=max_depth,
                 num_simulations=num_sims
             )
@@ -217,15 +229,57 @@ class KaelumOrchestrator:
         logger.info(f"TIME: {total_time:.3f}s")
         logger.info(f"{'=' * 70}\n")
         
-        # Step 6: Record outcome for router learning
+        # Format response
+        response = {
+            "query": query,
+            "reasoning_trace": final_result.reasoning_steps,
+            "answer": final_result.answer,
+            "worker": worker_specialty,
+            "confidence": final_result.confidence,
+            "verification_passed": verification_passed,
+            "iterations": iteration,
+            "cache_hit": False,
+            "metrics": {
+                "total_time_ms": total_time * 1000,
+                "execution_time_ms": final_result.execution_time * 1000,
+                "tree_depth": final_result.metadata.get("tree_depth", 0),
+                "num_simulations": final_result.metadata.get("num_simulations", 0),
+                "iterations": iteration
+            }
+        }
+        
+        # Store in cache with quality metadata
+        quality = "high" if verification_passed and final_result.confidence > 0.7 else "low"
+        self.tree_cache.store(
+            query_embedding,
+            {
+                "result": response,
+                "quality": quality,
+                "confidence": final_result.confidence,
+                "worker": worker_specialty
+            }
+        )
+        logger.info(f"CACHE: Stored result with quality={quality}")
+        
+        # Step 6: Record outcome for router learning with enhanced feedback
         if self.router:
+            avg_reward = final_result.metadata.get("avg_reward", final_result.confidence)
+            actual_depth = final_result.metadata.get("tree_depth", max_depth)
+            actual_sims = final_result.metadata.get("num_simulations", num_sims)
+            
             outcome = {
                 "query": query,
                 "success": verification_passed,
                 "confidence": final_result.confidence,
                 "execution_time": total_time,
                 "cost": total_time * 0.00000001,
-                "verification_passed": verification_passed
+                "verification_passed": verification_passed,
+                "avg_reward": avg_reward,
+                "predicted_depth": max_depth,
+                "actual_depth": actual_depth,
+                "predicted_sims": num_sims,
+                "actual_sims": actual_sims,
+                "cache_quality": quality
             }
             self.router.record_outcome(routing_decision, outcome)
         

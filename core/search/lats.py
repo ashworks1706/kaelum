@@ -18,6 +18,7 @@ class LATSNode:
     visits: int = 0
     value: float = 0.0
     last_updated: float = field(default_factory=time.time)
+    pruned: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -25,6 +26,7 @@ class LATSNode:
             'state': self.state,
             'visits': self.visits,
             'value': self.value,
+            'pruned': self.pruned,
             'children': [c.to_dict() for c in self.children],
         }
 
@@ -33,6 +35,7 @@ class LATSNode:
         node = LATSNode(id=d['id'], state=d.get('state', {}), parent=parent)
         node.visits = d.get('visits', 0)
         node.value = d.get('value', 0.0)
+        node.pruned = d.get('pruned', False)
         for c in d.get('children', []):
             child = LATSNode.from_dict(c, parent=node)
             node.children.append(child)
@@ -58,9 +61,12 @@ class LATS:
     def select(self) -> LATSNode:
         node = self.root
         while node.children:
-            scores = [self.uct_score(node, c) for c in node.children]
+            unpruned = [c for c in node.children if not c.pruned]
+            if not unpruned:
+                break
+            scores = [self.uct_score(node, c) for c in unpruned]
             max_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
-            node = node.children[max_idx]
+            node = unpruned[max_idx]
         return node
 
     def expand(self, parent: LATSNode, child_state: Dict[str, Any], child_id: Optional[str] = None) -> LATSNode:
@@ -90,6 +96,10 @@ class LATS:
             cur.visits += 1
             cur.value += reward
             cur.last_updated = time.time()
+            
+            if cur.visits >= 3 and (cur.value / cur.visits) < 0.3:
+                cur.pruned = True
+            
             cur = cur.parent
 
     def best_child(self, node: Optional['LATSNode'] = None) -> Optional['LATSNode']:
@@ -99,6 +109,15 @@ class LATS:
             return None
         best = max(node.children, key=lambda c: (c.value / max(1, c.visits)))
         return best
+    
+    def get_avg_reward(self) -> float:
+        if not self.nodes:
+            return 0.0
+        total_visits = sum(n.visits for n in self.nodes.values())
+        if total_visits == 0:
+            return 0.0
+        total_value = sum(n.value for n in self.nodes.values())
+        return total_value / total_visits
 
     def run_simulations(self, num_simulations: int, max_depth: int = 10, parallel: bool = False, max_workers: int = 4):
         if parallel and num_simulations >= 4:

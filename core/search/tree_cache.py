@@ -92,23 +92,21 @@ class TreeCache:
         content = f"{query}_{worker_specialty}_{time.time()}"
         return hashlib.sha256(content.encode()).hexdigest()[:16]
     
-    def store(self, query: str, tree: LATS, worker_specialty: str, 
-              success: bool, confidence: float) -> str:
-        tree_id = self._generate_tree_id(query, worker_specialty)
+    def store(self, query_embedding: np.ndarray, cached_data: Dict[str, Any]) -> str:
+        tree_id = hashlib.sha256(str(time.time()).encode()).hexdigest()[:16]
         tree_path = str(self.trees_dir / f"{tree_id}.json")
         
-        tree.save(tree_path)
-        
-        query_embedding = self._compute_embedding(query)
+        with open(tree_path, 'w') as f:
+            json.dump(cached_data, f, indent=2, default=str)
         
         cached_tree = CachedTree(
-            query=query,
+            query=cached_data.get("result", {}).get("query", ""),
             query_embedding=query_embedding,
             tree_id=tree_id,
-            worker_specialty=worker_specialty,
+            worker_specialty=cached_data.get("worker", ""),
             created_at=time.time(),
-            success=success,
-            confidence=confidence,
+            success=cached_data.get("quality") == "high",
+            confidence=cached_data.get("confidence", 0.0),
             tree_path=tree_path
         )
         
@@ -117,34 +115,27 @@ class TreeCache:
         
         return tree_id
     
-    def retrieve(self, query: str, worker_specialty: Optional[str] = None,
-                 require_success: bool = True) -> Optional[Tuple[LATS, CachedTree, float]]:
+    def get(self, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
         if not self.cached_trees:
             return None
-        
-        threshold = WORKER_THRESHOLDS.get(worker_specialty, 0.85) if worker_specialty else self.similarity_threshold
-        query_embedding = self._compute_embedding(query)
         
         best_match = None
         best_similarity = 0.0
         
         for cached_tree in self.cached_trees:
-            if worker_specialty and cached_tree.worker_specialty != worker_specialty:
-                continue
-            if require_success and not cached_tree.success:
-                continue
-            
             similarity = self._cosine_similarity(query_embedding, cached_tree.query_embedding)
             
-            if similarity > best_similarity and similarity >= threshold:
+            if similarity > best_similarity and similarity >= similarity_threshold:
                 best_similarity = similarity
                 best_match = cached_tree
         
-        if best_match is None:
+        if best_match is None or not best_match.success:
             return None
         
-        tree = LATS.load(best_match.tree_path)
-        return tree, best_match, best_similarity
+        with open(best_match.tree_path, 'r') as f:
+            cached_data = json.load(f)
+        
+        return cached_data
     
     def get_stats(self) -> Dict[str, Any]:
         if not self.cached_trees:

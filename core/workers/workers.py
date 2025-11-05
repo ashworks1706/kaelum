@@ -252,6 +252,8 @@ class MathWorker(WorkerAgent):
         
         execution_time = time.time() - start_time
         
+        avg_reward = tree.get_avg_reward()
+        
         if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value, 
                                  True, confidence)
@@ -267,7 +269,8 @@ class MathWorker(WorkerAgent):
                 "num_simulations": num_simulations,
                 "tree_depth": best_node.state.get("depth", 0) if best_node else 0,
                 "tree_visits": tree.root.visits,
-                "cache_hit": False
+                "cache_hit": False,
+                "avg_reward": avg_reward
             }
         )
 
@@ -378,6 +381,8 @@ class LogicWorker(WorkerAgent):
         verification_passed = confidence > 0.7
         execution_time = time.time() - start_time
         
+        avg_reward = tree.get_avg_reward()
+        
         if use_cache and verification_passed:
             self.tree_cache.store(query, tree, self.get_specialty().value,
                                  verification_passed, confidence)
@@ -392,16 +397,17 @@ class LogicWorker(WorkerAgent):
             metadata={
                 "num_simulations": num_simulations,
                 "tree_depth": best_node.state.get("depth", 0),
-                "cache_hit": False
+                "cache_hit": False,
+                "avg_reward": avg_reward
             }
         )
 
 
 def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None, **kwargs) -> WorkerAgent:
-    from core.code_worker import CodeWorker
-    from core.factual_worker import FactualWorker
-    from core.creative_worker import CreativeWorker
-    from core.analysis_worker import AnalysisWorker
+    from core.workers.code_worker import CodeWorker
+    from core.workers.factual_worker import FactualWorker
+    from core.workers.creative_worker import CreativeWorker
+    from core.workers.analysis_worker import AnalysisWorker
     
     workers = {
         WorkerSpecialty.MATH: MathWorker,
