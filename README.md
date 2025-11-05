@@ -17,14 +17,19 @@ Core concepts:
 - [Features](#features)
 - [Quick Start](#quick-start) ⚡
 - [Supported LLMs](#supported-llms) 🦙
-  - [Ollama (Recommended)](#-ollama-recommended-for-local)
-  - [vLLM (Production)](#-vllm-recommended-for-production)
-  - [Cloud APIs](#️-cloud-apis)
-  - [Model Recommendations](#-model-recommendations-by-use-case)
+  - [Recommended Models](#-recommended-models)
+  - [vLLM Setup (Recommended)](#-vllm-setup-recommended)
+  - [Cloud APIs](#️-cloud-apis-alternative)
+  - [Other Deployment Options](#-other-deployment-options)
+  - [Model Recommendations by Use Case](#-model-recommendations-by-use-case)
 - [Detailed Setup Guide](#detailed-setup-guide) 📖
+  - [vLLM + Kaelum](#step-by-step-vllm--kaelum)
+  - [Multi-GPU Setup](#multi-gpu-setup-with-vllm)
+  - [Quick Testing with Ollama](#alternative-quick-testing-with-ollama)
 - [Configuration Options](#configuration-options)
 - [Complete Workflow](#complete-workflow-from-query-to-answer)
 - [Python API Examples](#example-python-api)
+- [Troubleshooting](#troubleshooting-) 🔧
 - [Research &amp; References](#research--references)
 
 ---
@@ -60,18 +65,35 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 3. Choose Your LLM Backend
-
-Kaelum works with any OpenAI-compatible API. See [Supported LLMs](#supported-llms) below for setup instructions.
-
-### 4. Run with Command-Line Arguments (Recommended)
+### 3. Start LLM Backend (vLLM Recommended)
 
 ```bash
-# Basic usage with Ollama
-python run.py --model qwen2.5:3b --base-url http://localhost:11434/v1
+# Install vLLM
+pip install vllm
 
-# With custom settings
-python run.py --model llama3:8b --temperature 0.8 --max-tree-depth 7
+# Start server with a small fast model (recommended for testing)
+python -m vllm.entrypoints.openai.api_server \
+    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --port 8000
+
+# Or use a balanced model for production
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --port 8000
+```
+
+### 4. Run Kaelum with Your Model
+
+```bash
+# Basic usage
+python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
+
+# With custom reasoning parameters
+python run.py --model microsoft/phi-4 \
+    --base-url http://localhost:8000/v1 \
+    --temperature 0.7 \
+    --max-tree-depth 8 \
+    --num-simulations 5
 
 # See all options
 python run.py --help
@@ -87,64 +109,89 @@ docker-compose up -d
 
 ## Supported LLMs
 
-Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are tested configurations:
+Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are tested configurations optimized for reasoning tasks.
 
-### 🦙 Ollama (Recommended for Local)
+### 🚀 Recommended Models
 
-**Best for:** Local development, privacy, easy setup
+| Model Family          | Size  | VRAM  | Speed  | Reasoning | Math/Code | Use Case                    | HuggingFace Model ID                              |
+| --------------------- | ----- | ----- | ------ | --------- | --------- | --------------------------- | ------------------------------------------------- |
+| **SmolLM2**     | 1.7B  | 3GB   | ⚡⚡⚡ | ⭐⭐⭐⭐  | ⭐⭐⭐    | Edge/Mobile, Fast inference | `HuggingFaceTB/SmolLM2-1.7B-Instruct`           |
+| **Qwen 2.5**    | 3B    | 4GB   | ⚡⚡⚡ | ⭐⭐⭐⭐  | ⭐⭐⭐⭐  | Development, Testing        | `Qwen/Qwen2.5-3B-Instruct`                      |
+| **Phi-3-mini**  | 3.8B  | 5GB   | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Strong reasoning, Low VRAM  | `microsoft/Phi-3-mini-4k-instruct`              |
+| **Llama 3.2**   | 3B    | 4GB   | ⚡⚡⚡ | ⭐⭐⭐    | ⭐⭐⭐    | General purpose             | `meta-llama/Llama-3.2-3B-Instruct`              |
+| **Qwen 2.5**    | 7B    | 8GB   | ⚡⚡   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Best balance                | `Qwen/Qwen2.5-7B-Instruct`                      |
+| **Llama 3.1**   | 8B    | 8GB   | ⚡⚡   | ⭐⭐⭐⭐  | ⭐⭐⭐⭐  | General reasoning           | `meta-llama/Llama-3.1-8B-Instruct`              |
+| **DeepSeek-R1** | 7B    | 8GB   | ⚡⚡   | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Math/Logic specialist       | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`      |
+| **Phi-4**       | 14B   | 16GB  | ⚡     | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Complex reasoning, SOTA     | `microsoft/phi-4`                               |
+| **Qwen 2.5**    | 14B   | 16GB  | ⚡     | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Production quality          | `Qwen/Qwen2.5-14B-Instruct`                     |
+| **Mixtral**     | 8x7B  | 24GB  | ⚡     | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐  | High quality, MoE           | `mistralai/Mixtral-8x7B-Instruct-v0.1`          |
 
-| Model                 | Size | VRAM | Speed  | Reasoning Quality | Command                       |
-| --------------------- | ---- | ---- | ------ | ----------------- | ----------------------------- |
-| **Qwen 2.5**    | 3B   | 4GB  | ⚡⚡⚡ | ⭐⭐⭐⭐          | `ollama run qwen2.5:3b`     |
-| **Llama 3.2**   | 3B   | 4GB  | ⚡⚡⚡ | ⭐⭐⭐            | `ollama run llama3.2:3b`    |
-| **Qwen 2.5**    | 7B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐⭐        | `ollama run qwen2.5:7b`     |
-| **Llama 3.1**   | 8B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐          | `ollama run llama3.1:8b`    |
-| **DeepSeek-R1** | 7B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐⭐        | `ollama run deepseek-r1:7b` |
-| **Qwen 2.5**    | 14B  | 16GB | ⚡     | ⭐⭐⭐⭐⭐        | `ollama run qwen2.5:14b`    |
-| **Mixtral**     | 8x7B | 24GB | ⚡     | ⭐⭐⭐⭐⭐        | `ollama run mixtral:8x7b`   |
+**Key Highlights:**
+- **SmolLM2-1.7B**: Smallest efficient model, excellent for edge deployment, on-device inference, and resource-constrained environments. Trained on 11T tokens with strong instruction following.
+- **Phi-3-mini (3.8B)**: Microsoft's reasoning-optimized small model with exceptional math/logic performance (GSM8K: 85.7%, HumanEval: 57.3%). Best small model for reasoning.
+- **Phi-4 (14B)**: Latest Microsoft model with SOTA small-model performance (MMLU: 84.8%, MATH: 80.4%, HumanEval: 82.6%). Best for complex reasoning tasks.
+- **Qwen 2.5**: Strong all-around performance across sizes, excellent for code generation
+- **DeepSeek-R1**: Specialized for mathematical and logical reasoning with reinforcement learning
 
-**Setup:**
+### 🚀 vLLM Setup (Recommended)
 
-```bash
-# 1. Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+**Best for:** Production deployments, high throughput, GPU optimization, batch processing
 
-# 2. Pull a model
-ollama pull qwen2.5:3b
-
-# 3. Start Ollama (runs on port 11434 by default)
-ollama serve
-
-# 4. Run Kaelum
-python run.py --model qwen2.5:3b --base-url http://localhost:11434/v1
-```
-
-### 🚀 vLLM (Recommended for Production)
-
-**Best for:** High throughput, batch processing, GPU optimization
-
-**Setup:**
+**Basic Setup:**
 
 ```bash
 # 1. Install vLLM
 pip install vllm
 
-# 2. Start vLLM server
+# 2. Start vLLM server (choose a model)
+# Small & Fast (recommended for testing)
+python -m vllm.entrypoints.openai.api_server \
+    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --port 8000
+
+# Best Reasoning (recommended for production)
 python -m vllm.entrypoints.openai.api_server \
     --model Qwen/Qwen2.5-7B-Instruct \
     --port 8000
+
+# High Quality (if you have VRAM)
+python -m vllm.entrypoints.openai.api_server \
+    --model microsoft/phi-4 \
+    --port 8000 \
+    --gpu-memory-utilization 0.9
 
 # 3. Run Kaelum
 python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
 ```
 
-**Supported Models:**
+**Advanced vLLM Configuration:**
 
+```bash
+# Multi-GPU setup
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-14B-Instruct \
+    --tensor-parallel-size 2 \
+    --port 8000
+
+# Quantization for lower VRAM
+python -m vllm.entrypoints.openai.api_server \
+    --model microsoft/phi-4 \
+    --quantization awq \
+    --port 8000
+
+# CPU offloading for large models
+python -m vllm.entrypoints.openai.api_server \
+    --model mistralai/Mixtral-8x7B-Instruct-v0.1 \
+    --cpu-offload-gb 32 \
+    --port 8000
+```
+
+**Supported Architectures:**
 - Any Hugging Face model with chat template
-- Qwen, Llama, Mistral, Yi, DeepSeek families
-- Custom fine-tuned models
+- Qwen, Llama, Mistral, Yi, DeepSeek, Phi families
+- Custom fine-tuned models with transformer architecture
 
-### ☁️ Cloud APIs
+### ☁️ Cloud APIs (Alternative)
 
 | Provider              | Setup                                | Base URL                                  | Example                                                     |
 | --------------------- | ------------------------------------ | ----------------------------------------- | ----------------------------------------------------------- |
@@ -161,44 +208,58 @@ export OPENAI_API_KEY="sk-..."
 python run.py --model gpt-4 --base-url https://api.openai.com/v1
 ```
 
-### 🏠 Self-Hosted Options
+### 🏠 Other Deployment Options
 
-| Option                          | Best For                        | Setup Difficulty |
-| ------------------------------- | ------------------------------- | ---------------- |
-| **Ollama**                | Beginners, Mac/Linux            | ⭐ Easy          |
-| **vLLM**                  | Production, GPU clusters        | ⭐⭐ Moderate    |
-| **LM Studio**             | GUI-based local deployment      | ⭐ Easy          |
-| **llama.cpp**             | CPU inference, low VRAM         | ⭐⭐ Moderate    |
-| **text-generation-webui** | Full-featured UI + API          | ⭐⭐ Moderate    |
-| **LocalAI**               | Docker-based, OpenAI compatible | ⭐⭐ Moderate    |
+| Option                          | Best For                        | Setup Difficulty | OpenAI Compatible |
+| ------------------------------- | ------------------------------- | ---------------- | ----------------- |
+| **vLLM** (Recommended)    | Production, GPU optimization    | ⭐⭐ Moderate    | ✅ Yes            |
+| **Ollama**                | Quick local testing, beginners  | ⭐ Easy          | ✅ Yes            |
+| **LM Studio**             | GUI-based, no-code deployment   | ⭐ Easy          | ✅ Yes            |
+| **llama.cpp**             | CPU inference, low VRAM         | ⭐⭐ Moderate    | ✅ Yes (w/server) |
+| **text-generation-webui** | Full UI + API                   | ⭐⭐ Moderate    | ✅ Yes            |
+| **LocalAI**               | Docker-based multi-backend      | ⭐⭐ Moderate    | ✅ Yes            |
 
 ### 📊 Model Recommendations by Use Case
 
-| Use Case                      | Recommended Model           | Why                            |
-| ----------------------------- | --------------------------- | ------------------------------ |
-| **Development/Testing** | Qwen 2.5 3B                 | Fast, low VRAM, good reasoning |
-| **Math/Logic**          | DeepSeek-R1 7B              | Trained for reasoning tasks    |
-| **Code Generation**     | Qwen 2.5 14B / Llama 3.1 8B | Strong code capabilities       |
-| **General Reasoning**   | Qwen 2.5 7B                 | Best balance of speed/quality  |
-| **Production**          | Qwen 2.5 14B / Mixtral 8x7B | High quality, reliable         |
-| **Research**            | Custom fine-tuned           | Domain-specific optimization   |
+| Use Case                      | Recommended Model           | Why                                                |
+| ----------------------------- | --------------------------- | -------------------------------------------------- |
+| **Edge/Mobile**         | SmolLM2 1.7B                | Smallest efficient model, runs on-device           |
+| **Development/Testing** | Qwen 2.5 3B / Phi-3-mini    | Fast inference, low VRAM, solid reasoning          |
+| **Math/Logic**          | Phi-4 / DeepSeek-R1 7B      | Specialized for reasoning (Phi-4: 80.4% on MATH)   |
+| **Code Generation**     | Qwen 2.5 14B / Phi-4        | Strong code capabilities, function calling support |
+| **General Reasoning**   | Qwen 2.5 7B                 | Best balance of speed/quality/VRAM                 |
+| **Production**          | Qwen 2.5 14B / Phi-4        | High quality, reliable, SOTA performance           |
+| **Research**            | Custom fine-tuned           | Domain-specific optimization with PEFT/LoRA        |
 
 ---
 
 ## Detailed Setup Guide
 
-### Step-by-Step: Ollama + Kaelum
+### Step-by-Step: vLLM + Kaelum
 
-This is the **easiest** way to get started:
+This is the **recommended** way for production deployments:
 
 ```bash
-# Step 1: Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# Step 1: Install vLLM
+pip install vllm
 
-# Step 2: Pull a model (choose one)
-ollama pull qwen2.5:3b        # Fastest (4GB VRAM)
-ollama pull qwen2.5:7b        # Better quality (8GB VRAM)
-ollama pull deepseek-r1:7b    # Best reasoning (8GB VRAM)
+# Step 2: Start vLLM with your chosen model
+# For testing/development (low VRAM)
+python -m vllm.entrypoints.openai.api_server \
+    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --port 8000
+
+# For production (balanced)
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --port 8000 \
+    --gpu-memory-utilization 0.9
+
+# For high-quality reasoning
+python -m vllm.entrypoints.openai.api_server \
+    --model microsoft/phi-4 \
+    --port 8000 \
+    --gpu-memory-utilization 0.9
 
 # Step 3: Clone Kaelum
 git clone https://github.com/ashworks1706/KaelumAI.git
@@ -211,16 +272,17 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Step 5: Install dependencies
 pip install -r requirements.txt
 
-# Step 6: Run with default settings
-python run.py --model qwen2.5:3b
+# Step 6: Run with your vLLM model
+python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
 
-# Step 7: (Optional) Customize settings
+# Step 7: (Optional) Customize reasoning settings
 python run.py \
-    --model qwen2.5:7b \
+    --model microsoft/phi-4 \
+    --base-url http://localhost:8000/v1 \
     --embedding-model all-mpnet-base-v2 \
-    --temperature 0.8 \
-    --max-tree-depth 7 \
-    --num-simulations 15 \
+    --temperature 0.7 \
+    --max-tree-depth 8 \
+    --num-simulations 20 \
     --enable-factual-verification \
     --debug-verification
 
@@ -228,41 +290,51 @@ python run.py \
 python run.py --help
 ```
 
-### Step-by-Step: vLLM + Kaelum (GPU)
+### Multi-GPU Setup with vLLM
 
-For **production** or **GPU** setups:
+For large models or high throughput:
 
 ```bash
-# Step 1: Install vLLM (requires CUDA)
-pip install vllm
-
-# Step 2: Start vLLM server with a model
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --dtype auto \
-    --port 8000 \
-    --gpu-memory-utilization 0.9
-
-# Step 3: In another terminal, clone and setup Kaelum
-git clone https://github.com/ashworks1706/KaelumAI.git
-cd KaelumAI
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Step 4: Run Kaelum pointing to vLLM
-python run.py \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --base-url http://localhost:8000/v1
-
-# Step 5: For multiple GPUs
+# Tensor parallelism (split model across GPUs)
 python -m vllm.entrypoints.openai.api_server \
     --model Qwen/Qwen2.5-14B-Instruct \
     --tensor-parallel-size 2 \
     --port 8000
+
+# Pipeline parallelism (for extremely large models)
+python -m vllm.entrypoints.openai.api_server \
+    --model mistralai/Mixtral-8x7B-Instruct-v0.1 \
+    --pipeline-parallel-size 2 \
+    --tensor-parallel-size 2 \
+    --port 8000
+
+# Quantization for VRAM optimization
+python -m vllm.entrypoints.openai.api_server \
+    --model microsoft/phi-4 \
+    --quantization awq \
+    --dtype half \
+    --port 8000
 ```
 
-### Configuration Options
+### Alternative: Quick Testing with Ollama
+
+For **quick local testing** without GPU setup complexity:
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull and run a model
+ollama pull qwen2.5:3b
+ollama serve
+
+# Run Kaelum (in another terminal)
+python run.py --model qwen2.5:3b --base-url http://localhost:11434/v1
+```
+
+---
+
+## Configuration Options
 
 All configuration is now via **command-line arguments** (no `.env` file needed):
 
@@ -272,32 +344,38 @@ python run.py --help
 
 **Key Options:**
 
-| Category               | Argument                          | Description              | Default                       |
-| ---------------------- | --------------------------------- | ------------------------ | ----------------------------- |
-| **LLM**          | `--model`                       | Model name               | `qwen2.5:3b`                |
-|                        | `--base-url`                    | API endpoint             | `http://localhost:11434/v1` |
-|                        | `--temperature`                 | Creativity (0.0-2.0)     | `0.7`                       |
-|                        | `--max-tokens`                  | Max response length      | `2048`                      |
-| **Embeddings**   | `--embedding-model`             | Sentence transformer     | `all-MiniLM-L6-v2`          |
-| **Search**       | `--max-tree-depth`              | LATS depth               | Router decides (3-10)         |
-|                        | `--num-simulations`             | LATS simulations         | Router decides (5-25)         |
-|                        | `--parallel`                    | Enable parallel search   | Disabled                      |
-| **Routing**      | `--no-routing`                  | Disable neural router    | Enabled                       |
-|                        | `--worker`                      | Force specific worker    | Auto                          |
-| **Cache**        | `--no-cache`                    | Disable caching          | Enabled                       |
-| **Verification** | `--no-symbolic-verification`    | Disable SymPy            | Enabled                       |
-|                        | `--enable-factual-verification` | Enable fact checks       | Disabled                      |
-| **Reflection**   | `--max-reflection-iterations`   | Self-correction attempts | `2`                         |
-|                        | `--no-active-learning`          | Disable learning         | Enabled                       |
+| Category               | Argument                          | Description              | Default                   |
+| ---------------------- | --------------------------------- | ------------------------ | ------------------------- |
+| **LLM**          | `--model`                       | Model name               | (required)                |
+|                        | `--base-url`                    | API endpoint             | `http://localhost:8000/v1` |
+|                        | `--temperature`                 | Creativity (0.0-2.0)     | `0.7`                   |
+|                        | `--max-tokens`                  | Max response length      | `2048`                  |
+| **Embeddings**   | `--embedding-model`             | Sentence transformer     | `all-MiniLM-L6-v2`      |
+| **Search**       | `--max-tree-depth`              | LATS depth               | Router decides (3-10)     |
+|                        | `--num-simulations`             | LATS simulations         | Router decides (5-25)     |
+|                        | `--parallel`                    | Enable parallel search   | Disabled                  |
+| **Routing**      | `--no-routing`                  | Disable neural router    | Enabled                   |
+|                        | `--worker`                      | Force specific worker    | Auto                      |
+| **Cache**        | `--no-cache`                    | Disable caching          | Enabled                   |
+| **Verification** | `--no-symbolic-verification`    | Disable SymPy            | Enabled                   |
+|                        | `--enable-factual-verification` | Enable fact checks       | Disabled                  |
+| **Reflection**   | `--max-reflection-iterations`   | Self-correction attempts | `2`                     |
+|                        | `--no-active-learning`          | Disable learning         | Enabled                   |
 
 **Examples:**
 
 ```bash
 # High accuracy mode (slower)
-python run.py --max-tree-depth 10 --num-simulations 25
+python run.py --model microsoft/phi-4 \
+    --base-url http://localhost:8000/v1 \
+    --max-tree-depth 10 \
+    --num-simulations 25
 
 # Fast mode (less accurate)
-python run.py --max-tree-depth 3 --num-simulations 5
+python run.py --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --base-url http://localhost:8000/v1 \
+    --max-tree-depth 3 \
+    --num-simulations 5
 
 # Math-only with forced worker
 python run.py --no-routing --worker math
@@ -719,52 +797,104 @@ python -m pytest --cov=core --cov=runtime
 
 ### Common Issues
 
+#### 1. **vLLM: Out of Memory (OOM) / CUDA out of memory**
 
-#### 1. **Out of Memory (OOM) / CUDA out of memory**
-
-**Problem:** Model too large for your GPU/RAM.
+**Problem:** Model too large for your GPU VRAM.
 
 **Solutions:**
 
 ```bash
 # Use a smaller model
-python run.py --model qwen2.5:3b  # Instead of 7b/14b
+python -m vllm.entrypoints.openai.api_server \
+    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --port 8000
 
-# For vLLM - adjust memory utilization
+# Reduce GPU memory utilization
 python -m vllm.entrypoints.openai.api_server \
     --model Qwen/Qwen2.5-7B-Instruct \
-    --gpu-memory-utilization 0.7  # Reduce from 0.9
+    --gpu-memory-utilization 0.7 \
+    --port 8000
 
-# Use CPU inference with Ollama (slower but works)
+# Enable quantization (AWQ, GPTQ)
+python -m vllm.entrypoints.openai.api_server \
+    --model TheBloke/Mistral-7B-Instruct-v0.2-AWQ \
+    --quantization awq \
+    --port 8000
+
+# Use CPU offloading for large models
+python -m vllm.entrypoints.openai.api_server \
+    --model microsoft/phi-4 \
+    --cpu-offload-gb 16 \
+    --port 8000
+
+# Alternative: Use Ollama for easier memory management
 ollama run qwen2.5:3b
-
-# Enable quantization (if supported)
-ollama run qwen2.5:7b-q4  # 4-bit quantized
 ```
 
-#### 2. **Slow inference / Timeout errors**
+#### 2. **vLLM: Slow inference / Timeout errors**
 
-**Problem:** LLM is taking too long to respond.
+**Problem:** Model inference is slow or timing out.
 
 **Solutions:**
 
 ```bash
-# Reduce LATS search parameters
-python run.py --max-tree-depth 3 --num-simulations 5
+# Use smaller/faster model
+python -m vllm.entrypoints.openai.api_server \
+    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
+    --port 8000
 
-# Use smaller, faster model
-python run.py --model qwen2.5:3b
-
-# Disable verification (faster but less accurate)
-python run.py --no-symbolic-verification
-
-# For vLLM - enable tensor parallelism (multi-GPU)
+# Enable tensor parallelism (multi-GPU)
 python -m vllm.entrypoints.openai.api_server \
     --model Qwen/Qwen2.5-14B-Instruct \
-    --tensor-parallel-size 2
+    --tensor-parallel-size 2 \
+    --port 8000
+
+# Reduce Kaelum search parameters
+python run.py --model Qwen/Qwen2.5-7B-Instruct \
+    --base-url http://localhost:8000/v1 \
+    --max-tree-depth 3 \
+    --num-simulations 5
+
+# Disable verification (faster but less accurate)
+python run.py --model Qwen/Qwen2.5-7B-Instruct \
+    --base-url http://localhost:8000/v1 \
+    --no-symbolic-verification
+
+# Increase vLLM batch size for throughput
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --max-num-seqs 256 \
+    --port 8000
 ```
 
-#### 3. **SymPy verification always fails**
+#### 3. **vLLM: Model not found / Download errors**
+
+**Problem:** vLLM can't find or download the model from Hugging Face.
+
+**Solutions:**
+
+```bash
+# Verify model name is correct (case-sensitive)
+# ✅ Correct: Qwen/Qwen2.5-7B-Instruct
+# ❌ Wrong: qwen/qwen2.5-7b-instruct
+
+# Pre-download model manually
+pip install huggingface-hub
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-7B-Instruct')"
+
+# Use local model path
+python -m vllm.entrypoints.openai.api_server \
+    --model /path/to/local/model \
+    --port 8000
+
+# Set HF token for gated models (Llama, etc.)
+export HF_TOKEN="hf_..."
+python -m vllm.entrypoints.openai.api_server \
+    --model meta-llama/Llama-3.1-8B-Instruct \
+    --port 8000
+```
+
+#### 4. **SymPy verification always fails**
 
 **Problem:** Math expressions not in SymPy-compatible format.
 
@@ -795,7 +925,7 @@ ls .kaelum/cache
 # Default is 0.85, can adjust in TreeCache class
 ```
 
-#### 5. **Router always selects wrong worker**
+#### 8. **Router always selects wrong worker**
 
 **Problem:** Router needs training data.
 
