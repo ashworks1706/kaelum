@@ -206,9 +206,32 @@ pip install -r requirements.txt
 
 ### **Step 3: Configure (Optional)**
 
-Copy `.env.example` to `.env` and adjust if needed:
+Copy `.env.example` to `.env` and customize:
 ```bash
 cp .env.example .env
+```
+
+**Available Configuration:**
+```bash
+# LLM Backend
+LLM_BASE_URL=http://localhost:11434/v1  # Ollama default
+LLM_MODEL=qwen2.5:3b
+LLM_API_KEY=                             # Optional for OpenAI/commercial
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=2048
+
+# Reasoning System
+MAX_REFLECTION_ITERATIONS=2              # Self-correction attempts
+USE_SYMBOLIC_VERIFICATION=true           # SymPy math verification
+DEBUG_VERIFICATION=false                 # Debug mode
+
+# Worker System Prompts (optional - defaults provided)
+# WORKER_PROMPT_MATH="Your custom math expert prompt..."
+# WORKER_PROMPT_LOGIC="Your custom logic expert prompt..."
+# WORKER_PROMPT_CODE="Your custom code expert prompt..."
+# WORKER_PROMPT_FACTUAL="Your custom factual expert prompt..."
+# WORKER_PROMPT_CREATIVE="Your custom creative expert prompt..."
+# WORKER_PROMPT_ANALYSIS="Your custom analysis expert prompt..."
 ```
 
 Default configuration works with Ollama out-of-the-box.

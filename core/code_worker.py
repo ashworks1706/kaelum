@@ -23,19 +23,6 @@ class CodeWorker(WorkerAgent):
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CODE
     
-    def get_system_prompt(self) -> str:
-        return """You are a software engineering and programming expert specializing in:
-- Code generation (Python, JavaScript, Java, C++, Go, Rust, etc.)
-- Algorithm design and optimization
-- Data structures implementation
-- Code debugging and error fixing
-- Code refactoring and best practices
-- API design and integration
-- Testing and quality assurance
-
-Provide clear, well-commented code with explanations.
-Follow language-specific best practices and conventions."""
-    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     

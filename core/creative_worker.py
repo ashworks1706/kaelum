@@ -18,19 +18,6 @@ class CreativeWorker(WorkerAgent):
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CREATIVE
     
-    def get_system_prompt(self) -> str:
-        return """You are a creative writing and ideation expert specializing in:
-        - Story and narrative creation
-        - Poetry and prose composition
-        - Creative brainstorming
-        - Content generation (articles, blogs, essays)
-        - Character and dialogue development
-        - Innovative problem-solving
-        - Conceptual design and ideation
-
-        Provide imaginative, original, and engaging creative content.
-        Use vivid language and explore multiple perspectives."""
-    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     

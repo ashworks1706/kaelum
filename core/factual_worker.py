@@ -16,19 +16,6 @@ class FactualWorker(WorkerAgent):
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
     
-    def get_system_prompt(self) -> str:
-        return """You are a factual knowledge and information expert specializing in:
-- Historical facts and events
-- Geographic information
-- Scientific knowledge
-- Definitions and explanations
-- Statistical data and figures
-- Biographical information
-- General knowledge and trivia
-
-Provide accurate, well-sourced factual information.
-Include relevant context and details. Cite sources when appropriate."""
-    
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     
