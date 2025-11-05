@@ -46,7 +46,10 @@ class KaelumOrchestrator:
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
-        self.tree_cache = TreeCache(embedding_model=config.embedding_model)
+        self.tree_cache = TreeCache(
+            embedding_model=config.embedding_model,
+            llm_client=self.llm
+        )
         
         self.router = Router(learning_enabled=True, embedding_model=config.embedding_model) if enable_routing else None
         if self.router:
@@ -75,6 +78,7 @@ class KaelumOrchestrator:
         logger.info("Kaelum Orchestrator Initialized")
         logger.info(f"  Embedding Model: {config.embedding_model}")
         logger.info(f"  Router: {'Enabled' if enable_routing else 'Disabled'}")
+        logger.info(f"  Cache Validation: LLM-powered semantic validation")
         logger.info(f"  Verification: Symbolic={config.use_symbolic_verification}, Factual={config.use_factual_verification}")
         logger.info(f"  Reflection: Max {config.max_reflection_iterations} iterations")
         logger.info("=" * 70)
@@ -120,7 +124,7 @@ class KaelumOrchestrator:
         encoder = SentenceTransformer(self.config.embedding_model)
         query_embedding = encoder.encode(query)
         
-        cached_tree = self.tree_cache.get(query_embedding, similarity_threshold=0.85)
+        cached_tree = self.tree_cache.get(query, query_embedding, similarity_threshold=0.85)
         if cached_tree and cached_tree.get("quality") == "high":
             logger.info("CACHE: ✓ HIT (high quality) - returning cached result")
             cache_result = cached_tree["result"]

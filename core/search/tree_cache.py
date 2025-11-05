@@ -8,6 +8,7 @@ import hashlib
 
 from sentence_transformers import SentenceTransformer
 from .lats import LATS, LATSNode
+from core.cache_validator import CacheValidator
 
 
 WORKER_THRESHOLDS = {
@@ -46,11 +47,14 @@ class CachedTree:
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'CachedTree':
         data['query_embedding'] = np.array(data['query_embedding'])
+        # Remove old fingerprint data if present
+        data.pop('query_fingerprint', None)
         return CachedTree(**data)
 
 
 class TreeCache:
-    def __init__(self, cache_dir: str = ".kaelum/tree_cache", similarity_threshold: float = 0.85, embedding_model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, cache_dir: str = ".kaelum/tree_cache", similarity_threshold: float = 0.85, 
+                 embedding_model: str = "all-MiniLM-L6-v2", llm_client=None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -61,15 +65,26 @@ class TreeCache:
         self.similarity_threshold = similarity_threshold
         
         self.encoder = SentenceTransformer(embedding_model)
+        self.validator = CacheValidator(llm_client=llm_client)
         self.cached_trees: List[CachedTree] = self._load_metadata()
         
     def _load_metadata(self) -> List[CachedTree]:
         if not self.metadata_file.exists():
             return []
         
-        with open(self.metadata_file, 'r') as f:
-            data = json.load(f)
-        return [CachedTree.from_dict(item) for item in data]
+        try:
+            with open(self.metadata_file, 'r') as f:
+                data = json.load(f)
+            
+            cached_trees = []
+            for item in data:
+                # Remove old fingerprint data if present
+                item.pop('query_fingerprint', None)
+                cached_trees.append(CachedTree.from_dict(item))
+            
+            return cached_trees
+        except Exception as e:
+            return []
     
     def _save_metadata(self):
         with open(self.metadata_file, 'w') as f:
@@ -96,11 +111,13 @@ class TreeCache:
         tree_id = hashlib.sha256(str(time.time()).encode()).hexdigest()[:16]
         tree_path = str(self.trees_dir / f"{tree_id}.json")
         
+        query = cached_data.get("result", {}).get("query", "")
+        
         with open(tree_path, 'w') as f:
             json.dump(cached_data, f, indent=2, default=str)
         
         cached_tree = CachedTree(
-            query=cached_data.get("result", {}).get("query", ""),
+            query=query,
             query_embedding=query_embedding,
             tree_id=tree_id,
             worker_specialty=cached_data.get("worker", ""),
@@ -115,7 +132,7 @@ class TreeCache:
         
         return tree_id
     
-    def get(self, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
+    def get(self, query: str, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
         if not self.cached_trees:
             return None
         
@@ -123,17 +140,34 @@ class TreeCache:
         best_similarity = 0.0
         
         for cached_tree in self.cached_trees:
+            if not cached_tree.success:
+                continue
+            
             similarity = self._cosine_similarity(query_embedding, cached_tree.query_embedding)
             
-            if similarity > best_similarity and similarity >= similarity_threshold:
+            if similarity < similarity_threshold:
+                continue
+            
+            if similarity > best_similarity:
                 best_similarity = similarity
                 best_match = cached_tree
         
-        if best_match is None or not best_match.success:
+        if best_match is None:
             return None
         
         with open(best_match.tree_path, 'r') as f:
             cached_data = json.load(f)
+        
+        # LLM validation layer
+        cached_answer = cached_data.get('result', {}).get('answer', '')
+        validation = self.validator.validate_cache_match(
+            query, 
+            best_match.query, 
+            cached_answer
+        )
+        
+        if not validation.get('valid', False):
+            return None
         
         return cached_data
     
@@ -143,7 +177,8 @@ class TreeCache:
                 'total_trees': 0,
                 'by_specialty': {},
                 'avg_confidence': 0.0,
-                'success_rate': 0.0
+                'success_rate': 0.0,
+                'validation_stats': {}
             }
         
         by_specialty = {}
@@ -158,11 +193,14 @@ class TreeCache:
         avg_confidence = sum(t.confidence for t in self.cached_trees) / len(self.cached_trees)
         success_rate = sum(1 for t in self.cached_trees if t.success) / len(self.cached_trees)
         
+        validation_stats = self.validator.get_validation_stats()
+        
         return {
             'total_trees': len(self.cached_trees),
             'by_specialty': by_specialty,
             'avg_confidence': avg_confidence,
-            'success_rate': success_rate
+            'success_rate': success_rate,
+            'validation_stats': validation_stats
         }
     
     def clear(self, worker_specialty: Optional[str] = None):

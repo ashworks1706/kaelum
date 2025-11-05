@@ -6,6 +6,7 @@ import os
 class LLMConfig(BaseModel):
     base_url: str = Field(default="http://localhost:8000/v1")
     model: str = Field(default="Qwen/Qwen2.5-3B-Instruct")
+    api_key: Optional[str] = Field(default=None)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1, le=128000)
 
@@ -98,7 +99,8 @@ class KaelumConfig(BaseModel):
         return cls(
             reasoning_llm=LLMConfig(
                 base_url=os.getenv('LLM_BASE_URL', 'http://localhost:11434/v1'),
-                model=os.getenv('LLM_MODEL', 'qwen2.5:3b'),
+                model=os.getenv('LLM_MODEL', 'Qwen/Qwen2.5-1.5B-Instruct'),
+                api_key=os.getenv('LLM_API_KEY', None),
                 temperature=float(os.getenv('LLM_TEMPERATURE', '0.7')),
                 max_tokens=int(os.getenv('LLM_MAX_TOKENS', '2048'))
             ),

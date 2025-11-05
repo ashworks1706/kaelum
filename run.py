@@ -13,29 +13,38 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Ask a single question
+  python run.py "What is 2+2?"
+  
+  # Run with default test queries
   python run.py
   
   # Custom LLM and embedding model
-  python run.py --model llama3:8b --embedding-model all-mpnet-base-v2
+  python run.py "Solve x^2 + 5x + 6 = 0" --model llama3:8b --embedding-model all-mpnet-base-v2
   
   # Disable routing and force specific worker
-  python run.py --no-routing --worker math
+  python run.py "Write a Python function to check if a number is prime" --no-routing --worker code
   
   # Adjust LATS search parameters for better accuracy
-  python run.py --max-tree-depth 8 --num-simulations 20
+  python run.py "What is the derivative of x^2?" --max-tree-depth 8 --num-simulations 20
   
   # Enable factual verification and debugging
-  python run.py --enable-factual-verification --debug-verification
+  python run.py "What is the capital of France?" --enable-factual-verification --debug-verification
         """
     )
+    
+    # Query argument (optional - if not provided, runs default test queries)
+    parser.add_argument("query", nargs="?", default=None,
+                       help="Question or task to solve (optional - if not provided, runs default test queries)")
     
     # LLM Configuration
     llm_group = parser.add_argument_group('LLM Configuration')
     llm_group.add_argument("--base-url", default="http://localhost:11434/v1", 
                         help="LLM API base URL (default: http://localhost:11434/v1)")
-    llm_group.add_argument("--model", default="qwen2.5:3b",
-                        help="LLM model name (default: qwen2.5:3b)")
+    llm_group.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct",
+                        help="LLM model name (default: Qwen/Qwen2.5-1.5B-Instruct)")
+    llm_group.add_argument("--api-key", default=None,
+                        help="API key for LLM server (required for vLLM, optional for Ollama)")
     llm_group.add_argument("--embedding-model", default="all-MiniLM-L6-v2",
                         help="Sentence transformer model for embeddings (default: all-MiniLM-L6-v2)")
     llm_group.add_argument("--temperature", type=float, default=0.7,
@@ -74,8 +83,8 @@ Examples:
     verification_group = parser.add_argument_group('Verification Configuration')
     verification_group.add_argument("--no-symbolic-verification", action="store_true",
                         help="Disable symbolic verification with SymPy (for math/logic)")
-    verification_group.add_argument("--enable-factual-verification", action="store_true",
-                        help="Enable factual verification (checks facts against knowledge base)")
+    verification_group.add_argument("--no-factual-verification", action="store_true",
+                        help="Disable factual verification (enabled by default)")
     verification_group.add_argument("--debug-verification", action="store_true",
                         help="Enable detailed verification debugging output")
     
@@ -93,6 +102,10 @@ Examples:
     print("=" * 80)
     print("\n📋 Configuration:")
     print(f"  LLM: {args.model} @ {args.base_url}")
+    if args.api_key:
+        print(f"  API Key: {'*' * 8}{args.api_key[-4:] if len(args.api_key) > 4 else '****'}")
+    else:
+        print(f"  API Key: Not set (may be required for vLLM)")
     print(f"  Embeddings: {args.embedding_model}")
     print(f"  Temperature: {args.temperature}")
     print(f"  Max Tokens: {args.max_tokens}")
@@ -118,7 +131,7 @@ Examples:
     print(f"  Cache Dir: {args.cache_dir}")
     print(f"\n✓ Verification:")
     print(f"  Symbolic (SymPy): {'✗ Disabled' if args.no_symbolic_verification else '✓ Enabled'}")
-    print(f"  Factual: {'✓ Enabled' if args.enable_factual_verification else '✗ Disabled'}")
+    print(f"  Factual: {'✗ Disabled' if args.no_factual_verification else '✓ Enabled'}")
     print(f"  Debug Mode: {'✓ Enabled' if args.debug_verification else '✗ Disabled'}")
     print(f"\n🔄 Reflection & Learning:")
     print(f"  Max Iterations: {args.max_reflection_iterations}")
@@ -127,6 +140,7 @@ Examples:
     set_reasoning_model(
         base_url=args.base_url,
         model=args.model,
+        api_key=args.api_key,
         embedding_model=args.embedding_model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
@@ -138,6 +152,43 @@ Examples:
         enable_active_learning=not args.no_active_learning
     )
     
+    # If a single query is provided, run it and exit
+    if args.query:
+        print(f"\n{'=' * 80}")
+        print(f"Query: {args.query}")
+        print("=" * 80)
+        
+        try:
+            result = kaelum_enhance_reasoning(args.query)
+            
+            print(f"\n{'─' * 80}")
+            print(f"ANSWER: {result.get('suggested_approach', 'N/A')}")
+            print(f"{'─' * 80}")
+            
+            print(f"\nWorker: {result.get('worker_used', 'N/A')}")
+            print(f"Confidence: {result.get('confidence', 0):.2f}")
+            print(f"Verification: {'✓ PASSED' if result.get('verification_passed') else '✗ FAILED'}")
+            print(f"Cache Hit: {'Yes' if result.get('cache_hit') else 'No'}")
+            print(f"Iterations: {result.get('iterations', 0)}")
+            
+            print(f"\nReasoning Steps:")
+            print(f"  Step Count: {result.get('reasoning_count', 0)}")
+            
+            reasoning = result.get('reasoning_steps', [])
+            if reasoning:
+                for j, step in enumerate(reasoning, 1):
+                    print(f"  {j}. {step}")
+            
+            print()
+            return
+            
+        except Exception as e:
+            print(f"\n✗ ERROR: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+    
+    # Otherwise, run default test queries
     queries = [
         ("Math", "What is the derivative of x^2 + 3x?"),
         ("Math", "Solve: 2x + 6 = 10"),

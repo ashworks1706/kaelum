@@ -17,7 +17,7 @@ def main():
     
     set_reasoning_model(
         base_url="http://localhost:11434/v1",
-        model="qwen2.5:3b",
+        model="Qwen/Qwen2.5-1.5B-Instruct",
         enable_routing=True,
         enable_active_learning=True,
         use_symbolic_verification=True,

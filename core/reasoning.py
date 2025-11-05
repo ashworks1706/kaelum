@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, List, Optional
 
 import httpx
@@ -19,6 +20,11 @@ class LLMClient:
 
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
+        
+        # Add API key if provided (required for vLLM and other OpenAI-compatible servers)
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
+        
         return headers
 
     def generate(self, messages: List[Message], stream: bool = False):
@@ -32,37 +38,65 @@ class LLMClient:
             "stream": stream,
         }
         
-        if stream:
-            # Return generator for streaming
-            def stream_generator():
-                with httpx.stream("POST", url, json=payload, headers=self.headers, timeout=60.0) as response:
+        try:
+            if stream:
+                # Return generator for streaming
+                def stream_generator():
+                    with httpx.stream("POST", url, json=payload, headers=self.headers, timeout=60.0) as response:
+                        response.raise_for_status()
+                        for line in response.iter_lines():
+                            if line.startswith("data: "):
+                                data_str = line[6:]  # Remove "data: " prefix
+                                if data_str.strip() == "[DONE]":
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    if "choices" in data and len(data["choices"]) > 0:
+                                        delta = data["choices"][0].get("delta", {})
+                                        content = delta.get("content")
+                                        if content:
+                                            yield content
+                                except json.JSONDecodeError:
+                                    continue
+                return stream_generator()
+            else:
+                # Return complete response
+                with httpx.Client(timeout=60.0) as client:
+                    response = client.post(url, json=payload, headers=self.headers)
                     response.raise_for_status()
-                    for line in response.iter_lines():
-                        if line.startswith("data: "):
-                            data_str = line[6:]  # Remove "data: " prefix
-                            if data_str.strip() == "[DONE]":
-                                break
-                            try:
-                                data = json.loads(data_str)
-                                if "choices" in data and len(data["choices"]) > 0:
-                                    delta = data["choices"][0].get("delta", {})
-                                    content = delta.get("content")
-                                    if content:
-                                        yield content
-                            except json.JSONDecodeError:
-                                continue
-            return stream_generator()
-        else:
-            # Return complete response
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(url, json=payload, headers=self.headers)
-                response.raise_for_status()
-                data = response.json()
-                
-                if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
-                    raise RuntimeError("LLM returned empty response")
-                
-                return data["choices"][0]["message"]["content"]
+                    data = response.json()
+                    
+                    if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
+                        raise RuntimeError("LLM returned empty response")
+                    
+                    return data["choices"][0]["message"]["content"]
+        
+        except httpx.ConnectError as e:
+            raise ConnectionError(
+                f"Failed to connect to LLM server at {self.base_url}. "
+                f"Is the server running? For vLLM, start with: "
+                f"python -m vllm.entrypoints.openai.api_server --model {self.config.model} --port <port>"
+            ) from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise PermissionError(
+                    f"Authentication failed. For vLLM, you may need to set an API key. "
+                    f"Add --api-key parameter or set LLM_API_KEY environment variable."
+                ) from e
+            elif e.response.status_code == 404:
+                raise ValueError(
+                    f"Model '{self.config.model}' not found at {self.base_url}. "
+                    f"Check that the model name is correct and the server has loaded it."
+                ) from e
+            else:
+                raise RuntimeError(
+                    f"LLM server returned error {e.response.status_code}: {e.response.text}"
+                ) from e
+        except httpx.TimeoutException as e:
+            raise TimeoutError(
+                f"Request to LLM server timed out after 60 seconds. "
+                f"The model may be too slow or overloaded."
+            ) from e
 
 
 class ReasoningGenerator:
