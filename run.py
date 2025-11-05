@@ -146,7 +146,7 @@ Examples:
         max_tokens=args.max_tokens,
         enable_routing=not args.no_routing,
         use_symbolic_verification=not args.no_symbolic_verification,
-        use_factual_verification=args.enable_factual_verification,
+        use_factual_verification=not args.no_factual_verification,
         max_reflection_iterations=args.max_reflection_iterations,
         debug_verification=args.debug_verification,
         enable_active_learning=not args.no_active_learning
