@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Kaelum AI - Complete Example
-Demonstrates neural routing, LATS search, verification, and reflection
+Kaelum AI - Production Test Runner
+Neural routing, LATS search, verification, and reflection system
 """
 
 from kaelum import enhance, set_reasoning_model
 
 def main():
     print("=" * 80)
-    print(" " * 20 + "Kaelum AI - Reasoning System Demo")
+    print(" " * 22 + "Kaelum AI - Reasoning System")
     print("=" * 80)
     print("\nConfiguring system...")
     

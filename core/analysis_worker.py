@@ -9,7 +9,7 @@ from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
 from core.conclusion_detector import ConclusionDetector
 from core.adaptive_penalty import AdaptivePenalty
-
+from core.relevance_validator import RelevanceValidator
 
 class AnalysisWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):

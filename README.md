@@ -296,7 +296,7 @@ Default configuration works with Ollama out-of-the-box.
 ### **Step 4: Test**
 
 ```bash
-python example.py
+python run.py
 ```
 
 ### **Requirements:**
@@ -774,11 +774,3 @@ python -m pytest --cov=core --cov=runtime
 - [ ] **Tree-sitter integration**: Proper AST parsing for Java/C++/Go/Rust validation
 - [ ] **Cross-encoder models**: More accurate semantic similarity for cache/routing
 - [ ] **Batch processing**: Parallel query execution with load balancing
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
----
