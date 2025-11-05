@@ -14,7 +14,7 @@ Core concepts:
 
 ---
 
-## 🎯 Features
+## Features
 
 - **Neural Router**: A deep learning model using embeddings (vector representations of text meaning) and structural features to intelligently select which expert worker should handle each query and predict optimal search parameters.
 - **Expert Workers**: Six LLM-based (Large Language Model) domain specialists that run LATS to explore multiple reasoning paths in parallel.
@@ -63,7 +63,7 @@ python run.py
 
 ---
 
-## 🔄 Complete Workflow: From Query to Answer
+## Complete Workflow: From Query to Answer
 
 This section walks through exactly what happens when you ask Kaelum a question, explaining both the **what** (steps) and **why** (concepts behind each step).
 
@@ -192,7 +192,7 @@ Result: ["Apply sum rule", "d/dx(x²) = 2x", "d/dx(3x) = 3", "Combine: 2x + 3"]
 
 ```
 Candidate: "2x + 3"
-SymPy verification: derivative(x**2 + 3*x, x) == 2*x + 3 → ✅ TRUE
+SymPy verification: derivative(x**2 + 3*x, x) == 2*x + 3 →  TRUE
 ```
 
 **What happens:**
@@ -219,7 +219,7 @@ This isn't just checking if the answer "looks right" - it's **formal verificatio
 #### **Step 7: Success Path - Cache & Return**
 
 ```
-✅ Verification passed
+Verification passed
 → Store tree in cache with embedding
 → Update router training data: {"query": "...", "worker": "math", "success": true}
 → Return result
@@ -244,7 +244,7 @@ optimizer.step()  # Update neural network weights
 #### **Alternative: Verification Failure → Reflection**
 
 ```
-❌ Verification failed
+ Verification failed
 → Reflection Engine analyzes error
 → Generate improved reasoning
 → Retry (up to max_iterations)
