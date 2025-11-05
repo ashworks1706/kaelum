@@ -124,7 +124,7 @@ class WorkerAgent(ABC):
     
     async def solve_async(self, query: str, context: Optional[Dict] = None,
                          use_cache: bool = True, max_tree_depth: int = 5,
-                         num_simulations: int = 10) -> WorkerResult:
+                         num_simulations: int = 10, parallel: bool = False) -> WorkerResult:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None, self.solve, query, context, use_cache, max_tree_depth, num_simulations
@@ -294,16 +294,16 @@ class LogicWorker(WorkerAgent):
         
         def simulate_logic_step(node: LATSNode) -> float:
             state = node.state
-            
-            if state.get("conclusion"):
-                return 0.95
-            
-            num_premises = len(state.get("premises", []))
-            if num_premises > 0:
-                return 0.6 + (num_premises * 0.05)
-            
             depth = state.get("depth", 0)
-            return max(0.2, 0.5 - depth * 0.04)
+            
+            completion = 0.0
+            if state.get("conclusion"):
+                completion = 1.0
+            else:
+                num_premises = len(state.get("premises", []))
+                completion = min(0.8, num_premises * 0.15)
+            
+            return RewardModel.get_reward("logic", state, depth, completion)
         
         def expand_logic_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state

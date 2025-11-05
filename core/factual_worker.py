@@ -122,7 +122,7 @@ class FactualWorker(WorkerAgent):
         
         if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value,
-                                 verification_passed, confidence)
+                                 False, confidence)
         
         return WorkerResult(
             answer=answer,
