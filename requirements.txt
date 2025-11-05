@@ -6,12 +6,14 @@ python-dotenv
 click
 
 # Neural Routing (Novel Contribution)
-torch              # PyTorch for neural network routing
-sentence-transformers  # For query embeddings (384-dim)
-numpy               # For numerical operations
+torch
+sentence-transformers
+transformers
+numpy
+scikit-learn
 
 # Formal Reasoning
-z3-solver          # For formal logic verification
+z3-solver
 
 # Commercial LLM Integration (optional)
 google-generativeai

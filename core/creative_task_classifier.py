@@ -108,11 +108,18 @@ class CreativeTaskClassifier:
                 similarities.append(sim)
             
             max_similarity = np.max(similarities)
-            avg_top3 = np.mean(sorted(similarities, reverse=True)[:3])
+            top_3_sims = sorted(similarities, reverse=True)[:3]
+            avg_top3 = np.mean(top_3_sims)
             
             score = 0.65 * max_similarity + 0.35 * avg_top3
             
-            all_scores[task] = float(score)
+            threshold = self._adaptive_threshold(profile['base_threshold'], query)
+            
+            if score >= threshold:
+                all_scores[task] = float(score)
+        
+        if not all_scores:
+            return 'general_creative', 0.3, False, {}
         
         sorted_tasks = sorted(all_scores.items(), key=lambda x: x[1], reverse=True)
         best_task, best_score = sorted_tasks[0]
@@ -123,3 +130,18 @@ class CreativeTaskClassifier:
         alternatives = {task: score for task, score in sorted_tasks[1:4] if score > 0.35}
         
         return best_task, best_score, is_ambiguous, alternatives
+    
+    def _adaptive_threshold(self, base_threshold: float, query: str) -> float:
+        words = query.split()
+        word_count = len(words)
+        
+        if word_count < 5:
+            adjustment = 0.10
+        elif word_count < 10:
+            adjustment = 0.05
+        elif word_count > 40:
+            adjustment = -0.05
+        else:
+            adjustment = 0.0
+        
+        return max(0.30, min(0.75, base_threshold + adjustment))
