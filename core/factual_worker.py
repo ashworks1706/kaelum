@@ -9,6 +9,9 @@ from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
 from core.task_classifier import TaskClassifier
+from core.conclusion_detector import ConclusionDetector
+from core.completeness_detector import CompletenessDetector
+from core.adaptive_penalty import AdaptivePenalty
 from sentence_transformers import SentenceTransformer, util
 
 
@@ -17,6 +20,8 @@ class FactualWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
         self.task_classifier = TaskClassifier()
+        self.conclusion_detector = ConclusionDetector()
+        self.completeness_detector = CompletenessDetector()
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
@@ -48,15 +53,13 @@ class FactualWorker(WorkerAgent):
             state = node.state
             depth = state.get("depth", 0)
             
-            completion = 0.0
-            if "answer" in state:
-                answer = state["answer"]
-                completion = 1.0 if answer and len(answer) > 50 else 0.3
-            else:
-                facts_count = len(state.get("facts_gathered", []))
-                completion = min(0.8, facts_count * 0.15)
+            has_answer = state.get("answer") is not None
+            has_facts = len(state.get("facts_gathered", [])) > 0
             
-            return RewardModel.get_reward("factual", state, depth, completion)
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            
+            return RewardModel.get_reward("factual", state, depth, has_answer, has_facts,
+                                         query_complexity=query_complexity)
         
         def expand_factual_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -82,8 +85,20 @@ class FactualWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                has_conclusion = any(next_step.lower().startswith(kw) for kw in ['therefore', 'in conclusion', 'to summarize'])
-                is_final = depth >= max_tree_depth - 1 or has_conclusion or len(next_step) > 200
+                history = []
+                node = parent_node
+                while node.parent is not None:
+                    if "step" in node.state:
+                        history.insert(0, node.state["step"])
+                    node = node.parent
+                
+                conclusion_result = self.conclusion_detector.detect(next_step, '\n'.join(history))
+                has_conclusion = conclusion_result['is_conclusion'] and conclusion_result['confidence'] > 0.7
+                
+                completeness_result = self.completeness_detector.is_complete(query, next_step, history)
+                is_complete = completeness_result['is_complete'] and completeness_result['confidence'] > 0.65
+                
+                is_final = depth >= max_tree_depth - 1 or has_conclusion or is_complete
                 
                 return {
                     "query": query,

@@ -1,5 +1,6 @@
 import math
 from typing import Dict, Any
+from core.adaptive_penalty import AdaptivePenalty
 
 
 class RewardModel:
@@ -57,7 +58,7 @@ class RewardModel:
     @staticmethod
     def get_reward(worker_type: str, state: Dict[str, Any], depth: int,
                    has_answer: bool = False, has_partial: bool = False,
-                   syntax_valid: bool = False) -> float:
+                   syntax_valid: bool = False, query_complexity: float = 0.5) -> float:
         config = RewardModel.CONFIGS.get(worker_type, RewardModel.CONFIGS["math"])
         
         if has_answer:
@@ -68,4 +69,6 @@ class RewardModel:
         if has_partial:
             return config["partial"]
         
-        return max(0.1, config["base"] - depth * config["depth_penalty"])
+        adaptive_penalty = AdaptivePenalty.get_penalty(worker_type, query_complexity)
+        
+        return max(0.1, config["base"] - depth * adaptive_penalty)

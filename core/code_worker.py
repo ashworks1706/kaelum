@@ -12,6 +12,8 @@ from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
 from core.language_detector import LanguageDetector
 from core.task_classifier import TaskClassifier
+from core.code_extractor import CodeExtractor
+from core.adaptive_penalty import AdaptivePenalty
 
 
 class CodeWorker(WorkerAgent):
@@ -20,6 +22,7 @@ class CodeWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         self.language_detector = LanguageDetector()
         self.task_classifier = TaskClassifier()
+        self.code_extractor = CodeExtractor()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
             'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'

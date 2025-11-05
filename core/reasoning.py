@@ -94,15 +94,7 @@ Present your reasoning as a numbered list."""
             # Stream chunks directly
             return response
         else:
-            # Parse reasoning trace
-            trace = []
-            for line in response.strip().split("\n"):
-                line = line.strip()
-                if line and (line[0].isdigit() or line.startswith("-") or line.startswith("•")):
-                    step = line.lstrip("0123456789.-•) ").strip()
-                    if step:
-                        trace.append(step)
-
+            trace = self._parse_structured_list(response)
             return trace if trace else [response.strip()]
 
     def generate_answer(self, query: str, reasoning_trace: List[str], stream: bool = False):
@@ -120,3 +112,42 @@ Present your reasoning as a numbered list."""
         ]
 
         return self.llm.generate(messages, stream=stream)
+    
+    def _parse_structured_list(self, text: str) -> List[str]:
+        patterns = [
+            r'^\d+[\.\)]\s+(.+)',
+            r'^[-•*]\s+(.+)',
+            r'^[a-zA-Z][\.\)]\s+(.+)',
+            r'^(?:Step\s+\d+:)\s*(.+)'
+        ]
+        
+        items = []
+        current_item = []
+        
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            
+            is_new_item = False
+            matched_content = None
+            
+            for pattern in patterns:
+                match = re.match(pattern, line, re.IGNORECASE)
+                if match:
+                    is_new_item = True
+                    matched_content = match.group(1)
+                    break
+            
+            if is_new_item:
+                if current_item:
+                    items.append(' '.join(current_item))
+                current_item = [matched_content]
+            else:
+                current_item.append(line)
+        
+        if current_item:
+            items.append(' '.join(current_item))
+        
+        return items
+

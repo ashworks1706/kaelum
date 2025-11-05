@@ -8,6 +8,7 @@ from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
+from core.adaptive_penalty import AdaptivePenalty
 
 
 class CreativeWorker(WorkerAgent):
@@ -46,15 +47,13 @@ class CreativeWorker(WorkerAgent):
             state = node.state
             depth = state.get("depth", 0)
             
-            completion = 0.0
-            if "content" in state:
-                content = state["content"]
-                completion = 1.0 if content and len(content) > 100 else 0.3
-            else:
-                parts_count = len(state.get("content_parts", []))
-                completion = min(0.8, parts_count * 0.15)
+            has_content = state.get("content") is not None
+            has_parts = len(state.get("content_parts", [])) > 0
             
-            return RewardModel.get_reward("creative", state, depth, completion)
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            
+            return RewardModel.get_reward("creative", state, depth, has_content, has_parts,
+                                         query_complexity=query_complexity)
         
         def expand_creative_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state

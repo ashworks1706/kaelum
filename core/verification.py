@@ -237,19 +237,19 @@ class VerificationEngine:
         logic_keywords = {'therefore', 'thus', 'premise', 'conclusion', 'implies', 'entails'}
         has_logic = any(kw in combined_text.lower() for kw in logic_keywords)
         
-        # Prioritize by strongest signal
+        classification = self.worker_classifier.classify_worker(query)
+        
+        if classification['confidence'] > 0.5:
+            return classification['worker']
+        
         if math_equation_pattern or math_keywords >= 2:
             return "math"
         elif code_symbols > 5 or has_code:
             return "code"
         elif has_logic:
             return "logic"
-        elif any(kw in query.lower() for kw in ['story', 'poem', 'write a', 'brainstorm', 'imagine']):
-            return "creative"
-        elif any(kw in query.lower() for kw in ['what is', 'define', 'explain', 'describe']):
-            return "factual"
         else:
-            return "analysis"
+            return classification['worker']
     
     def _verify_math(self, reasoning_steps: List[str]) -> dict:
         errors, details = self.verify_trace(reasoning_steps)

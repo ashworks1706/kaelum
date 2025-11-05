@@ -85,6 +85,42 @@ class ReflectionEngine:
         return improvements if improvements else None
     
     def _parse_structured_list(self, text: str) -> List[str]:
+        patterns = [
+            r'^\d+[\.\)]\s+(.+)',
+            r'^[-•*]\s+(.+)',
+            r'^[a-zA-Z][\.\)]\s+(.+)',
+            r'^(?:Step\s+\d+:)\s*(.+)'
+        ]
+        
+        items = []
+        current_item = []
+        
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            
+            is_new_item = False
+            matched_content = None
+            
+            for pattern in patterns:
+                match = re.match(pattern, line, re.IGNORECASE)
+                if match:
+                    is_new_item = True
+                    matched_content = match.group(1)
+                    break
+            
+            if is_new_item:
+                if current_item:
+                    items.append(' '.join(current_item))
+                current_item = [matched_content]
+            else:
+                current_item.append(line)
+        
+        if current_item:
+            items.append(' '.join(current_item))
+        
+        return items
     
     def _improve_trace(self, query: str, trace: List[str], issues: List[str]) -> List[str]:
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(trace))

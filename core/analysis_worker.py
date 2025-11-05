@@ -8,6 +8,7 @@ from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
 from core.conclusion_detector import ConclusionDetector
+from core.adaptive_penalty import AdaptivePenalty
 
 
 class AnalysisWorker(WorkerAgent):
@@ -43,15 +44,13 @@ class AnalysisWorker(WorkerAgent):
             state = node.state
             depth = state.get("depth", 0)
             
-            completion = 0.0
-            if "conclusion" in state:
-                conclusion = state["conclusion"]
-                completion = 1.0 if conclusion and len(conclusion) > 50 else 0.3
-            else:
-                points_count = len(state.get("analysis_points", []))
-                completion = min(0.8, points_count * 0.15)
+            has_conclusion = state.get("conclusion") is not None
+            has_points = len(state.get("analysis_points", [])) > 0
             
-            return RewardModel.get_reward("analysis", state, depth, completion)
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            
+            return RewardModel.get_reward("analysis", state, depth, has_conclusion, has_points,
+                                         query_complexity=query_complexity)
         
         def expand_analysis_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state

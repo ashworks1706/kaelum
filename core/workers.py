@@ -11,6 +11,8 @@ from core.sympy_engine import SympyEngine
 from core.lats import LATS, LATSNode
 from core.tree_cache import TreeCache
 from core.reward_model import RewardModel
+from core.conclusion_detector import ConclusionDetector
+from core.adaptive_penalty import AdaptivePenalty
 
 
 class WorkerSpecialty(Enum):
@@ -131,16 +133,16 @@ class WorkerAgent(ABC):
         )
 
 
+
+
 class LogicWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
         self.conclusion_detector = ConclusionDetector()
-        self.conclusion_detector = ConclusionDetector()
-        self.sympy_engine = SympyEngine
         
     def get_specialty(self) -> WorkerSpecialty:
-        return WorkerSpecialty.MATH
+        return WorkerSpecialty.LOGIC
     
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
@@ -170,12 +172,15 @@ class LogicWorker(WorkerAgent):
                 try:
                     answer = state["answer"]
                     has_answer = answer and len(str(answer)) > 0
-                    return RewardModel.get_reward("math", state, depth, has_answer=has_answer)
+                    query_complexity = AdaptivePenalty.compute_complexity(query)
+                    return RewardModel.get_reward("math", state, depth, has_answer=has_answer, query_complexity=query_complexity)
                 except:
-                    return RewardModel.get_reward("math", state, depth)
+                    query_complexity = AdaptivePenalty.compute_complexity(query)
+                    return RewardModel.get_reward("math", state, depth, query_complexity=query_complexity)
             
             has_partial = bool(state.get("partial_solution"))
-            return RewardModel.get_reward("math", state, depth, has_partial=has_partial)
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            return RewardModel.get_reward("math", state, depth, has_partial=has_partial, query_complexity=query_complexity)
         
         def expand_math_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -304,7 +309,10 @@ class LogicWorker(WorkerAgent):
                 num_premises = len(state.get("premises", []))
                 completion = min(0.8, num_premises * 0.15)
             
-            return RewardModel.get_reward("logic", state, depth, completion)
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            
+            return RewardModel.get_reward("logic", state, depth, completion, 
+                                         query_complexity=query_complexity)
         
         def expand_logic_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
