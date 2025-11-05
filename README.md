@@ -152,6 +152,7 @@ How Kaelum optimizes thresholds:
 **What is UCT?** UCT (Upper Confidence Bound applied to Trees) is the selection algorithm that decides which path to explore next in the search tree. It balances exploitation (following promising paths) with exploration (trying untested options).
 
 UCT formula:
+
 ```
 UCT(node) = Q(node) / N(node) + c * sqrt(ln N(parent) / N(node))
 ```
@@ -244,22 +245,19 @@ Contributing:
 - Typical query latency: 2–5s (uncached); cached queries ~0.001s (1000x faster)
 - Verification: High accuracy for math (SymPy symbolic validation) and Python AST parsing
 - Language support: Python, JavaScript, TypeScript for code verification
-- **Not yet implemented**: Parallel LATS (multi-GPU tree search), multi-turn conversation state tracking, ensemble voting across multiple models, web UI dashboard
-
----
 
 ## Research & References
 
 Kaelum builds upon several key research areas in AI and reasoning:
 
-- [Browne et al. (2012): "A Survey of Monte Carlo Tree Search Methods"](https://ieeexplore.ieee.org/document/6145622)
-- [Silver et al. (2016): "Mastering the game of Go with deep neural networks and tree search" (AlphaGo)](https://www.nature.com/articles/nature16961)
-- [Wei et al. (2022): "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"](https://arxiv.org/abs/2201.11903)
-- [Yao et al. (2023): "Tree of Thoughts: Deliberate Problem Solving with Large Language Models"](https://arxiv.org/abs/2305.10601)
-- [Shinn et al. (2023): "Reflexion: Language Agents with Verbal Reinforcement Learning"](https://arxiv.org/abs/2303.11366)
-- [Madaan et al. (2023): "Self-Refine: Iterative Refinement with Self-Feedback"](https://arxiv.org/abs/2303.17651)
-- [Shazeer et al. (2017): "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer"](https://arxiv.org/abs/1701.06538)
-- [Fedus et al. (2021): "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity"](https://arxiv.org/abs/2101.03961)
-- [Welleck et al. (2022): "Symbolic Knowledge Distillation: from General Language Models to Commonsense Models"](https://arxiv.org/abs/2110.07178)
-- [Settles (2009): "Active Learning Literature Survey"](https://minds.wisconsin.edu/handle/1793/60660)
-- [Reimers & Gurevych (2019): "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"](https://arxiv.org/abs/1908.10084)
+- [Browne et al. (2012): &#34;A Survey of Monte Carlo Tree Search Methods&#34;](https://ieeexplore.ieee.org/document/6145622)
+- [Silver et al. (2016): &#34;Mastering the game of Go with deep neural networks and tree search&#34; (AlphaGo)](https://www.nature.com/articles/nature16961)
+- [Wei et al. (2022): &#34;Chain-of-Thought Prompting Elicits Reasoning in Large Language Models&#34;](https://arxiv.org/abs/2201.11903)
+- [Yao et al. (2023): &#34;Tree of Thoughts: Deliberate Problem Solving with Large Language Models&#34;](https://arxiv.org/abs/2305.10601)
+- [Shinn et al. (2023): &#34;Reflexion: Language Agents with Verbal Reinforcement Learning&#34;](https://arxiv.org/abs/2303.11366)
+- [Madaan et al. (2023): &#34;Self-Refine: Iterative Refinement with Self-Feedback&#34;](https://arxiv.org/abs/2303.17651)
+- [Shazeer et al. (2017): &#34;Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer&#34;](https://arxiv.org/abs/1701.06538)
+- [Fedus et al. (2021): &#34;Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity&#34;](https://arxiv.org/abs/2101.03961)
+- [Welleck et al. (2022): &#34;Symbolic Knowledge Distillation: from General Language Models to Commonsense Models&#34;](https://arxiv.org/abs/2110.07178)
+- [Settles (2009): &#34;Active Learning Literature Survey&#34;](https://minds.wisconsin.edu/handle/1793/60660)
+- [Reimers &amp; Gurevych (2019): &#34;Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks&#34;](https://arxiv.org/abs/1908.10084)
