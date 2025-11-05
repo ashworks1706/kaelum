@@ -5,14 +5,14 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from enum import Enum
 
-from core.config import KaelumConfig
-from core.reasoning import LLMClient, Message
-from core.sympy_engine import SympyEngine
-from core.lats import LATS, LATSNode
-from core.tree_cache import TreeCache
-from core.reward_model import RewardModel
-from core.conclusion_detector import ConclusionDetector
-from core.adaptive_penalty import AdaptivePenalty
+from ..config import KaelumConfig
+from ..reasoning import LLMClient, Message
+from ..verification import SympyEngine
+from ..search import LATS, LATSNode
+from ..search import TreeCache
+from ..search import RewardModel
+from ..detectors import ConclusionDetector
+from ..learning import AdaptivePenalty
 
 
 class WorkerSpecialty(Enum):

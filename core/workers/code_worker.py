@@ -4,26 +4,22 @@ import ast
 import time
 from typing import Optional, Dict, List, Any
 
-from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from core.tree_cache import TreeCache
-from core.config import KaelumConfig
-from core.reasoning import Message
-from core.lats import LATS, LATSNode
-from core.reward_model import RewardModel
-from core.language_detector import LanguageDetector
-from core.task_classifier import TaskClassifier
-from core.code_extractor import CodeExtractor
-from core.adaptive_penalty import AdaptivePenalty
-from core.confidence_calibrator import ConfidenceCalibrator
+from .workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from ..search import TreeCache
+from ..config import KaelumConfig
+from ..reasoning import Message
+from ..search import LATS, LATSNode
+from ..search import RewardModel
+from ..detectors import TaskClassifier
+from ..learning import AdaptivePenalty
+from ..verification import ConfidenceCalibrator
 
 
 class CodeWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self.language_detector = LanguageDetector()
         self.task_classifier = TaskClassifier()
-        self.code_extractor = CodeExtractor()
         self.confidence_calibrator = ConfidenceCalibrator()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
@@ -176,8 +172,29 @@ class CodeWorker(WorkerAgent):
         )
     
     def _detect_language(self, query: str) -> Optional[str]:
-        result = self.language_detector.detect(query, "")
-        return result['language'] if result['confidence'] > 0.3 else None
+        """Simple heuristic language detection from query keywords."""
+        query_lower = query.lower()
+        
+        # Check for explicit language mentions
+        lang_keywords = {
+            'python': ['python', '.py', 'def ', 'import ', 'class '],
+            'javascript': ['javascript', 'js', '.js', 'function', 'const ', 'let ', '=>'],
+            'typescript': ['typescript', 'ts', '.ts', 'interface', 'type '],
+            'java': ['java', '.java', 'public class', 'private ', 'System.out'],
+            'cpp': ['c++', 'cpp', '.cpp', '#include', 'std::', 'namespace'],
+            'go': ['golang', 'go', '.go', 'func ', 'package '],
+            'rust': ['rust', '.rs', 'fn ', 'let mut', 'impl ']
+        }
+        
+        scores = {}
+        for lang, keywords in lang_keywords.items():
+            score = sum(1 for kw in keywords if kw in query_lower)
+            if score > 0:
+                scores[lang] = score
+        
+        if scores:
+            return max(scores, key=scores.get)
+        return None
     
     
     def _classify_task(self, query: str) -> str:

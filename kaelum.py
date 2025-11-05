@@ -1,10 +1,11 @@
 __version__ = "2.0.0"
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from core.config import KaelumConfig, LLMConfig
 from runtime.orchestrator import KaelumOrchestrator
-from core.metrics import CostTracker
-from core.router import Router, QueryType, ReasoningStrategy
+from core.learning import CostTracker, TokenCounter, AnalyticsDashboard
+from core.search import Router, QueryType, ReasoningStrategy
+from core.learning import ActiveLearningEngine, QuerySelector
 
 _orchestrator: Optional[KaelumOrchestrator] = None
 
@@ -18,6 +19,7 @@ def set_reasoning_model(
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
     enable_routing: bool = True,
+    enable_active_learning: bool = True,
     debug_verification: bool = False,
 ):
     global _orchestrator
@@ -35,7 +37,11 @@ def set_reasoning_model(
         debug_verification=debug_verification,
     )
     
-    _orchestrator = KaelumOrchestrator(config, enable_routing=enable_routing)
+    _orchestrator = KaelumOrchestrator(
+        config,
+        enable_routing=enable_routing,
+        enable_active_learning=enable_active_learning
+    )
 
 
 def enhance(query: str) -> str:
@@ -101,13 +107,79 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
     }
 
 
+def get_metrics() -> Dict[str, Any]:
+    """Get comprehensive metrics and analytics."""
+    global _orchestrator
+    
+    if _orchestrator is None:
+        return {"error": "Orchestrator not initialized"}
+    
+    return _orchestrator.get_metrics_summary()
+
+
+def get_active_learning_stats() -> Dict[str, Any]:
+    """Get active learning statistics."""
+    global _orchestrator
+    
+    if _orchestrator is None:
+        return {"error": "Orchestrator not initialized"}
+    
+    return _orchestrator.get_active_learning_stats()
+
+
+def generate_training_batch(
+    strategy: str = "mixed",
+    batch_size: int = 20
+) -> List[Dict[str, Any]]:
+    """Generate training batch using active learning.
+    
+    Args:
+        strategy: Selection strategy (uncertainty, diversity, error, complexity, mixed)
+        batch_size: Number of queries to select
+    
+    Returns:
+        List of training examples
+    """
+    global _orchestrator
+    
+    if _orchestrator is None:
+        set_reasoning_model()
+    
+    return _orchestrator.generate_training_batch(strategy, batch_size)
+
+
+def export_training_data(output_path: str) -> int:
+    """Export collected training data.
+    
+    Args:
+        output_path: Path to save training dataset
+    
+    Returns:
+        Number of examples exported
+    """
+    global _orchestrator
+    
+    if _orchestrator is None:
+        return 0
+    
+    return _orchestrator.export_training_dataset(output_path)
+
+
 __all__ = [
     "enhance", 
     "enhance_stream", 
     "set_reasoning_model",
     "kaelum_enhance_reasoning",
+    "get_metrics",
+    "get_active_learning_stats",
+    "generate_training_batch",
+    "export_training_data",
     "CostTracker",
+    "TokenCounter",
+    "AnalyticsDashboard",
     "Router",
     "QueryType",
     "ReasoningStrategy",
+    "ActiveLearningEngine",
+    "QuerySelector",
 ]

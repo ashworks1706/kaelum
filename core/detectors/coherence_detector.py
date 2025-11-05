@@ -3,7 +3,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from transformers import pipeline
 import time
-from core.threshold_calibrator import ThresholdCalibrator
+from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class CoherenceDetector:

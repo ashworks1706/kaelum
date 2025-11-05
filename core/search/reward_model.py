@@ -1,6 +1,6 @@
 import math
 from typing import Dict, Any
-from core.adaptive_penalty import AdaptivePenalty
+from ..learning import AdaptivePenalty
 
 
 class RewardModel:

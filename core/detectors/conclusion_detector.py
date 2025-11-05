@@ -4,7 +4,7 @@ from transformers import pipeline
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import time
-from core.threshold_calibrator import ThresholdCalibrator
+from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class ConclusionDetector:

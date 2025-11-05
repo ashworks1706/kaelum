@@ -13,18 +13,18 @@ Query → Router → Expert Worker (LATS + Cache) → Verification → Reflectio
 
 import time
 import logging
-from typing import Iterator, Dict, Any, Optional
+from typing import Iterator, Dict, Any, Optional, List
 
-from ..core.config import KaelumConfig
-from ..core.reasoning import LLMClient
-from ..core.metrics import CostTracker
-from ..core.router import Router
-from ..core.workers import WorkerSpecialty, create_worker
-from ..core.tree_cache import TreeCache
-from ..core.verification import VerificationEngine
-from ..core.reflection import ReflectionEngine
-from ..core.adaptive_lats_config import AdaptiveLATSConfig
-from ..core.adaptive_penalty import AdaptivePenalty
+from core.config import KaelumConfig
+from core.reasoning import LLMClient
+from core.learning import CostTracker
+from core.search import Router
+from core.workers import WorkerSpecialty, create_worker
+from core.search import TreeCache
+from core.verification import VerificationEngine
+from core.verification import ReflectionEngine
+from core.learning import AdaptivePenalty
+from core.learning import ActiveLearningEngine
 
 logger = logging.getLogger("kaelum.orchestrator")
 
@@ -41,7 +41,8 @@ class KaelumOrchestrator:
     """
 
     def __init__(self, config: KaelumConfig, reasoning_system_prompt=None, 
-                 reasoning_user_template=None, enable_routing: bool = True):
+                 reasoning_user_template=None, enable_routing: bool = True,
+                 enable_active_learning: bool = True):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
@@ -63,7 +64,9 @@ class KaelumOrchestrator:
             max_iterations=config.max_reflection_iterations
         )
         
-        self.lats_config = AdaptiveLATSConfig()
+        self.active_learning = ActiveLearningEngine() if enable_active_learning else None
+        if self.active_learning:
+            logger.info("Active learning enabled: Intelligent query selection for fine-tuning")
         
         self._workers = {}
         
@@ -128,12 +131,8 @@ class KaelumOrchestrator:
         
         worker = self._get_worker(worker_specialty)
         
-        if hasattr(worker, 'solve'):
-            query_complexity = AdaptivePenalty.compute_complexity(query)
-            lats_cfg = self.lats_config.get_config(query_complexity, worker_specialty)
-            max_depth = lats_cfg.max_depth
-            num_sims = lats_cfg.num_simulations
-            use_cache = lats_cfg.use_cache
+        # Router already provides optimal params via neural network
+        # No need for separate adaptive config
         
         session_id = f"session_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
@@ -223,13 +222,13 @@ class KaelumOrchestrator:
                 "success": verification_passed,
                 "confidence": final_result.confidence,
                 "execution_time": total_time,
-                "cost": total_time * 0.00000001,  # Estimate
+                "cost": total_time * 0.00000001,
                 "verification_passed": verification_passed
             }
             self.router.record_outcome(routing_decision, outcome)
         
         # Format response
-        return {
+        response = {
             "query": query,
             "reasoning_trace": final_result.reasoning_steps,
             "answer": final_result.answer,
@@ -246,3 +245,74 @@ class KaelumOrchestrator:
                 "iterations": iteration
             }
         }
+        
+        # Log metrics with token counting
+        input_text = query
+        output_text = final_result.answer + " ".join(final_result.reasoning_steps[:3])
+        self.metrics.log_inference(
+            input_text=input_text,
+            output_text=output_text,
+            latency_ms=total_time * 1000,
+            worker_type=worker_specialty,
+            verification_passed=verification_passed,
+            cache_hit=final_result.metadata.get("cache_hit", False),
+            num_simulations=final_result.metadata.get("num_simulations", 0),
+            session_id=session_id
+        )
+        
+        # Collect for active learning
+        if self.active_learning:
+            self.active_learning.collect_query(query, response)
+        
+        return response
+    
+    def get_metrics_summary(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get comprehensive metrics summary."""
+        session_metrics = self.metrics.get_session_metrics(session_id)
+        analytics = self.metrics.get_analytics_summary()
+        
+        return {
+            "session": session_metrics,
+            "analytics": analytics
+        }
+    
+    def get_active_learning_stats(self) -> Dict[str, Any]:
+        """Get active learning statistics."""
+        if not self.active_learning:
+            return {"active_learning": "disabled"}
+        return self.active_learning.get_statistics()
+    
+    def generate_training_batch(
+        self,
+        strategy: str = "mixed",
+        batch_size: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Generate training batch using active learning.
+        
+        Args:
+            strategy: Selection strategy (uncertainty, diversity, error, complexity, mixed)
+            batch_size: Number of queries to select
+        
+        Returns:
+            List of training examples
+        """
+        if not self.active_learning:
+            logger.warning("Active learning is disabled")
+            return []
+        
+        return self.active_learning.generate_training_batch(strategy, batch_size)
+    
+    def export_training_dataset(self, output_path: str) -> int:
+        """Export collected training data.
+        
+        Args:
+            output_path: Path to save training dataset
+        
+        Returns:
+            Number of examples exported
+        """
+        if not self.active_learning:
+            logger.warning("Active learning is disabled")
+            return 0
+        
+        return self.active_learning.export_training_dataset(output_path)

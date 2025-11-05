@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
 import time
-from core.threshold_calibrator import ThresholdCalibrator
+from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class TaskClassifier:

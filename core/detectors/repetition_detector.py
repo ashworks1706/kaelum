@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 import time
-from core.threshold_calibrator import ThresholdCalibrator
+from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class RepetitionDetector:

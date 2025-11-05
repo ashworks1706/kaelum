@@ -1,15 +1,15 @@
 import time
 from typing import Dict, Any, Optional, List
 
-from core.config import KaelumConfig
-from core.tree_cache import TreeCache
-from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from core.reasoning import Message
-from core.lats import LATS, LATSNode
-from core.reward_model import RewardModel
-from core.conclusion_detector import ConclusionDetector
-from core.adaptive_penalty import AdaptivePenalty
-from core.relevance_validator import RelevanceValidator
+from ..config import KaelumConfig
+from ..search import TreeCache
+from .workers import WorkerAgent, WorkerResult, WorkerSpecialty
+from ..reasoning import Message
+from ..search import LATS, LATSNode
+from ..search import RewardModel
+from ..detectors import ConclusionDetector
+from ..learning import AdaptivePenalty
+from ..verification import RelevanceValidator
 
 class AnalysisWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):

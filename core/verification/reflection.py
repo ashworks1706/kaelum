@@ -1,9 +1,8 @@
 import re
-from typing import List, Optional, Dict
+from typing import List, Optional
 from transformers import pipeline
 
-from core.reasoning import LLMClient, Message
-from core.verification import VerificationEngine
+from ..reasoning import LLMClient, Message
 
 
 class ReflectionEngine:

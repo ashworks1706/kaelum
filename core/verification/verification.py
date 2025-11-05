@@ -136,12 +136,12 @@ from typing import List, Dict, Optional
 
 from sentence_transformers import SentenceTransformer, util
 
-from core.reasoning import LLMClient, Message
-from core.sympy_engine import SympyEngine
-from core.syntax_validator import SyntaxValidator
-from core.conclusion_detector import ConclusionDetector
-from core.worker_type_classifier import WorkerTypeClassifier
-from core.domain_classifier import DomainClassifier
+from ..reasoning import LLMClient, Message
+from .sympy_engine import SympyEngine
+from .syntax_validator import SyntaxValidator
+from ..detectors.conclusion_detector import ConclusionDetector
+from ..detectors.worker_type_classifier import WorkerTypeClassifier
+from ..detectors.domain_classifier import DomainClassifier
 
 
 class VerificationEngine:

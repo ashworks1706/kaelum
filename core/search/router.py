@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sentence_transformers import SentenceTransformer
 
-from core.domain_classifier import DomainClassifier
+from ..detectors import DomainClassifier
 
 logger = logging.getLogger("kaelum.router")
 logger.setLevel(logging.INFO)
