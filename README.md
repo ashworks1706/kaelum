@@ -252,55 +252,14 @@ Contributing:
 
 Kaelum builds upon several key research areas in AI and reasoning:
 
-- **Browne et al. (2012)**: "A Survey of Monte Carlo Tree Search Methods" - Comprehensive overview of MCTS algorithms and applications
-  - IEEE Transactions on Computational Intelligence and AI in Games
-  - https://ieeexplore.ieee.org/document/6145622
-
-- **Silver et al. (2016)**: "Mastering the game of Go with deep neural networks and tree search" (AlphaGo)
-  - Nature, 529(7587), 484-489
-  - Demonstrated MCTS combined with neural networks for complex decision-making
-  - https://www.nature.com/articles/nature16961
-
-- **Wei et al. (2022)**: "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"
-  - NeurIPS 2022
-  - Foundation for multi-step reasoning in LLMs
-  - https://arxiv.org/abs/2201.11903
-
-- **Yao et al. (2023)**: "Tree of Thoughts: Deliberate Problem Solving with Large Language Models"
-  - NeurIPS 2023
-  - Explores tree-based reasoning structures with LLMs
-  - https://arxiv.org/abs/2305.10601
-
-- **Shinn et al. (2023)**: "Reflexion: Language Agents with Verbal Reinforcement Learning"
-  - Shows LLMs can improve through self-reflection on failures
-  - https://arxiv.org/abs/2303.11366
-
-- **Madaan et al. (2023)**: "Self-Refine: Iterative Refinement with Self-Feedback"
-  - NeurIPS 2023
-  - Iterative improvement through self-generated feedback
-  - https://arxiv.org/abs/2303.17651
-
-- **Shazeer et al. (2017)**: "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer"
-  - ICLR 2017
-  - Foundation for learned routing in neural networks
-  - https://arxiv.org/abs/1701.06538
-
-- **Fedus et al. (2021)**: "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity"
-  - Sparse expert routing at scale
-  - https://arxiv.org/abs/2101.03961
-
-- **Welleck et al. (2022)**: "Symbolic Knowledge Distillation: from General Language Models to Commonsense Models"
-  - Combining neural and symbolic reasoning
-  - https://arxiv.org/abs/2110.07178
-
-- **Settles (2009)**: "Active Learning Literature Survey"
-  - Computer Sciences Technical Report, University of Wisconsin-Madison
-  - Comprehensive overview of active learning strategies
-  - https://minds.wisconsin.edu/handle/1793/60660
-
-- **Reimers & Gurevych (2019)**: "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"
-  - EMNLP 2019
-  - Foundation for semantic similarity used in tree cache
-  - https://arxiv.org/abs/1908.10084
-
----
+- [Browne et al. (2012): "A Survey of Monte Carlo Tree Search Methods"](https://ieeexplore.ieee.org/document/6145622)
+- [Silver et al. (2016): "Mastering the game of Go with deep neural networks and tree search" (AlphaGo)](https://www.nature.com/articles/nature16961)
+- [Wei et al. (2022): "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"](https://arxiv.org/abs/2201.11903)
+- [Yao et al. (2023): "Tree of Thoughts: Deliberate Problem Solving with Large Language Models"](https://arxiv.org/abs/2305.10601)
+- [Shinn et al. (2023): "Reflexion: Language Agents with Verbal Reinforcement Learning"](https://arxiv.org/abs/2303.11366)
+- [Madaan et al. (2023): "Self-Refine: Iterative Refinement with Self-Feedback"](https://arxiv.org/abs/2303.17651)
+- [Shazeer et al. (2017): "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer"](https://arxiv.org/abs/1701.06538)
+- [Fedus et al. (2021): "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity"](https://arxiv.org/abs/2101.03961)
+- [Welleck et al. (2022): "Symbolic Knowledge Distillation: from General Language Models to Commonsense Models"](https://arxiv.org/abs/2110.07178)
+- [Settles (2009): "Active Learning Literature Survey"](https://minds.wisconsin.edu/handle/1793/60660)
+- [Reimers & Gurevych (2019): "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"](https://arxiv.org/abs/1908.10084)
