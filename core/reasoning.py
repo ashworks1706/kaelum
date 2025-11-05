@@ -19,8 +19,6 @@ class LLMClient:
 
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
-        if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
         return headers
 
     def generate(self, messages: List[Message], stream: bool = False):

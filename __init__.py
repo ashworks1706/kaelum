@@ -12,7 +12,6 @@ _orchestrator: Optional[KaelumOrchestrator] = None
 def set_reasoning_model(
     base_url: str = "http://localhost:11434/v1",
     model: str = "qwen2.5:3b",
-    api_key: Optional[str] = None,
     temperature: float = 0.7,
     max_tokens: int = 2048,
     max_reflection_iterations: int = 2,
@@ -27,7 +26,6 @@ def set_reasoning_model(
         reasoning_llm=LLMConfig(
             base_url=base_url,
             model=model,
-            api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
         ),
