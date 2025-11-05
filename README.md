@@ -12,6 +12,21 @@ Core concepts:
 - **Global semantic tree cache**: Stores previously solved problems using AI embeddings (numerical representations of meaning) for instant retrieval of similar queries
 - Continuous learning: router trains on outcomes; thresholds are F1-optimized
 
+## 📚 Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start) ⚡
+- [Supported LLMs](#supported-llms) 🦙
+  - [Ollama (Recommended)](#-ollama-recommended-for-local)
+  - [vLLM (Production)](#-vllm-recommended-for-production)
+  - [Cloud APIs](#️-cloud-apis)
+  - [Model Recommendations](#-model-recommendations-by-use-case)
+- [Detailed Setup Guide](#detailed-setup-guide) 📖
+- [Configuration Options](#configuration-options)
+- [Complete Workflow](#complete-workflow-from-query-to-answer)
+- [Python API Examples](#example-python-api)
+- [Research &amp; References](#research--references)
+
 ---
 
 ## Features
@@ -30,39 +45,272 @@ Core concepts:
 
 ## Quick Start
 
-Install runtime dependencies and clone repo:
+### 1. Clone Repository
 
 ```bash
-# System requirements: Python 3.8+, Ollama or vLLM (recommended)
-curl -fsSL https://ollama.com/install.sh | sh    # Ollama (example)
+git clone https://github.com/ashworks1706/KaelumAI.git
+cd KaelumAI
+```
+
+### 2. Install Dependencies
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. Choose Your LLM Backend
+
+Kaelum works with any OpenAI-compatible API. See [Supported LLMs](#supported-llms) below for setup instructions.
+
+### 4. Run with Command-Line Arguments (Recommended)
+
+```bash
+# Basic usage with Ollama
+python run.py --model qwen2.5:3b --base-url http://localhost:11434/v1
+
+# With custom settings
+python run.py --model llama3:8b --temperature 0.8 --max-tree-depth 7
+
+# See all options
+python run.py --help
+```
+
+### 5. Docker Setup (Optional)
+
+```bash
+docker-compose up -d
+```
+
+---
+
+## Supported LLMs
+
+Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are tested configurations:
+
+### 🦙 Ollama (Recommended for Local)
+
+**Best for:** Local development, privacy, easy setup
+
+| Model                 | Size | VRAM | Speed  | Reasoning Quality | Command                       |
+| --------------------- | ---- | ---- | ------ | ----------------- | ----------------------------- |
+| **Qwen 2.5**    | 3B   | 4GB  | ⚡⚡⚡ | ⭐⭐⭐⭐          | `ollama run qwen2.5:3b`     |
+| **Llama 3.2**   | 3B   | 4GB  | ⚡⚡⚡ | ⭐⭐⭐            | `ollama run llama3.2:3b`    |
+| **Qwen 2.5**    | 7B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐⭐        | `ollama run qwen2.5:7b`     |
+| **Llama 3.1**   | 8B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐          | `ollama run llama3.1:8b`    |
+| **DeepSeek-R1** | 7B   | 8GB  | ⚡⚡   | ⭐⭐⭐⭐⭐        | `ollama run deepseek-r1:7b` |
+| **Qwen 2.5**    | 14B  | 16GB | ⚡     | ⭐⭐⭐⭐⭐        | `ollama run qwen2.5:14b`    |
+| **Mixtral**     | 8x7B | 24GB | ⚡     | ⭐⭐⭐⭐⭐        | `ollama run mixtral:8x7b`   |
+
+**Setup:**
+
+```bash
+# 1. Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Pull a model
+ollama pull qwen2.5:3b
+
+# 3. Start Ollama (runs on port 11434 by default)
+ollama serve
+
+# 4. Run Kaelum
+python run.py --model qwen2.5:3b --base-url http://localhost:11434/v1
+```
+
+### 🚀 vLLM (Recommended for Production)
+
+**Best for:** High throughput, batch processing, GPU optimization
+
+**Setup:**
+
+```bash
+# 1. Install vLLM
+pip install vllm
+
+# 2. Start vLLM server
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --port 8000
+
+# 3. Run Kaelum
+python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
+```
+
+**Supported Models:**
+
+- Any Hugging Face model with chat template
+- Qwen, Llama, Mistral, Yi, DeepSeek families
+- Custom fine-tuned models
+
+### ☁️ Cloud APIs
+
+| Provider              | Setup                                | Base URL                                  | Example                                                     |
+| --------------------- | ------------------------------------ | ----------------------------------------- | ----------------------------------------------------------- |
+| **OpenAI**      | Get API key from platform.openai.com | `https://api.openai.com/v1`             | `--model gpt-4 --base-url https://api.openai.com/v1`      |
+| **Anthropic**   | Use with proxy/adapter               | Via proxy                                 | Use OpenAI-compatible proxy                                 |
+| **Together AI** | Get key from together.ai             | `https://api.together.xyz/v1`           | `--model meta-llama/Llama-3-70b-chat-hf`                  |
+| **Fireworks**   | Get key from fireworks.ai            | `https://api.fireworks.ai/inference/v1` | `--model accounts/fireworks/models/llama-v3-70b-instruct` |
+| **Groq**        | Get key from groq.com                | `https://api.groq.com/openai/v1`        | `--model llama3-70b-8192`                                 |
+
+**Example with OpenAI:**
+
+```bash
+export OPENAI_API_KEY="sk-..."
+python run.py --model gpt-4 --base-url https://api.openai.com/v1
+```
+
+### 🏠 Self-Hosted Options
+
+| Option                          | Best For                        | Setup Difficulty |
+| ------------------------------- | ------------------------------- | ---------------- |
+| **Ollama**                | Beginners, Mac/Linux            | ⭐ Easy          |
+| **vLLM**                  | Production, GPU clusters        | ⭐⭐ Moderate    |
+| **LM Studio**             | GUI-based local deployment      | ⭐ Easy          |
+| **llama.cpp**             | CPU inference, low VRAM         | ⭐⭐ Moderate    |
+| **text-generation-webui** | Full-featured UI + API          | ⭐⭐ Moderate    |
+| **LocalAI**               | Docker-based, OpenAI compatible | ⭐⭐ Moderate    |
+
+### 📊 Model Recommendations by Use Case
+
+| Use Case                      | Recommended Model           | Why                            |
+| ----------------------------- | --------------------------- | ------------------------------ |
+| **Development/Testing** | Qwen 2.5 3B                 | Fast, low VRAM, good reasoning |
+| **Math/Logic**          | DeepSeek-R1 7B              | Trained for reasoning tasks    |
+| **Code Generation**     | Qwen 2.5 14B / Llama 3.1 8B | Strong code capabilities       |
+| **General Reasoning**   | Qwen 2.5 7B                 | Best balance of speed/quality  |
+| **Production**          | Qwen 2.5 14B / Mixtral 8x7B | High quality, reliable         |
+| **Research**            | Custom fine-tuned           | Domain-specific optimization   |
+
+---
+
+## Detailed Setup Guide
+
+### Step-by-Step: Ollama + Kaelum
+
+This is the **easiest** way to get started:
+
+```bash
+# Step 1: Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Step 2: Pull a model (choose one)
+ollama pull qwen2.5:3b        # Fastest (4GB VRAM)
+ollama pull qwen2.5:7b        # Better quality (8GB VRAM)
+ollama pull deepseek-r1:7b    # Best reasoning (8GB VRAM)
+
+# Step 3: Clone Kaelum
+git clone https://github.com/ashworks1706/KaelumAI.git
+cd KaelumAI
+
+# Step 4: Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Step 5: Install dependencies
+pip install -r requirements.txt
+
+# Step 6: Run with default settings
+python run.py --model qwen2.5:3b
+
+# Step 7: (Optional) Customize settings
+python run.py \
+    --model qwen2.5:7b \
+    --embedding-model all-mpnet-base-v2 \
+    --temperature 0.8 \
+    --max-tree-depth 7 \
+    --num-simulations 15 \
+    --enable-factual-verification \
+    --debug-verification
+
+# Step 8: See all options
+python run.py --help
+```
+
+### Step-by-Step: vLLM + Kaelum (GPU)
+
+For **production** or **GPU** setups:
+
+```bash
+# Step 1: Install vLLM (requires CUDA)
+pip install vllm
+
+# Step 2: Start vLLM server with a model
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --dtype auto \
+    --port 8000 \
+    --gpu-memory-utilization 0.9
+
+# Step 3: In another terminal, clone and setup Kaelum
 git clone https://github.com/ashworks1706/KaelumAI.git
 cd KaelumAI
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Step 4: Run Kaelum pointing to vLLM
+python run.py \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --base-url http://localhost:8000/v1
+
+# Step 5: For multiple GPUs
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-14B-Instruct \
+    --tensor-parallel-size 2 \
+    --port 8000
 ```
 
-Configure `.env`:
+### Configuration Options
+
+All configuration is now via **command-line arguments** (no `.env` file needed):
 
 ```bash
-cp .env.example .env
-# Edit .env to point to LLM backend and tune settings:
-# LLM_BASE_URL=http://localhost:11434/v1
-# LLM_MODEL=qwen2.5:3b
-# MAX_REFLECTION_ITERATIONS=2
-# USE_SYMBOLIC_VERIFICATION=true
+python run.py --help
 ```
 
-Run:
+**Key Options:**
+
+| Category               | Argument                          | Description              | Default                       |
+| ---------------------- | --------------------------------- | ------------------------ | ----------------------------- |
+| **LLM**          | `--model`                       | Model name               | `qwen2.5:3b`                |
+|                        | `--base-url`                    | API endpoint             | `http://localhost:11434/v1` |
+|                        | `--temperature`                 | Creativity (0.0-2.0)     | `0.7`                       |
+|                        | `--max-tokens`                  | Max response length      | `2048`                      |
+| **Embeddings**   | `--embedding-model`             | Sentence transformer     | `all-MiniLM-L6-v2`          |
+| **Search**       | `--max-tree-depth`              | LATS depth               | Router decides (3-10)         |
+|                        | `--num-simulations`             | LATS simulations         | Router decides (5-25)         |
+|                        | `--parallel`                    | Enable parallel search   | Disabled                      |
+| **Routing**      | `--no-routing`                  | Disable neural router    | Enabled                       |
+|                        | `--worker`                      | Force specific worker    | Auto                          |
+| **Cache**        | `--no-cache`                    | Disable caching          | Enabled                       |
+| **Verification** | `--no-symbolic-verification`    | Disable SymPy            | Enabled                       |
+|                        | `--enable-factual-verification` | Enable fact checks       | Disabled                      |
+| **Reflection**   | `--max-reflection-iterations`   | Self-correction attempts | `2`                         |
+|                        | `--no-active-learning`          | Disable learning         | Enabled                       |
+
+**Examples:**
 
 ```bash
-python run.py
-```
+# High accuracy mode (slower)
+python run.py --max-tree-depth 10 --num-simulations 25
 
-**Docker:**
+# Fast mode (less accurate)
+python run.py --max-tree-depth 3 --num-simulations 5
 
-```bash
-docker-compose up -d
+# Math-only with forced worker
+python run.py --no-routing --worker math
+
+# Debug mode
+python run.py --debug-verification --enable-factual-verification
+
+# Production settings
+python run.py \
+    --model qwen2.5:14b \
+    --parallel \
+    --max-workers 8 \
+    --cache-dir /data/kaelum/cache
 ```
 
 ---
@@ -466,6 +714,136 @@ python -m pytest --cov=core --cov=runtime
 - Typical query latency: 2–5s (uncached); cached queries ~0.001s (1000x faster)
 - Verification: High accuracy for math (SymPy symbolic validation) and Python AST parsing
 - Language support: Python, JavaScript, TypeScript for code verification
+
+---
+
+### Common Issues
+
+
+#### 1. **Out of Memory (OOM) / CUDA out of memory**
+
+**Problem:** Model too large for your GPU/RAM.
+
+**Solutions:**
+
+```bash
+# Use a smaller model
+python run.py --model qwen2.5:3b  # Instead of 7b/14b
+
+# For vLLM - adjust memory utilization
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --gpu-memory-utilization 0.7  # Reduce from 0.9
+
+# Use CPU inference with Ollama (slower but works)
+ollama run qwen2.5:3b
+
+# Enable quantization (if supported)
+ollama run qwen2.5:7b-q4  # 4-bit quantized
+```
+
+#### 2. **Slow inference / Timeout errors**
+
+**Problem:** LLM is taking too long to respond.
+
+**Solutions:**
+
+```bash
+# Reduce LATS search parameters
+python run.py --max-tree-depth 3 --num-simulations 5
+
+# Use smaller, faster model
+python run.py --model qwen2.5:3b
+
+# Disable verification (faster but less accurate)
+python run.py --no-symbolic-verification
+
+# For vLLM - enable tensor parallelism (multi-GPU)
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-14B-Instruct \
+    --tensor-parallel-size 2
+```
+
+#### 3. **SymPy verification always fails**
+
+**Problem:** Math expressions not in SymPy-compatible format.
+
+**Solutions:**
+
+```bash
+# Disable symbolic verification if not needed
+python run.py --no-symbolic-verification
+
+# Check debug output
+python run.py --debug-verification
+```
+
+#### 4. **Cache not working / Always computing fresh**
+
+**Problem:** Cache disabled or similarity threshold too high.
+
+**Solutions:**
+
+```bash
+# Ensure cache is enabled (it is by default)
+python run.py  # Cache enabled
+
+# Check cache directory exists
+ls .kaelum/cache
+
+# Lower similarity threshold (edit code if needed)
+# Default is 0.85, can adjust in TreeCache class
+```
+
+#### 5. **Router always selects wrong worker**
+
+**Problem:** Router needs training data.
+
+**Solutions:**
+
+```bash
+# Force specific worker during testing
+python run.py --worker math
+
+# Disable router and use default
+python run.py --no-routing
+
+# Let router learn - it improves after ~10-20 queries
+# Just keep using it!
+```
+
+### Performance Tuning
+
+**For Maximum Accuracy (slower):**
+
+```bash
+python run.py \
+    --model qwen2.5:14b \
+    --max-tree-depth 10 \
+    --num-simulations 25 \
+    --max-reflection-iterations 5 \
+    --enable-factual-verification
+```
+
+**For Maximum Speed (less accurate):**
+
+```bash
+python run.py \
+    --model qwen2.5:3b \
+    --max-tree-depth 3 \
+    --num-simulations 5 \
+    --max-reflection-iterations 0 \
+    --no-symbolic-verification
+```
+
+**Balanced (recommended):**
+
+```bash
+python run.py \
+    --model qwen2.5:7b \
+    --temperature 0.7
+# Let router decide depth/sims automatically
+```
 
 ## Research & References
 
