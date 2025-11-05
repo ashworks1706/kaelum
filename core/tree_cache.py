@@ -10,6 +10,16 @@ from sentence_transformers import SentenceTransformer
 from .lats import LATS, LATSNode
 
 
+WORKER_THRESHOLDS = {
+    "math": 0.90,
+    "code": 0.87,
+    "logic": 0.88,
+    "factual": 0.80,
+    "creative": 0.75,
+    "analysis": 0.82
+}
+
+
 @dataclass
 class CachedTree:
     query: str
@@ -112,6 +122,7 @@ class TreeCache:
         if not self.cached_trees:
             return None
         
+        threshold = WORKER_THRESHOLDS.get(worker_specialty, 0.85) if worker_specialty else self.similarity_threshold
         query_embedding = self._compute_embedding(query)
         
         best_match = None
@@ -125,7 +136,7 @@ class TreeCache:
             
             similarity = self._cosine_similarity(query_embedding, cached_tree.query_embedding)
             
-            if similarity > best_similarity and similarity >= self.similarity_threshold:
+            if similarity > best_similarity and similarity >= threshold:
                 best_similarity = similarity
                 best_match = cached_tree
         

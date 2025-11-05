@@ -9,6 +9,7 @@ from core.tree_cache import TreeCache
 from core.config import KaelumConfig
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
+from core.reward_model import RewardModel
 
 
 class CodeWorker(WorkerAgent):
@@ -50,22 +51,21 @@ class CodeWorker(WorkerAgent):
         
         def simulate_code_step(node: LATSNode) -> float:
             state = node.state
+            depth = state.get("depth", 0)
             
             if "code" in state:
                 code = state["code"]
                 if code and language == 'python':
-                    if self._validate_python_syntax(code):
-                        return 0.95
-                    return 0.3
+                    syntax_valid = self._validate_python_syntax(code)
+                    has_answer = len(code) > 20
+                    return RewardModel.get_reward("code", state, depth, 
+                                                 has_answer=has_answer, syntax_valid=syntax_valid)
                 elif code and len(code) > 20:
-                    return 0.8
-                return 0.4
+                    return RewardModel.get_reward("code", state, depth, has_answer=True)
+                return RewardModel.get_reward("code", state, depth)
             
-            if len(state.get("code_parts", [])) > 0:
-                return 0.6
-            
-            depth = state.get("depth", 0)
-            return max(0.2, 0.6 - depth * 0.1)
+            has_partial = len(state.get("code_parts", [])) > 0
+            return RewardModel.get_reward("code", state, depth, has_partial=has_partial)
         
         def expand_code_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -138,19 +138,22 @@ class CodeWorker(WorkerAgent):
         if language == 'python' and code:
             syntax_valid = self._validate_python_syntax(code)
         
-        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
-        verification_passed = syntax_valid and confidence > 0.7
+        confidence = RewardModel.compute_confidence(
+            best_node.value if best_node else 0.0,
+            best_node.visits if best_node else 0,
+            tree.root.visits
+        )
         execution_time = time.time() - start_time
         
-        if use_cache and verification_passed:
+        if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value,
-                                 verification_passed, confidence)
+                                 False, confidence)
         
         return WorkerResult(
             answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=verification_passed,
+            verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={

@@ -7,6 +7,7 @@ from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
+from core.reward_model import RewardModel
 from sentence_transformers import SentenceTransformer, util
 
 
@@ -43,19 +44,17 @@ class FactualWorker(WorkerAgent):
         
         def simulate_factual_step(node: LATSNode) -> float:
             state = node.state
+            depth = state.get("depth", 0)
             
+            completion = 0.0
             if "answer" in state:
                 answer = state["answer"]
-                if answer and len(answer) > 50:
-                    return 0.9
-                return 0.4
+                completion = 1.0 if answer and len(answer) > 50 else 0.3
+            else:
+                facts_count = len(state.get("facts_gathered", []))
+                completion = min(0.8, facts_count * 0.15)
             
-            facts_count = len(state.get("facts_gathered", []))
-            if facts_count > 0:
-                return 0.6 + (facts_count * 0.05)
-            
-            depth = state.get("depth", 0)
-            return max(0.2, 0.5 - depth * 0.05)
+            return RewardModel.get_reward("factual", state, depth, completion)
         
         def expand_factual_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -117,11 +116,11 @@ class FactualWorker(WorkerAgent):
             node = node.parent
         
         answer = best_node.state.get("answer", reasoning_steps[-1] if reasoning_steps else "")
-        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
-        verification_passed = confidence > 0.6 and len(answer) > 20
+        confidence = RewardModel.compute_confidence(best_node.value if best_node else 0.0, best_node.visits if best_node else 0, tree.root.visits)
+        
         execution_time = time.time() - start_time
         
-        if use_cache and verification_passed:
+        if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value,
                                  verification_passed, confidence)
         
@@ -129,7 +128,7 @@ class FactualWorker(WorkerAgent):
             answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=verification_passed,
+            verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={

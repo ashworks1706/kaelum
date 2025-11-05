@@ -7,6 +7,7 @@ from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
+from core.reward_model import RewardModel
 
 
 class CreativeWorker(WorkerAgent):
@@ -43,19 +44,17 @@ class CreativeWorker(WorkerAgent):
         
         def simulate_creative_step(node: LATSNode) -> float:
             state = node.state
+            depth = state.get("depth", 0)
             
+            completion = 0.0
             if "content" in state:
                 content = state["content"]
-                if content and len(content) > 100:
-                    return 0.85
-                return 0.4
+                completion = 1.0 if content and len(content) > 100 else 0.3
+            else:
+                parts_count = len(state.get("content_parts", []))
+                completion = min(0.8, parts_count * 0.15)
             
-            parts_count = len(state.get("content_parts", []))
-            if parts_count > 0:
-                return 0.55 + (parts_count * 0.05)
-            
-            depth = state.get("depth", 0)
-            return max(0.3, 0.6 - depth * 0.07)
+            return RewardModel.get_reward("creative", state, depth, completion)
         
         def expand_creative_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -118,11 +117,11 @@ class CreativeWorker(WorkerAgent):
         
         answer = best_node.state.get("content", reasoning_steps[-1] if reasoning_steps else "")
         metrics = self._analyze_creativity(answer, task_type)
-        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
+        confidence = RewardModel.compute_confidence(best_node.value if best_node else 0.0, best_node.visits if best_node else 0, tree.root.visits)
         verification_passed = metrics['coherence'] > 0.6 and len(answer) > 50
         execution_time = time.time() - start_time
         
-        if use_cache and verification_passed:
+        if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value,
                                  verification_passed, confidence)
         
@@ -130,7 +129,7 @@ class CreativeWorker(WorkerAgent):
             answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=verification_passed,
+            verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={

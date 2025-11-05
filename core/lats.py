@@ -128,28 +128,6 @@ class LATS:
                 except Exception as e:
                     pass
 
-    def choose(self, exploit: float = 0.9, *, expand_fn: Optional[callable] = None, simulator: Optional[callable] = None) -> LATSNode:
-        if random.random() < exploit:
-            best = self.best_child()
-            if best:
-                return best
-
-        node = self.select()
-
-        exp = expand_fn or self.expand_fn
-        if exp is None:
-            raise NotImplementedError(
-                "LATS.choose requires an expand function to produce a child state. "
-                "Provide it as LATS(expand_fn=...) or pass expand_fn=... to choose()."
-            )
-
-        child_state = exp(node)
-        child = self.expand(node, child_state)
-
-        reward = self.simulate(child, simulator=simulator)
-        self.backpropagate(child, reward)
-        return child
-
     def to_json(self) -> str:
         return json.dumps(self.root.to_dict(), indent=2)
 

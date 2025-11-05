@@ -10,6 +10,7 @@ from core.reasoning import LLMClient, Message
 from core.sympy_engine import SympyEngine
 from core.lats import LATS, LATSNode
 from core.tree_cache import TreeCache
+from core.reward_model import RewardModel
 
 
 class WorkerSpecialty(Enum):
@@ -128,20 +129,6 @@ class WorkerAgent(ABC):
         return await loop.run_in_executor(
             None, self.solve, query, context, use_cache, max_tree_depth, num_simulations
         )
-    
-    def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        try:
-            from core.reasoning import Message
-            
-            messages = [
-                Message(role="system", content="You are a verification assistant. Check if the answer is correct for the given question."),
-                Message(role="user", content=f"Question: {query}\nAnswer: {answer}\n\nIs this answer correct? Reply with just 'yes' or 'no'.")
-            ]
-            
-            response = self.llm_client.generate(messages)
-            return "yes" in response.lower()
-        except:
-            return True
 
 
 class MathWorker(WorkerAgent):
@@ -175,20 +162,18 @@ class MathWorker(WorkerAgent):
         
         def simulate_math_step(node: LATSNode) -> float:
             state = node.state
+            depth = state.get("depth", 0)
             
             if "answer" in state:
                 try:
                     answer = state["answer"]
-                    if answer and len(str(answer)) > 0:
-                        return 0.9
+                    has_answer = answer and len(str(answer)) > 0
+                    return RewardModel.get_reward("math", state, depth, has_answer=has_answer)
                 except:
-                    return 0.3
+                    return RewardModel.get_reward("math", state, depth)
             
-            if state.get("partial_solution"):
-                return 0.5
-            
-            depth = state.get("depth", 0)
-            return max(0.1, 0.5 - depth * 0.05)
+            has_partial = bool(state.get("partial_solution"))
+            return RewardModel.get_reward("math", state, depth, has_partial=has_partial)
         
         def expand_math_step(parent_node: LATSNode) -> Dict[str, Any]:
             parent_state = parent_node.state
@@ -253,28 +238,28 @@ class MathWorker(WorkerAgent):
         if not answer and reasoning_steps:
             answer = reasoning_steps[-1]
         
-        if best_node.visits > 0:
-            confidence = best_node.value / best_node.visits
-        else:
-            confidence = 0.5
+        confidence = RewardModel.compute_confidence(
+            best_node.value if best_node else 0.0,
+            best_node.visits if best_node else 0,
+            tree.root.visits
+        )
         
-        verification_passed = confidence > 0.7
         execution_time = time.time() - start_time
         
-        if use_cache and verification_passed:
+        if use_cache:
             self.tree_cache.store(query, tree, self.get_specialty().value, 
-                                 verification_passed, confidence)
+                                 True, confidence)
         
         return WorkerResult(
             answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=verification_passed,
+            verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={
                 "num_simulations": num_simulations,
-                "tree_depth": best_node.state.get("depth", 0),
+                "tree_depth": best_node.state.get("depth", 0) if best_node else 0,
                 "tree_visits": tree.root.visits,
                 "cache_hit": False
             }
