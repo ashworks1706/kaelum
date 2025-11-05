@@ -64,6 +64,8 @@ def setup_logging(verbose: bool = False):
     logging.getLogger("kaelum.worker").setLevel(logging.INFO)
     logging.getLogger("kaelum.verification").setLevel(logging.INFO)  # Show verification outcomes
     logging.getLogger("kaelum.reflection").setLevel(logging.INFO)  # Show self-correction
+    logging.getLogger("kaelum.cache").setLevel(logging.INFO)  # Show cache hits/misses
+    logging.getLogger("kaelum.cache_validator").setLevel(logging.INFO)  # Show LLM validation
     logging.getLogger("kaelum.reward").setLevel(logging.DEBUG if verbose else logging.WARNING)  # Domain scoring (verbose only)
 
 def main():

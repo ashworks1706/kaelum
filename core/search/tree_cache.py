@@ -133,6 +133,9 @@ class TreeCache:
         return tree_id
     
     def get(self, query: str, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
+        import logging
+        logger = logging.getLogger("kaelum.cache")
+        
         if not self.cached_trees:
             return None
         
@@ -153,7 +156,13 @@ class TreeCache:
                 best_match = cached_tree
         
         if best_match is None:
+            logger.debug(f"CACHE: No similarity match found (threshold={similarity_threshold})")
             return None
+        
+        logger.info(f"\nCACHE: Similarity match found!")
+        logger.info(f"  Similarity: {best_similarity:.3f}")
+        logger.info(f"  Cached query: {best_match.query[:100]}...")
+        logger.info(f"  Worker: {best_match.worker_specialty}")
         
         with open(best_match.tree_path, 'r') as f:
             cached_data = json.load(f)
@@ -167,8 +176,10 @@ class TreeCache:
         )
         
         if not validation.get('valid', False):
+            logger.info(f"CACHE: ✗ MISS (LLM validation rejected)")
             return None
         
+        logger.info(f"CACHE: ✓ HIT (LLM validated)")
         return cached_data
     
     def get_stats(self) -> Dict[str, Any]:
