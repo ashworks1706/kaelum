@@ -193,12 +193,12 @@ def infer(query):
             max_tree_depth=decision.max_tree_depth,  # Router-predicted
             num_simulations=decision.num_simulations  # Router-predicted
         )
-    
+  
         # 3. Domain-specific verification
         verification = verification_engine.verify(
             query, result.reasoning_steps, result.answer
         )
-    
+  
         if verification.passed:
             # 6. Train router on successful outcome
             router.record_outcome(decision, {
@@ -209,7 +209,7 @@ def infer(query):
             })
             # Triggers gradient descent every 32 outcomes
             return result
-    
+  
         # 4. Reflection improves reasoning
         if iteration < max_iterations:
             improved_steps = reflection_engine.enhance_reasoning(
@@ -498,6 +498,7 @@ Store in global tree cache:
 Kaelum has undergone a **major refactoring** to eliminate naive approaches and implement production-grade machine learning throughout:
 
 ### **1. Upgraded Embedding Model**
+
 - **Before:** `all-MiniLM-L6-v2` (384 dimensions)
 - **After:** `all-mpnet-base-v2` (768 dimensions)
 - **Impact:** 20-30% better semantic understanding for routing and caching
@@ -505,51 +506,61 @@ Kaelum has undergone a **major refactoring** to eliminate naive approaches and i
 ### **2. Replaced Regex with ML-Based Detection**
 
 #### Repetition Detection (`core/repetition_detector.py`)
+
 - **Before:** Hardcoded regex patterns for stylistic repetition (e.g., `(very\s+){2,}`)
 - **After:** Semantic clustering with embeddings + TF-IDF adaptive stop word filtering
 - **Result:** Detects paraphrased repetition, adapts to technical domains
 
 #### Conclusion Detection (`core/conclusion_detector.py`)
+
 - **Before:** Simple keyword matching (`therefore`, `thus`, `hence`)
 - **After:** Contrastive learning with positive/negative exemplars + zero-shot classification
 - **Result:** Context-aware negation handling ("This does not therefore mean...")
 
 #### Language Detection (`core/language_detector.py`)
+
 - **Before:** Regex patterns only (false positives common)
 - **After:** Pattern scoring with exclusion patterns + unique/repeated distinction
 - **Result:** Eliminates false matches (e.g., Python patterns in Java comments)
 
 ### **3. Dynamic Adaptive Thresholds**
+
 - **Before:** Fixed thresholds (0.60, 0.55) across all queries
 - **After:** `base_threshold + adjustment` based on query characteristics
-- **Implementation:** 
+- **Implementation:**
   - Word count adjustments (longer queries → higher threshold)
   - Performance history tracking (success rate → threshold tuning)
   - Domain-specific calibration
 - **Result:** 15-25% better classification accuracy
 
 ### **4. TF-IDF Adaptive Filtering**
+
 - **Before:** Hardcoded stop word lists (lost context in technical domains)
 - **After:** TF-IDF vectorization with corpus-specific weighting
 - **Impact:** Preserves domain-specific terms (`async`, `malloc`, `lambda`)
 
 ### **5. Enhanced Syntax Validation**
+
 - **Before:** Simple bracket matching (failed on triple-quoted strings)
 - **After:** State machine tracking string delimiters
 - **Result:** 99%+ accuracy on multi-line Python/JavaScript strings
 
 ### **6. Semantic Pattern Matching**
+
 - **Before:** N-gram exact matching for phrase repetition
 - **After:** Embedding-based clustering (similarity > 0.9)
 - **Result:** Detects semantic repetition even with different words
 
 ### **7. Performance Tracking**
+
 All classifiers now track success rates and continuously improve:
+
 - `update_performance(success_rate)` → adjusts future thresholds
 - Router trains on every outcome → learns from mistakes
 - Tree cache grows with every successful query
 
 ### **Technical Details:**
+
 ```python
 # Old approach (naive):
 if re.search(r"(very\s+){2,}", text):
@@ -563,18 +574,20 @@ if similarity > 0.9:
 ```
 
 ### **Dependencies Added:**
+
 - `scikit-learn>=1.3.0` - TF-IDF vectorization, clustering
 - `sentence-transformers>=2.2.0` - Upgraded embedding model
 - `transformers>=4.30.0` - Zero-shot classification, NLI
 
 ### **Migration Impact:**
+
 - ✅ **No training required** - Models download automatically
 - ✅ **Backward compatible** - Same API, better internals
 - ✅ **Zero configuration** - Works out-of-the-box
 - ✅ **Faster on second run** - Models cached locally
 
-**Total Lines Changed:** 800+ across 12 core modules  
-**Compilation Status:** ✓ All files compile successfully  
+**Total Lines Changed:** 800+ across 12 core modules
+**Compilation Status:** ✓ All files compile successfully
 **Testing:** ✓ Manual verification on diverse query types
 
 ---
@@ -638,34 +651,28 @@ python -m pytest --cov=core --cov=runtime
 - 6 expert workers (Math, Logic, Code, Factual, Creative, Analysis)
 - True MCTS (select/expand/simulate/backprop) in all workers
 - Domain-specific verification for all 6 worker types
-- Global shared tree cache with semantic search
+- Global shared tree cache with semantic search (768-dim embeddings)
 - Reflection engine for self-correction
 - Configuration system with .env support
 - Worker system prompts fully configurable
+- ML-based detection (repetition, conclusions, language)
+- Dynamic adaptive thresholds (context-aware)
+- TF-IDF adaptive stop word filtering
+- Semantic clustering for pattern detection
+- Contrastive learning for classification
+- Performance tracking and continuous improvement
+- Fine-tuning infrastructure (`finetune_setup.py`)
+
 
 ### 🚧 **Not Yet Implemented:**
 
-- [ ] **Multi-turn**: Conversation history and context management
-- [ ] **Parallel LATS**: Distributed tree search across multiple processes
-- [ ] **Fine-tuning**: Domain-specific model weights for workers
-- [ ] **RAG**: External knowledge retrieval for factual grounding
-- [ ] **Streaming**: Real-time token streaming during generation
-- [ ] **Cost tracking**: Accurate token counting and pricing
-- [ ] **Web UI**: Interactive interface for query execution
-- [ ] **Benchmarking**: GSM8K, ToolBench, HumanEval test suites
+- [ ] **Parallel LATS**: Distributed tree search across multiple processes/GPUs
+- [ ] **Multi-turn conversations**: Conversation history and context management
+- [ ] **Advanced metrics**: Token counting, cost tracking, detailed analytics
+- [ ] **Ensemble methods**: Multiple model voting/consensus
+- [ ] **Active learning**: Intelligent query selection for fine-tuning
+- [ ] **Web UI**: Interactive dashboard for query execution and monitoring
 
----
-
-## 📝 Citation
-
-```bibtex
-@software{kaelum2025,
-  title={Kaelum: Multi-Agent Reasoning System},
-  author={Ash Works},
-  year={2025},
-  url={https://github.com/ashworks1706/KaelumAI}
-}
-```
 
 ---
 
@@ -674,5 +681,3 @@ python -m pytest --cov=core --cov=runtime
 MIT License - see LICENSE file for details
 
 ---
-
-**Built with ❤️ for production-grade reasoning systems**
