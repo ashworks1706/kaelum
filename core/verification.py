@@ -1,7 +1,9 @@
 import re
+import ast
 from typing import List, Optional, Tuple
 import sympy
 from .sympy_engine import SympyEngine
+from sentence_transformers import SentenceTransformer, util
 
 
 class SymbolicVerifier:
@@ -134,8 +136,8 @@ class VerificationEngine:
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
-        self.factual_verifier = None
         self.debug = debug
+        self.semantic_encoder = SentenceTransformer('all-MiniLM-L6-v2')
     
     def _log_debug(self, message: str):
         if self.debug:
@@ -202,17 +204,49 @@ class VerificationEngine:
         return errors, details
     
     def verify(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
-        # Run symbolic/factual verification on reasoning steps
+        worker_type = self._infer_worker_type(query, reasoning_steps)
+        
+        if worker_type == "math":
+            return self._verify_math(reasoning_steps)
+        elif worker_type == "code":
+            return self._verify_code(query, answer, reasoning_steps)
+        elif worker_type == "logic":
+            return self._verify_logic(query, reasoning_steps, answer)
+        elif worker_type == "factual":
+            return self._verify_factual(query, answer, reasoning_steps)
+        elif worker_type == "creative":
+            return self._verify_creative(answer, reasoning_steps)
+        else:
+            return self._verify_analysis(query, answer, reasoning_steps)
+    
+    def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
+        combined_text = query + " " + " ".join(reasoning_steps[:3])
+        
+        math_indicators = sum(c in combined_text for c in '+-*/=^√∫∂∑')
+        code_indicators = sum(c in combined_text for c in '{}[]();')
+        logic_indicators = combined_text.lower().count('therefore') + combined_text.lower().count('thus')
+        
+        if math_indicators > 3:
+            return "math"
+        elif code_indicators > 5:
+            return "code"
+        elif logic_indicators > 0:
+            return "logic"
+        elif any(kw in query.lower() for kw in ['story', 'poem', 'create', 'write', 'brainstorm']):
+            return "creative"
+        elif any(kw in query.lower() for kw in ['what', 'when', 'where', 'who', 'define', 'explain']):
+            return "factual"
+        else:
+            return "analysis"
+    
+    def _verify_math(self, reasoning_steps: List[str]) -> dict:
         errors, details = self.verify_trace(reasoning_steps)
         
-        # Calculate confidence based on verification results
         if details["total_steps"] == 0:
-            confidence = 0.5  # No steps to verify, uncertain
+            confidence = 0.5
         else:
-            # Confidence based on percentage of steps that passed verification
             confidence = details["verified_steps"] / details["total_steps"]
         
-        # Overall pass/fail based on whether any errors found
         passed = len(errors) == 0
         
         return {
@@ -220,4 +254,156 @@ class VerificationEngine:
             "confidence": confidence,
             "issues": errors,
             "details": details
+        }
+    
+    def _verify_code(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
+        issues = []
+        
+        code_block_pattern = r'```(?:\w+)?\n(.*?)```'
+        matches = re.findall(code_block_pattern, answer, re.DOTALL)
+        code = matches[0].strip() if matches else None
+        
+        if not code:
+            issues.append("No code block found in answer")
+            return {
+                "passed": False,
+                "confidence": 0.3,
+                "issues": issues,
+                "details": {"syntax_valid": False}
+            }
+        
+        if 'python' in query.lower() or 'def ' in code or 'import ' in code:
+            try:
+                ast.parse(code)
+                syntax_valid = True
+            except SyntaxError as e:
+                syntax_valid = False
+                issues.append(f"Python syntax error: {str(e)}")
+        else:
+            syntax_valid = True
+        
+        if len(code) < 10:
+            issues.append("Code is too short")
+        
+        confidence = 0.8 if syntax_valid else 0.3
+        passed = syntax_valid and len(issues) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": issues,
+            "details": {"syntax_valid": syntax_valid, "code_length": len(code)}
+        }
+    
+    def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
+        issues = []
+        
+        if len(reasoning_steps) < 2:
+            issues.append("Insufficient logical reasoning steps")
+        
+        conclusion_keywords = ['therefore', 'thus', 'conclude', 'hence']
+        has_conclusion = any(kw in step.lower() for step in reasoning_steps for kw in conclusion_keywords)
+        
+        if not has_conclusion:
+            issues.append("No clear logical conclusion")
+        
+        query_embedding = self.semantic_encoder.encode(query, convert_to_tensor=True)
+        answer_embedding = self.semantic_encoder.encode(answer, convert_to_tensor=True)
+        relevance = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
+        
+        if relevance < 0.3:
+            issues.append("Answer not relevant to query")
+        
+        confidence = 0.7 if has_conclusion else 0.5
+        confidence *= (relevance + 0.5) / 1.5
+        passed = len(issues) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": issues,
+            "details": {"has_conclusion": has_conclusion, "relevance": relevance}
+        }
+    
+    def _verify_factual(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
+        issues = []
+        
+        if len(answer) < 20:
+            issues.append("Answer too short for factual query")
+        
+        query_embedding = self.semantic_encoder.encode(query, convert_to_tensor=True)
+        answer_embedding = self.semantic_encoder.encode(answer, convert_to_tensor=True)
+        relevance = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
+        
+        if relevance < 0.35:
+            issues.append("Answer not semantically relevant to query")
+        
+        has_specifics = bool(re.search(r'\d+', answer)) or len(answer) > 100
+        if not has_specifics:
+            issues.append("Answer lacks specific details")
+        
+        confidence = relevance * (0.9 if has_specifics else 0.7)
+        passed = len(issues) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": issues,
+            "details": {"relevance": relevance, "has_specifics": has_specifics}
+        }
+    
+    def _verify_creative(self, answer: str, reasoning_steps: List[str]) -> dict:
+        issues = []
+        
+        if len(answer) < 50:
+            issues.append("Creative content too short")
+        
+        words = answer.split()
+        if len(words) < 20:
+            issues.append("Insufficient word count")
+        
+        unique_words = len(set(w.lower() for w in words))
+        diversity = unique_words / max(len(words), 1)
+        
+        if diversity < 0.4:
+            issues.append("Low vocabulary diversity")
+        
+        has_structure = '.' in answer or '\n' in answer or '!' in answer or '?' in answer
+        if not has_structure:
+            issues.append("Lacks structure (no punctuation or line breaks)")
+        
+        confidence = diversity * (0.9 if has_structure else 0.7)
+        passed = len(issues) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": issues,
+            "details": {"diversity": diversity, "has_structure": has_structure, "word_count": len(words)}
+        }
+    
+    def _verify_analysis(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
+        issues = []
+        
+        if len(reasoning_steps) < 2:
+            issues.append("Insufficient analytical reasoning")
+        
+        if len(answer) < 30:
+            issues.append("Analysis too brief")
+        
+        query_embedding = self.semantic_encoder.encode(query, convert_to_tensor=True)
+        answer_embedding = self.semantic_encoder.encode(answer, convert_to_tensor=True)
+        relevance = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
+        
+        if relevance < 0.3:
+            issues.append("Analysis not relevant to query")
+        
+        confidence = relevance * 0.9 if len(reasoning_steps) >= 2 else 0.5
+        passed = len(issues) == 0
+        
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": issues,
+            "details": {"relevance": relevance, "step_count": len(reasoning_steps)}
         }

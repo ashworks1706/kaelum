@@ -425,6 +425,7 @@ def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = N
     from core.code_worker import CodeWorker
     from core.factual_worker import FactualWorker
     from core.creative_worker import CreativeWorker
+    from core.analysis_worker import AnalysisWorker
     
     workers = {
         WorkerSpecialty.MATH: MathWorker,
@@ -432,6 +433,7 @@ def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = N
         WorkerSpecialty.CODE: CodeWorker,
         WorkerSpecialty.FACTUAL: FactualWorker,
         WorkerSpecialty.CREATIVE: CreativeWorker,
+        WorkerSpecialty.ANALYSIS: AnalysisWorker,
     }
     
     worker_class = workers.get(specialty)

@@ -1,14 +1,14 @@
 
 import re
 import ast
-import asyncio
 import time
 from typing import Optional, Dict, List, Any
 
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.tree_cache import TreeCache
 from core.config import KaelumConfig
-from core.reasoning import LLMClient, Message
+from core.reasoning import Message
+from core.lats import LATS, LATSNode
 
 
 class CodeWorker(WorkerAgent):
@@ -26,61 +26,147 @@ class CodeWorker(WorkerAgent):
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return asyncio.run(self._solve_async(query, context))
-    
-    async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return await self._solve_async(query, context)
-    
-    async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
         start_time = time.time()
-        reasoning_steps = []
         
-        # Detect language
+        if use_cache:
+            cached_result = self._check_cache(query)
+            if cached_result:
+                return cached_result
+        
         language = self._detect_language(query)
-        reasoning_steps.append(f"Detected language: {language or 'unspecified'}")
-        
-        # Determine task type
         task_type = self._classify_task(query)
-        reasoning_steps.append(f"Task type: {task_type}")
         
-        # Generate specialized prompt
-        prompt = self._build_prompt(query, language, task_type, context)
-        reasoning_steps.append("Built specialized code generation prompt")
+        root_state = {
+            "query": query,
+            "step": f"Analyzing {task_type} task for {language or 'unspecified'} language",
+            "depth": 0,
+            "language": language,
+            "task_type": task_type,
+            "code_parts": []
+        }
         
-        # Generate code
-        messages = [Message(role="user", content=prompt)]
-        response = self.llm_client.generate(messages)
-        reasoning_steps.append("Generated code solution")
+        def simulate_code_step(node: LATSNode) -> float:
+            state = node.state
+            
+            if "code" in state:
+                code = state["code"]
+                if code and language == 'python':
+                    if self._validate_python_syntax(code):
+                        return 0.95
+                    return 0.3
+                elif code and len(code) > 20:
+                    return 0.8
+                return 0.4
+            
+            if len(state.get("code_parts", [])) > 0:
+                return 0.6
+            
+            depth = state.get("depth", 0)
+            return max(0.2, 0.6 - depth * 0.1)
         
-        # Extract code from response
-        code = self._extract_code(response)
+        def expand_code_step(parent_node: LATSNode) -> Dict[str, Any]:
+            parent_state = parent_node.state
+            depth = parent_state.get("depth", 0)
+            
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
+            
+            prompt = self._build_prompt(query, language, task_type, context)
+            if history:
+                prompt += "\n\nPrevious steps:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
+                prompt += "\n\nWhat is the next implementation step?"
+            
+            try:
+                messages = [
+                    Message(role="system", content=self.get_system_prompt()),
+                    Message(role="user", content=prompt)
+                ]
+                response = self.llm_client.generate(messages)
+                next_step = response.strip()
+                
+                code = self._extract_code(next_step)
+                has_code = code is not None and len(code) > 10
+                is_final = depth >= max_tree_depth - 1 or has_code
+                
+                return {
+                    "query": query,
+                    "step": next_step,
+                    "depth": depth + 1,
+                    "language": language,
+                    "task_type": task_type,
+                    "code_parts": parent_state.get("code_parts", []) + ([next_step] if not is_final else []),
+                    "code": code if is_final else None
+                }
+            except:
+                return {
+                    "query": query,
+                    "step": f"Implementation step {depth + 1}",
+                    "depth": depth + 1,
+                    "language": language,
+                    "task_type": task_type,
+                    "code_parts": parent_state.get("code_parts", [])
+                }
         
-        # Validate syntax if Python
+        tree = LATS(root_state, simulator=simulate_code_step, expand_fn=expand_code_step)
+        
+        for _ in range(num_simulations):
+            node = tree.select()
+            if node.state.get("depth", 0) >= max_tree_depth:
+                continue
+            child_state = expand_code_step(node)
+            child = tree.expand(node, child_state)
+            reward = simulate_code_step(child)
+            tree.backpropagate(child, reward)
+        
+        best_node = tree.best_child()
+        if best_node is None:
+            best_node = tree.root
+        
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if node.state.get("step") and node != tree.root:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        code = best_node.state.get("code")
+        if not code and reasoning_steps:
+            code = self._extract_code(reasoning_steps[-1])
+        
+        answer = reasoning_steps[-1] if reasoning_steps else ""
         syntax_valid = True
         if language == 'python' and code:
             syntax_valid = self._validate_python_syntax(code)
-            reasoning_steps.append(f"Python syntax validation: {'passed' if syntax_valid else 'failed'}")
         
-        # Calculate confidence
-        confidence = self._calculate_confidence(
-            code, syntax_valid, task_type, language
-        )
-        
+        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
+        verification_passed = syntax_valid and confidence > 0.7
         execution_time = time.time() - start_time
         
+        if use_cache and verification_passed:
+            self.tree_cache.store(query, tree, self.get_specialty().value,
+                                 verification_passed, confidence)
+        
         return WorkerResult(
-            answer=response,
+            answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=syntax_valid,
-            specialty=WorkerSpecialty.CODE,
+            verification_passed=verification_passed,
+            specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={
                 'language': language,
                 'task_type': task_type,
-                'code_extracted': code is not None,
-                'syntax_valid': syntax_valid
+                'syntax_valid': syntax_valid,
+                'num_simulations': num_simulations,
+                'tree_depth': best_node.state.get("depth", 0),
+                'cache_hit': False
             }
         )
     
@@ -249,25 +335,3 @@ class CodeWorker(WorkerAgent):
             confidence += 0.05  # More straightforward
         
         return min(max(confidence, 0.0), 1.0)
-    
-    async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        # Extract code
-        code = self._extract_code(answer)
-        if not code:
-            return False
-        
-        # Validate Python syntax
-        language = self._detect_language(query)
-        if language == 'python':
-            return self._validate_python_syntax(code)
-        
-        # For other languages, basic checks
-        if len(code) < 10:  # Too short
-            return False
-        
-        # Check for common error indicators
-        error_indicators = ['error', 'exception', 'undefined', 'null pointer']
-        if any(indicator in answer.lower() for indicator in error_indicators):
-            return False
-        
-        return True

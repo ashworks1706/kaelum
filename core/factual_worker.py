@@ -1,4 +1,3 @@
-import asyncio
 import time
 import re
 from typing import Dict, Any, Optional, List
@@ -6,12 +5,15 @@ from typing import Dict, Any, Optional, List
 from core.config import KaelumConfig
 from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from core.reasoning import LLMClient, Message
+from core.reasoning import Message
+from core.lats import LATS, LATSNode
+from sentence_transformers import SentenceTransformer, util
 
 
 class FactualWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
+        self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
@@ -19,53 +21,134 @@ class FactualWorker(WorkerAgent):
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return asyncio.run(self._solve_async(query, context))
-    
-    async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return await self._solve_async(query, context)
-    
-    async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
         start_time = time.time()
-        reasoning_steps = []
+        
+        if use_cache:
+            cached_result = self._check_cache(query)
+            if cached_result:
+                return cached_result
         
         query_type = self._classify_factual_query(query)
-        reasoning_steps.append(f"Query type: {query_type}")
         
-        prompt = self._build_prompt(query, query_type, None)
-        reasoning_steps.append("Built factual query prompt")
+        root_state = {
+            "query": query,
+            "step": f"Analyzing {query_type} query",
+            "depth": 0,
+            "query_type": query_type,
+            "facts_gathered": []
+        }
         
-        messages = [Message(role="user", content=prompt)]
-        response = self.llm_client.generate(messages)
-        reasoning_steps.append("Generated factual answer")
+        def simulate_factual_step(node: LATSNode) -> float:
+            state = node.state
+            
+            if "answer" in state:
+                answer = state["answer"]
+                if answer and len(answer) > 50:
+                    return 0.9
+                return 0.4
+            
+            facts_count = len(state.get("facts_gathered", []))
+            if facts_count > 0:
+                return 0.6 + (facts_count * 0.05)
+            
+            depth = state.get("depth", 0)
+            return max(0.2, 0.5 - depth * 0.05)
         
-        sources = self._extract_sources(response, None)
+        def expand_factual_step(parent_node: LATSNode) -> Dict[str, Any]:
+            parent_state = parent_node.state
+            depth = parent_state.get("depth", 0)
+            
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
+            
+            prompt = self._build_prompt(query, query_type, None)
+            if history:
+                prompt += "\n\nFacts gathered so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
+                prompt += "\n\nProvide additional relevant information or conclude."
+            
+            try:
+                messages = [
+                    Message(role="system", content=self.get_system_prompt()),
+                    Message(role="user", content=prompt)
+                ]
+                response = self.llm_client.generate(messages)
+                next_step = response.strip()
+                
+                has_conclusion = any(next_step.lower().startswith(kw) for kw in ['therefore', 'in conclusion', 'to summarize'])
+                is_final = depth >= max_tree_depth - 1 or has_conclusion or len(next_step) > 200
+                
+                return {
+                    "query": query,
+                    "step": next_step,
+                    "depth": depth + 1,
+                    "query_type": query_type,
+                    "facts_gathered": parent_state.get("facts_gathered", []) + ([next_step] if not is_final else []),
+                    "answer": next_step if is_final else None
+                }
+            except:
+                return {
+                    "query": query,
+                    "step": f"Gathering fact {depth + 1}",
+                    "depth": depth + 1,
+                    "query_type": query_type,
+                    "facts_gathered": parent_state.get("facts_gathered", [])
+                }
         
-        confidence = self._calculate_confidence(
-            query_type, None, sources, response
-        )
+        tree = LATS(root_state, simulator=simulate_factual_step, expand_fn=expand_factual_step)
         
+        for _ in range(num_simulations):
+            node = tree.select()
+            if node.state.get("depth", 0) >= max_tree_depth:
+                continue
+            child_state = expand_factual_step(node)
+            child = tree.expand(node, child_state)
+            reward = simulate_factual_step(child)
+            tree.backpropagate(child, reward)
+        
+        best_node = tree.best_child()
+        if best_node is None:
+            best_node = tree.root
+        
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if node.state.get("step") and node != tree.root:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        answer = best_node.state.get("answer", reasoning_steps[-1] if reasoning_steps else "")
+        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
+        verification_passed = confidence > 0.6 and len(answer) > 20
         execution_time = time.time() - start_time
         
+        if use_cache and verification_passed:
+            self.tree_cache.store(query, tree, self.get_specialty().value,
+                                 verification_passed, confidence)
+        
         return WorkerResult(
-            answer=response,
+            answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=True,
-            specialty=WorkerSpecialty.FACTUAL,
+            verification_passed=verification_passed,
+            specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={
                 'query_type': query_type,
-                'sources': sources
+                'num_simulations': num_simulations,
+                'tree_depth': best_node.state.get("depth", 0),
+                'cache_hit': False
             }
         )
     
     def _classify_factual_query(self, query: str) -> str:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_type_encoder'):
-            self._type_encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
+        if not hasattr(self, '_type_embeddings'):
             type_exemplars = {
                 'definition': "What is photosynthesis? Define machine learning.",
                 'historical': "When did the Renaissance begin? What year did World War II end?",
@@ -76,12 +159,12 @@ class FactualWorker(WorkerAgent):
             }
             
             self._type_names = list(type_exemplars.keys())
-            self._type_embeddings = self._type_encoder.encode(
+            self._type_embeddings = self._encoder.encode(
                 list(type_exemplars.values()), 
                 convert_to_tensor=True
             )
         
-        query_embedding = self._type_encoder.encode(query, convert_to_tensor=True)
+        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
         similarities = util.cos_sim(query_embedding, self._type_embeddings)[0]
         max_idx = int(similarities.argmax())
         
@@ -112,79 +195,3 @@ class FactualWorker(WorkerAgent):
         prompt_parts.append("\nAnswer:")
         
         return "\n".join(prompt_parts)
-    
-    def _extract_sources(
-        self,
-        response: str,
-        retrieved_context: Optional[List[str]]
-    ) -> List[str]:
-        sources = []
-        
-        # Look for source citations like [Source 1], [1], (Source 1), etc.
-        source_patterns = [
-            r'\[Source\s+(\d+)\]',
-            r'\[(\d+)\]',
-            r'\(Source\s+(\d+)\)',
-        ]
-        
-        for pattern in source_patterns:
-            matches = re.findall(pattern, response)
-            for match in matches:
-                source_num = int(match)
-                if retrieved_context and 0 < source_num <= len(retrieved_context):
-                    if f"Source {source_num}" not in sources:
-                        sources.append(f"Source {source_num}")
-        
-        return sources
-    
-    def _calculate_confidence(
-        self,
-        query_type: str,
-        retrieved_context: Optional[List[str]],
-        sources: List[str],
-        response: str
-    ) -> float:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not hasattr(self, '_conf_encoder'):
-            self._conf_encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        if not response or len(response) < 20:
-            return 0.3
-        
-        words = response.split()
-        if len(words) < 5:
-            return 0.4
-        
-        response_parts = response.split('.')[:3]
-        if len(response_parts) < 2:
-            return 0.5
-        
-        has_numbers = bool(re.search(r'\d+', response))
-        has_specifics = len(response) > 100
-        
-        base_confidence = 0.6
-        if has_numbers:
-            base_confidence += 0.1
-        if has_specifics:
-            base_confidence += 0.1
-        if len(sources) > 0:
-            base_confidence += 0.1
-        
-        return min(base_confidence, 0.95)
-    
-    async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        from sentence_transformers import SentenceTransformer, util
-        
-        if not answer or len(answer.strip()) < 10:
-            return False
-        
-        if not hasattr(self, '_verif_encoder'):
-            self._verif_encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        query_embedding = self._verif_encoder.encode(query, convert_to_tensor=True)
-        answer_embedding = self._verif_encoder.encode(answer, convert_to_tensor=True)
-        
-        similarity = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
-        
-        return similarity > 0.3

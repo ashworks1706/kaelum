@@ -9,6 +9,7 @@ from enum import Enum
 
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("kaelum.router")
@@ -166,6 +167,8 @@ class Router:
         
         self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
         self.policy_network = PolicyNetwork().to(device)
+        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=0.001)
+        self.training_buffer = []
         
         if model_path and Path(model_path).exists():
             self._load_model(model_path)
@@ -240,8 +243,65 @@ class Router:
         
         self.outcomes.append(outcome)
         
+        features = self._extract_features(result.get("query", ""))
+        worker_to_idx = {v: k for k, v in self.idx_to_worker.items()}
+        worker_idx = worker_to_idx.get(decision.worker_specialty, 0)
+        
+        reward = 1.0 if result.get("verification_passed", False) else 0.0
+        reward *= result.get("confidence", 0.5)
+        
+        self.training_buffer.append({
+            "features": features,
+            "worker_idx": worker_idx,
+            "reward": reward,
+            "depth": decision.max_tree_depth,
+            "sims": decision.num_simulations,
+            "use_cache": decision.use_tree_cache
+        })
+        
+        if len(self.training_buffer) >= 32:
+            self._train_step()
+            self.training_buffer = []
+        
         if len(self.outcomes) % 10 == 0:
             self._save_training_data()
+    
+    def _train_step(self):
+        if len(self.training_buffer) < 8:
+            return
+        
+        self.policy_network.train()
+        
+        features_list = [item["features"].to_tensor() for item in self.training_buffer]
+        features_batch = torch.stack(features_list).to(self.device)
+        
+        worker_targets = torch.tensor([item["worker_idx"] for item in self.training_buffer], dtype=torch.long).to(self.device)
+        rewards = torch.tensor([item["reward"] for item in self.training_buffer], dtype=torch.float32).to(self.device)
+        
+        outputs = self.policy_network(features_batch)
+        
+        worker_loss = nn.CrossEntropyLoss()(outputs['worker_logits'], worker_targets)
+        worker_loss = worker_loss * rewards.mean()
+        
+        depth_targets = torch.tensor([item["depth"] for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        depth_loss = nn.MSELoss()(outputs['depth_logits'], depth_targets)
+        
+        sims_targets = torch.tensor([item["sims"] for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        sims_loss = nn.MSELoss()(outputs['sims_logits'], sims_targets)
+        
+        cache_targets = torch.tensor([float(item["use_cache"]) for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        cache_loss = nn.BCEWithLogitsLoss()(outputs['cache_logits'], cache_targets)
+        
+        total_loss = worker_loss + 0.1 * depth_loss + 0.1 * sims_loss + 0.05 * cache_loss
+        
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
+        self.optimizer.step()
+        
+        if len(self.outcomes) % 100 == 0:
+            self.save_model()
+            logger.info(f"Router trained on {len(self.outcomes)} outcomes. Loss: {total_loss.item():.4f}")
     
     def _extract_features(self, query: str, context: Optional[Dict] = None) -> NeuralRoutingFeatures:
         embedding = self.encoder.encode(query, convert_to_numpy=True)
@@ -308,10 +368,13 @@ class Router:
     def _load_model(self, path: str):
         checkpoint = torch.load(path, map_location=self.device)
         self.policy_network.load_state_dict(checkpoint["model_state_dict"])
+        if "optimizer_state_dict" in checkpoint:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     
     def save_model(self):
         torch.save({
             "model_state_dict": self.policy_network.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
             "input_dim": 398,
             "hidden_dim": 256,
         }, self.model_file)

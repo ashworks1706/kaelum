@@ -1,4 +1,3 @@
-import asyncio
 import time
 import re
 from typing import Dict, Any, Optional, List
@@ -6,7 +5,8 @@ from typing import Dict, Any, Optional, List
 from core.config import KaelumConfig
 from core.tree_cache import TreeCache
 from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
-from core.reasoning import LLMClient, Message
+from core.reasoning import Message
+from core.lats import LATS, LATSNode
 
 
 class CreativeWorker(WorkerAgent):
@@ -21,53 +21,132 @@ class CreativeWorker(WorkerAgent):
     def can_handle(self, query: str, context: Optional[Dict] = None) -> float:
         return 1.0
     
-    def solve(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return asyncio.run(self._solve_async(query, context))
-    
-    async def solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
-        return await self._solve_async(query, context)
-    
-    async def _solve_async(self, query: str, context: Optional[Dict] = None) -> WorkerResult:
+    def solve(self, query: str, context: Optional[Dict] = None,
+              use_cache: bool = True, max_tree_depth: int = 5,
+              num_simulations: int = 10) -> WorkerResult:
         start_time = time.time()
-        reasoning_steps = []
         
-        # Determine creative task type
+        if use_cache:
+            cached_result = self._check_cache(query)
+            if cached_result:
+                return cached_result
+        
         task_type = self._classify_creative_task(query)
-        reasoning_steps.append(f"Creative task type: {task_type}")
         
-        # Build creative prompt
-        prompt = self._build_creative_prompt(query, task_type)
-        reasoning_steps.append("Built creative prompt with enhanced temperature")
+        root_state = {
+            "query": query,
+            "step": f"Initiating {task_type} creation",
+            "depth": 0,
+            "task_type": task_type,
+            "content_parts": []
+        }
         
-        # Generate creative response
-        # Note: We'd ideally pass temperature here, but LLMClient.generate() uses config.temperature
-        # TODO: Consider enhancing LLMClient to accept optional temperature override
-        messages = [Message(role="user", content=prompt)]
-        response = self.llm_client.generate(messages)
-        reasoning_steps.append("Generated creative response")
+        def simulate_creative_step(node: LATSNode) -> float:
+            state = node.state
+            
+            if "content" in state:
+                content = state["content"]
+                if content and len(content) > 100:
+                    return 0.85
+                return 0.4
+            
+            parts_count = len(state.get("content_parts", []))
+            if parts_count > 0:
+                return 0.55 + (parts_count * 0.05)
+            
+            depth = state.get("depth", 0)
+            return max(0.3, 0.6 - depth * 0.07)
         
-        # Analyze creativity metrics
-        metrics = self._analyze_creativity(response, task_type)
-        reasoning_steps.append(f"Creativity metrics: diversity={metrics['diversity']:.2f}, coherence={metrics['coherence']:.2f}")
+        def expand_creative_step(parent_node: LATSNode) -> Dict[str, Any]:
+            parent_state = parent_node.state
+            depth = parent_state.get("depth", 0)
+            
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
+            
+            prompt = self._build_creative_prompt(query, task_type)
+            if history:
+                prompt += "\n\nContent created so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
+                prompt += "\n\nContinue or conclude the creative work."
+            
+            try:
+                messages = [
+                    Message(role="system", content=self.get_system_prompt()),
+                    Message(role="user", content=prompt)
+                ]
+                response = self.llm_client.generate(messages)
+                next_step = response.strip()
+                
+                is_substantial = len(next_step) > 150
+                is_final = depth >= max_tree_depth - 1 or is_substantial
+                
+                return {
+                    "query": query,
+                    "step": next_step,
+                    "depth": depth + 1,
+                    "task_type": task_type,
+                    "content_parts": parent_state.get("content_parts", []) + ([next_step] if not is_final else []),
+                    "content": next_step if is_final else None
+                }
+            except:
+                return {
+                    "query": query,
+                    "step": f"Creative iteration {depth + 1}",
+                    "depth": depth + 1,
+                    "task_type": task_type,
+                    "content_parts": parent_state.get("content_parts", [])
+                }
         
-        # Calculate confidence based on coherence and completeness
-        confidence = self._calculate_confidence(response, task_type, metrics)
+        tree = LATS(root_state, simulator=simulate_creative_step, expand_fn=expand_creative_step)
         
+        for _ in range(num_simulations):
+            node = tree.select()
+            if node.state.get("depth", 0) >= max_tree_depth:
+                continue
+            child_state = expand_creative_step(node)
+            child = tree.expand(node, child_state)
+            reward = simulate_creative_step(child)
+            tree.backpropagate(child, reward)
+        
+        best_node = tree.best_child()
+        if best_node is None:
+            best_node = tree.root
+        
+        reasoning_steps = []
+        node = best_node
+        while node is not None:
+            if node.state.get("step") and node != tree.root:
+                reasoning_steps.insert(0, node.state["step"])
+            node = node.parent
+        
+        answer = best_node.state.get("content", reasoning_steps[-1] if reasoning_steps else "")
+        metrics = self._analyze_creativity(answer, task_type)
+        confidence = best_node.value / best_node.visits if best_node.visits > 0 else 0.5
+        verification_passed = metrics['coherence'] > 0.6 and len(answer) > 50
         execution_time = time.time() - start_time
         
+        if use_cache and verification_passed:
+            self.tree_cache.store(query, tree, self.get_specialty().value,
+                                 verification_passed, confidence)
+        
         return WorkerResult(
-            answer=response,
+            answer=answer,
             confidence=confidence,
             reasoning_steps=reasoning_steps,
-            verification_passed=metrics['coherence'] > 0.6,
-            specialty=WorkerSpecialty.CREATIVE,
+            verification_passed=verification_passed,
+            specialty=self.get_specialty(),
             execution_time=execution_time,
             metadata={
                 'task_type': task_type,
                 'diversity_score': metrics['diversity'],
                 'coherence_score': metrics['coherence'],
-                'temperature': self.creative_temperature,
-                'word_count': len(response.split())
+                'num_simulations': num_simulations,
+                'tree_depth': best_node.state.get("depth", 0),
+                'cache_hit': False
             }
         )
     
@@ -178,20 +257,3 @@ class CreativeWorker(WorkerAgent):
             confidence -= 0.1
         
         return min(max(confidence, 0.0), 1.0)
-    
-    async def verify(self, query: str, answer: str, context: Optional[Dict] = None) -> bool:
-        # Basic checks
-        if not answer or len(answer.strip()) < 20:
-            return False
-        
-        # Check for minimum content
-        words = answer.split()
-        if len(words) < 10:
-            return False
-        
-        # Check for some structure (sentences or lines)
-        has_structure = '.' in answer or '\n' in answer or '!' in answer or '?' in answer
-        if not has_structure:
-            return False
-        
-        return True
