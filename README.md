@@ -513,6 +513,7 @@ Kaelum has undergone a **major refactoring** to eliminate naive approaches and i
 ```
 
 **Integrated Everywhere:**
+
 - Task classification (code debugging vs generation vs review)
 - Domain routing (math vs logic vs creative)
 - Relevance validation (query-response alignment)
@@ -523,12 +524,14 @@ Kaelum has undergone a **major refactoring** to eliminate naive approaches and i
 - Repetition detection (is content redundant?)
 
 **Impact:**
+
 - Thresholds improve automatically as system runs
 - No manual tuning required
 - Per-task-type optimization (different tasks need different thresholds)
 - Graceful degradation (falls back to base threshold with <10 samples)
 
 **Example:**
+
 ```python
 # Initial: base_threshold = 0.55
 # After 50 code debugging tasks:
@@ -558,6 +561,7 @@ SUPPORTED_LANGUAGES = ['python', 'javascript', 'typescript']
 ```
 
 **Impact:**
+
 - No more false confidence
 - No more accepting invalid code
 - No more rejecting valid code
@@ -590,6 +594,7 @@ if explicit_lang:
 ```
 
 **Impact:**
+
 - Code analysis still matters
 - User hints help but don't override reality
 - 40% reduction in language detection errors
@@ -599,14 +604,17 @@ if explicit_lang:
 All detection systems now use embeddings + semantic analysis:
 
 #### Repetition Detection
+
 - Semantic clustering (similarity > 0.9) for paraphrased repetition
 - TF-IDF with adaptive stop words (domain-specific filtering)
 
 #### Conclusion Detection
+
 - Contrastive learning (positive/negative exemplars)
 - Context-aware negation ("does not therefore mean...")
 
 #### Language Detection
+
 - Exclusion patterns prevent false positives
 - Semantic analysis via sentence embeddings
 
@@ -626,6 +634,7 @@ classifier.record_outcome(
 ```
 
 **Feedback Loop:**
+
 1. Router selects worker → records decision
 2. Worker solves → verification checks result
 3. Verification result → fed back to router for training
@@ -640,11 +649,11 @@ for threshold in [0.20, 0.25, 0.30, ..., 0.80, 0.85]:
     tp = true positives at this threshold
     fp = false positives at this threshold
     fn = false negatives at this threshold
-    
+  
     precision = tp / (tp + fp)
     recall = tp / (tp + fn)
     f1 = 2 * precision * recall / (precision + recall)
-    
+  
     if f1 > best_f1:
         best_threshold = threshold
 
@@ -720,6 +729,7 @@ python -m pytest --cov=core --cov=runtime
 ### ✅ **Fully Implemented:**
 
 **Core Architecture:**
+
 - Neural router with PolicyNetwork (398→256→6 + heads)
 - Continuous router training via gradient descent (every 32 outcomes)
 - 6 expert workers (Math, Logic, Code, Factual, Creative, Analysis)
@@ -731,6 +741,7 @@ python -m pytest --cov=core --cov=runtime
 - Worker system prompts fully configurable
 
 **Production-Grade ML:**
+
 - Adaptive threshold calibration (learns optimal thresholds per task type)
 - Performance tracking with persistent storage (`.kaelum/calibration/`)
 - F1-optimizing threshold selection via grid search
@@ -738,6 +749,7 @@ python -m pytest --cov=core --cov=runtime
 - Graceful degradation (falls back to base threshold with <10 samples)
 
 **Robust Detection Systems:**
+
 - ML-based repetition detection (semantic clustering + TF-IDF)
 - ML-based conclusion detection (contrastive learning + zero-shot)
 - ML-based language detection (pattern scoring + exclusion filters)
@@ -745,11 +757,11 @@ python -m pytest --cov=core --cov=runtime
 - Smart language detection (boosts hints instead of forcing overrides)
 
 **Infrastructure:**
+
 - Fine-tuning infrastructure (`finetune_setup.py`)
 - Outcome recording and feedback loops
 - Model persistence and loading
 - Training data collection (`.kaelum/routing/outcomes.jsonl`)
-
 
 ### 🚧 **Not Yet Implemented:**
 
@@ -762,8 +774,6 @@ python -m pytest --cov=core --cov=runtime
 - [ ] **Tree-sitter integration**: Proper AST parsing for Java/C++/Go/Rust validation
 - [ ] **Cross-encoder models**: More accurate semantic similarity for cache/routing
 - [ ] **Batch processing**: Parallel query execution with load balancing
-- [ ] **A/B testing framework**: Compare threshold strategies and routing decisions
-
 
 ---
 
