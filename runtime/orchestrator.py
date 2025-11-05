@@ -23,6 +23,8 @@ from ..core.workers import WorkerSpecialty, create_worker
 from ..core.tree_cache import TreeCache
 from ..core.verification import VerificationEngine
 from ..core.reflection import ReflectionEngine
+from ..core.adaptive_lats_config import AdaptiveLATSConfig
+from ..core.adaptive_penalty import AdaptivePenalty
 
 logger = logging.getLogger("kaelum.orchestrator")
 
@@ -45,12 +47,10 @@ class KaelumOrchestrator:
         self.metrics = CostTracker()
         self.tree_cache = TreeCache()
         
-        # Router for expert worker selection (embedding-based)
         self.router = Router(learning_enabled=True) if enable_routing else None
         if self.router:
             logger.info("Router enabled: Embedding-based intelligent routing")
         
-        # Verification and Reflection engines
         self.verification_engine = VerificationEngine(
             self.llm,
             use_symbolic=config.use_symbolic_verification,
@@ -63,7 +63,8 @@ class KaelumOrchestrator:
             max_iterations=config.max_reflection_iterations
         )
         
-        # Worker cache
+        self.lats_config = AdaptiveLATSConfig()
+        
         self._workers = {}
         
         logger.info("=" * 70)
@@ -125,10 +126,15 @@ class KaelumOrchestrator:
             num_sims = 10
             logger.info(f"ROUTING: Default to {worker_specialty} worker (router disabled)")
         
-        # Get worker
         worker = self._get_worker(worker_specialty)
         
-        # Step 2-5: Worker reasoning with verification + reflection loop
+        if hasattr(worker, 'solve'):
+            query_complexity = AdaptivePenalty.compute_complexity(query)
+            lats_cfg = self.lats_config.get_config(query_complexity, worker_specialty)
+            max_depth = lats_cfg.max_depth
+            num_sims = lats_cfg.num_simulations
+            use_cache = lats_cfg.use_cache
+        
         session_id = f"session_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
         start_time = time.time()

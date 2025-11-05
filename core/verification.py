@@ -131,6 +131,19 @@ class SymbolicVerifier:
 
 
 
+import logging
+from typing import List, Dict, Optional
+
+from sentence_transformers import SentenceTransformer, util
+
+from core.reasoning import LLMClient, Message
+from core.sympy_engine import SympyEngine
+from core.syntax_validator import SyntaxValidator
+from core.conclusion_detector import ConclusionDetector
+from core.worker_type_classifier import WorkerTypeClassifier
+from core.domain_classifier import DomainClassifier
+
+
 class VerificationEngine:
 
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
@@ -138,6 +151,10 @@ class VerificationEngine:
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
         self.debug = debug
         self.semantic_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.syntax_validator = SyntaxValidator()
+        self.conclusion_detector = ConclusionDetector()
+        self.worker_classifier = WorkerTypeClassifier()
+        self.domain_classifier = DomainClassifier()
     
     def _log_debug(self, message: str):
         if self.debug:

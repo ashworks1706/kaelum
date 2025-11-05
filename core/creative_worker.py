@@ -1,5 +1,6 @@
 import time
 import re
+import logging
 from typing import Dict, Any, Optional, List
 
 from core.config import KaelumConfig
@@ -9,11 +10,19 @@ from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
 from core.adaptive_penalty import AdaptivePenalty
+from core.creative_task_classifier import CreativeTaskClassifier
+from core.confidence_calibrator import ConfidenceCalibrator
+from core.coherence_detector import CoherenceDetector
 
 
 class CreativeWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
+        base_temp = self.config.reasoning_llm.temperature
+        self.creative_temperature = min(base_temp + 0.3, 1.0)
+        self.task_classifier = CreativeTaskClassifier()
+        self.confidence_calibrator = ConfidenceCalibrator()
+        self.coherence_detector = CoherenceDetector()
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
     
@@ -142,23 +151,8 @@ class CreativeWorker(WorkerAgent):
         )
     
     def _classify_creative_task(self, query: str) -> str:
-        
-        query_lower = query.lower()
-        
-        if any(kw in query_lower for kw in ['story', 'narrative', 'fiction', 'tale']):
-            return 'storytelling'
-        elif any(kw in query_lower for kw in ['poem', 'verse', 'rhyme', 'haiku']):
-            return 'poetry'
-        elif any(kw in query_lower for kw in ['essay', 'article', 'blog', 'post']):
-            return 'writing'
-        elif any(kw in query_lower for kw in ['brainstorm', 'idea', 'suggest', 'propose']):
-            return 'ideation'
-        elif any(kw in query_lower for kw in ['design', 'concept', 'plan']):
-            return 'design'
-        elif any(kw in query_lower for kw in ['dialogue', 'conversation', 'script']):
-            return 'dialogue'
-        else:
-            return 'general_creative'
+        task, confidence, is_ambiguous, alternatives = self.task_classifier.classify_task(query)
+        return task
     
     def _build_creative_prompt(self, query: str, task_type: str) -> str:
         prompt_parts = []
@@ -190,39 +184,18 @@ class CreativeWorker(WorkerAgent):
         return "\n".join(prompt_parts)
     
     def _analyze_creativity(self, response: str, task_type: str) -> Dict[str, float]:
-        metrics = {
-            'diversity': 0.0,
-            'coherence': 0.0
-        }
-        
-        # Measure diversity via vocabulary richness
         words = response.lower().split()
+        diversity = 0.0
         if words:
             unique_words = set(words)
-            metrics['diversity'] = min(len(unique_words) / len(words), 1.0)
+            diversity = min(len(unique_words) / len(words), 1.0)
         
-        # Measure coherence via basic heuristics
-        sentences = response.split('.')
+        coherence_result = self.coherence_detector.assess_coherence(response, task_type)
         
-        # Check for reasonable sentence length
-        if sentences:
-            avg_sentence_length = len(words) / len(sentences)
-            if 5 <= avg_sentence_length <= 30:
-                metrics['coherence'] += 0.3
-        
-        # Check for completeness (reasonable length)
-        if len(words) >= 20:
-            metrics['coherence'] += 0.3
-        
-        # Check for structure (paragraphs or line breaks)
-        if '\n' in response or len(response) > 100:
-            metrics['coherence'] += 0.2
-        
-        # Task-specific bonuses
-        if task_type == 'poetry' and len(response.split('\n')) > 2:
-            metrics['coherence'] += 0.2  # Multiple lines
-        
-        metrics['coherence'] = min(metrics['coherence'], 1.0)
+        metrics = {
+            'diversity': diversity,
+            'coherence': coherence_result['overall_coherence']
+        }
         
         return metrics
     
@@ -232,19 +205,19 @@ class CreativeWorker(WorkerAgent):
         task_type: str,
         metrics: Dict[str, float]
     ) -> float:
-        confidence = 0.4  # Base confidence for creative tasks
+        base_confidence = 0.4
         
-        # Bonus for good coherence
-        confidence += metrics['coherence'] * 0.3
-        
-        # Bonus for good diversity
-        confidence += metrics['diversity'] * 0.2
-        
-        # Bonus for adequate length
         word_count = len(response.split())
-        if word_count >= 50:
-            confidence += 0.1
-        elif word_count < 20:
-            confidence -= 0.1
+        task_features = {
+            'good_coherence': metrics['coherence'] > 0.6,
+            'good_diversity': metrics['diversity'] > 0.5,
+            'adequate_length': word_count >= 50
+        }
         
-        return min(max(confidence, 0.0), 1.0)
+        calibrated = self.confidence_calibrator.calibrate_confidence(
+            'creative',
+            base_confidence,
+            task_features
+        )
+        
+        return calibrated

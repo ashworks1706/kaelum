@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sentence_transformers import SentenceTransformer
 
+from core.domain_classifier import DomainClassifier
+
 logger = logging.getLogger("kaelum.router")
 logger.setLevel(logging.INFO)
 
@@ -169,6 +171,7 @@ class Router:
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=0.001)
         self.training_buffer = []
+        self.domain_classifier = DomainClassifier()
         
         if model_path and Path(model_path).exists():
             self._load_model(model_path)
@@ -328,18 +331,9 @@ class Router:
         has_math_symbols = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', query)) or \
                           any(sym in query for sym in ['√', '∫', '∂', '∑', '∏', 'derivative', 'integral'])
         
-        # Code detection: actual programming keywords
-        code_keywords = {'function', 'class', 'def', 'import', 'return', 'for', 'while', 
-                        'if', 'else', 'try', 'except', 'lambda', 'yield', 'const', 'var', 'let',
-                        'async', 'await', 'public', 'private', 'static', 'void'}
-        has_code_keywords = any(word.lower() in code_keywords for word in words) or \
-                           sum(c in query for c in '{}[]();') > 3
-        
-        # Logic detection: logical connectives and reasoning words
-        logic_keywords = {'if', 'then', 'therefore', 'thus', 'because', 'implies', 
-                         'and', 'or', 'not', 'all', 'some', 'every', 'exists', 'premise',
-                         'conclusion', 'hence', 'consequently', 'entails'}
-        has_logic_keywords = any(word.lower() in logic_keywords for word in words)
+        domain_features = self.domain_classifier.get_domain_features(query)
+        has_code_keywords = domain_features['has_code_domain'] > 0.5
+        has_logic_keywords = domain_features['has_logic_domain'] > 0.5
         
         structural_complexity = (
             (word_count / 100.0) * 0.3 +

@@ -14,6 +14,7 @@ from core.language_detector import LanguageDetector
 from core.task_classifier import TaskClassifier
 from core.code_extractor import CodeExtractor
 from core.adaptive_penalty import AdaptivePenalty
+from core.confidence_calibrator import ConfidenceCalibrator
 
 
 class CodeWorker(WorkerAgent):
@@ -23,6 +24,7 @@ class CodeWorker(WorkerAgent):
         self.language_detector = LanguageDetector()
         self.task_classifier = TaskClassifier()
         self.code_extractor = CodeExtractor()
+        self.confidence_calibrator = ConfidenceCalibrator()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
             'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'
@@ -275,24 +277,20 @@ class CodeWorker(WorkerAgent):
         task_type: str,
         language: Optional[str]
     ) -> float:
-        confidence = 0.5  # Base confidence
+        base_confidence = 0.5
         
-        # Adjust for code extraction
-        if code:
-            confidence += 0.2
+        task_features = {
+            'code_present': code is not None,
+            'syntax_valid': syntax_valid,
+            'language_detected': language is not None,
+            'task_simple': task_type == 'generation',
+            'task_complex': task_type in ['debugging', 'optimization']
+        }
         
-        # Adjust for syntax validation
-        if syntax_valid:
-            confidence += 0.15
+        calibrated = self.confidence_calibrator.calibrate_confidence(
+            'code',
+            base_confidence,
+            task_features
+        )
         
-        # Adjust for language specificity
-        if language:
-            confidence += 0.1
-        
-        # Adjust for task complexity
-        if task_type in ['debugging', 'optimization']:
-            confidence -= 0.05  # More complex
-        elif task_type == 'generation':
-            confidence += 0.05  # More straightforward
-        
-        return min(max(confidence, 0.0), 1.0)
+        return calibrated
