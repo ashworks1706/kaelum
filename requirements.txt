@@ -15,9 +15,6 @@ scikit-learn
 # Formal Reasoning
 z3-solver
 
-# Commercial LLM Integration (optional)
-google-generativeai
-
 # Dev Tools
 black
 ruff
