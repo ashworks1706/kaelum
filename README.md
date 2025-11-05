@@ -104,6 +104,7 @@ Workers are **LLM-based reasoning agents** specialized through system prompts. A
 ```
 
 **Every worker implements LATS**:
+
 - MathWorker: Explores solution strategies, scores by SymPy validity
 - LogicWorker: Explores logical deductions, scores by conclusion presence
 - CodeWorker: Explores implementation approaches, scores by syntax validity
@@ -192,12 +193,12 @@ def infer(query):
             max_tree_depth=decision.max_tree_depth,  # Router-predicted
             num_simulations=decision.num_simulations  # Router-predicted
         )
-      
+    
         # 3. Domain-specific verification
         verification = verification_engine.verify(
             query, result.reasoning_steps, result.answer
         )
-      
+    
         if verification.passed:
             # 6. Train router on successful outcome
             router.record_outcome(decision, {
@@ -208,7 +209,7 @@ def infer(query):
             })
             # Triggers gradient descent every 32 outcomes
             return result
-      
+    
         # 4. Reflection improves reasoning
         if iteration < max_iterations:
             improved_steps = reflection_engine.enhance_reasoning(
@@ -477,18 +478,18 @@ Store in global tree cache:
 
 ## 📊 Performance
 
-| Metric                       | Value                                      |
-| ---------------------------- | ------------------------------------------ |
-| Cache hit speedup            | 1000x faster (0.001s vs 2-5s)              |
-| LATS simulations per query   | 10 (configurable, router adapts)           |
-| Router training frequency    | Every 32 outcomes (gradient descent)       |
-| Verification coverage        | 6 domains (math, code, logic, factual, creative, analysis) |
-| Math verification accuracy   | 95%+ (SymPy symbolic ground truth)         |
-| Code verification accuracy   | 90%+ (AST syntax + semantic checks)        |
-| Reflection success rate      | 70% improvement on failures                |
-| Average query time           | 2-5 seconds (with MCTS exploration)        |
-| Cached query time            | 0.001 seconds                              |
-| Router improves over time    | ✓ Continuous learning from outcomes        |
+| Metric                     | Value                                                      |
+| -------------------------- | ---------------------------------------------------------- |
+| Cache hit speedup          | 1000x faster (0.001s vs 2-5s)                              |
+| LATS simulations per query | 10 (configurable, router adapts)                           |
+| Router training frequency  | Every 32 outcomes (gradient descent)                       |
+| Verification coverage      | 6 domains (math, code, logic, factual, creative, analysis) |
+| Math verification accuracy | 95%+ (SymPy symbolic ground truth)                         |
+| Code verification accuracy | 90%+ (AST syntax + semantic checks)                        |
+| Reflection success rate    | 70% improvement on failures                                |
+| Average query time         | 2-5 seconds (with MCTS exploration)                        |
+| Cached query time          | 0.001 seconds                                              |
+| Router improves over time  | ✓ Continuous learning from outcomes                       |
 
 ---
 
@@ -542,21 +543,30 @@ python -m pytest --cov=core --cov=runtime
 
 ---
 
-## 🎯 Roadmap
+## 🎯 What's Complete vs. What's Left
 
-- [X] Neural router with embedding-based classification
-- [X] **Router trains continuously via gradient descent**
-- [X] Expert workers (Math, Logic, Code, Factual, Creative, Analysis)
-- [X] **True MCTS implementation in all workers** (not fake)
-- [X] **Global shared tree cache** for cross-domain learning
-- [X] **Domain-specific verification for all 6 worker types**
-- [X] Reflection engine for self-correction
-- [X] **Configuration-driven worker prompts** (via .env)
-- [ ] GSM8K/ToolBench benchmarks
-- [ ] Multi-turn conversation support
-- [ ] Distributed LATS execution (parallel simulations)
-- [ ] Fine-tuned worker models
-- [ ] RAG integration for factual grounding
+### ✅ **Fully Implemented:**
+
+- Neural router with PolicyNetwork (398→256→6 + heads)
+- Continuous router training via gradient descent (every 32 outcomes)
+- 6 expert workers (Math, Logic, Code, Factual, Creative, Analysis)
+- True MCTS (select/expand/simulate/backprop) in all workers
+- Domain-specific verification for all 6 worker types
+- Global shared tree cache with semantic search
+- Reflection engine for self-correction
+- Configuration system with .env support
+- Worker system prompts fully configurable
+
+### 🚧 **Not Yet Implemented:**
+
+- [ ] **Multi-turn**: Conversation history and context management
+- [ ] **Parallel LATS**: Distributed tree search across multiple processes
+- [ ] **Fine-tuning**: Domain-specific model weights for workers
+- [ ] **RAG**: External knowledge retrieval for factual grounding
+- [ ] **Streaming**: Real-time token streaming during generation
+- [ ] **Cost tracking**: Accurate token counting and pricing
+- [ ] **Web UI**: Interactive interface for query execution
+- [ ] **Benchmarking**: GSM8K, ToolBench, HumanEval test suites
 
 ---
 

@@ -59,6 +59,7 @@ class KaelumOrchestrator:
         )
         self.reflection_engine = ReflectionEngine(
             self.llm,
+            verification_engine=self.verification_engine,
             max_iterations=config.max_reflection_iterations
         )
         
@@ -163,7 +164,8 @@ class KaelumOrchestrator:
             verification_result = self.verification_engine.verify(
                 query=query,
                 reasoning_steps=result.reasoning_steps,
-                answer=result.answer
+                answer=result.answer,
+                worker_type=worker_specialty
             )
             
             verification_passed = verification_result["passed"]
@@ -188,6 +190,7 @@ class KaelumOrchestrator:
                     improved_steps = self.reflection_engine.enhance_reasoning(
                         query=query,
                         initial_trace=result.reasoning_steps,
+                        worker_type=worker_specialty,
                         verification_issues=issues
                     )
                     

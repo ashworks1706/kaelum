@@ -304,6 +304,8 @@ class Router:
             logger.info(f"Router trained on {len(self.outcomes)} outcomes. Loss: {total_loss.item():.4f}")
     
     def _extract_features(self, query: str, context: Optional[Dict] = None) -> NeuralRoutingFeatures:
+        import re
+        
         embedding = self.encoder.encode(query, convert_to_numpy=True)
         
         words = query.split()
@@ -318,8 +320,26 @@ class Router:
         lexical_diversity = unique_words / max(word_count, 1)
         avg_word_length = sum(len(w) for w in words) / max(word_count, 1)
         
-        math_symbols = sum(c in query for c in '+-*/=^√∫∂∑∏')
-        code_symbols = sum(c in query for c in '{}[]();')
+        # Semantic question word detection
+        question_words_set = {'what', 'why', 'how', 'when', 'where', 'who', 'which', 'whose', 'whom'}
+        question_words = sum(1 for w in words if w.lower() in question_words_set)
+        
+        # Math detection: equations and mathematical expressions
+        has_math_symbols = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', query)) or \
+                          any(sym in query for sym in ['√', '∫', '∂', '∑', '∏', 'derivative', 'integral'])
+        
+        # Code detection: actual programming keywords
+        code_keywords = {'function', 'class', 'def', 'import', 'return', 'for', 'while', 
+                        'if', 'else', 'try', 'except', 'lambda', 'yield', 'const', 'var', 'let',
+                        'async', 'await', 'public', 'private', 'static', 'void'}
+        has_code_keywords = any(word.lower() in code_keywords for word in words) or \
+                           sum(c in query for c in '{}[]();') > 3
+        
+        # Logic detection: logical connectives and reasoning words
+        logic_keywords = {'if', 'then', 'therefore', 'thus', 'because', 'implies', 
+                         'and', 'or', 'not', 'all', 'some', 'every', 'exists', 'premise',
+                         'conclusion', 'hence', 'consequently', 'entails'}
+        has_logic_keywords = any(word.lower() in logic_keywords for word in words)
         
         structural_complexity = (
             (word_count / 100.0) * 0.3 +
@@ -333,10 +353,10 @@ class Router:
             query_length=len(query),
             word_count=word_count,
             has_numbers=num_numbers > 2,
-            has_math_symbols=math_symbols > 0,
-            has_code_keywords=code_symbols > 2,
-            has_logic_keywords=num_punct > 3,
-            question_words=0,
+            has_math_symbols=has_math_symbols,
+            has_code_keywords=has_code_keywords,
+            has_logic_keywords=has_logic_keywords,
+            question_words=question_words,
             complexity_score=min(structural_complexity, 1.0),
             avg_word_length=avg_word_length,
             uppercase_ratio=num_upper / max(len(query), 1),

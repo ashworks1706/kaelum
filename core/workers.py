@@ -236,18 +236,7 @@ class MathWorker(WorkerAgent):
         
         tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step)
         
-        for _ in range(num_simulations):
-            node = tree.select()
-            
-            if node.state.get("depth", 0) >= max_tree_depth:
-                continue
-            
-            child_state = expand_math_step(node)
-            child = tree.expand(node, child_state)
-            
-            reward = simulate_math_step(child)
-            
-            tree.backpropagate(child, reward)
+        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -302,7 +291,7 @@ class LogicWorker(WorkerAgent):
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
-              num_simulations: int = 10) -> WorkerResult:
+              num_simulations: int = 10, parallel: bool = False) -> WorkerResult:
         start_time = time.time()
         
         if use_cache:
@@ -377,14 +366,7 @@ class LogicWorker(WorkerAgent):
         
         tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step)
         
-        for _ in range(num_simulations):
-            node = tree.select()
-            if node.state.get("depth", 0) >= max_tree_depth:
-                continue
-            child_state = expand_logic_step(node)
-            child = tree.expand(node, child_state)
-            reward = simulate_logic_step(child)
-            tree.backpropagate(child, reward)
+        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel)
         
         best_node = tree.best_child()
         if best_node is None:

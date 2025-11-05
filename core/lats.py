@@ -6,6 +6,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 
 @dataclass
@@ -91,13 +92,41 @@ class LATS:
             cur.last_updated = time.time()
             cur = cur.parent
 
-    def best_child(self, node: Optional[LATSNode] = None) -> Optional[LATSNode]:
+    def best_child(self, node: Optional['LATSNode'] = None) -> Optional['LATSNode']:
         if node is None:
             node = self.root
         if not node.children:
             return None
         best = max(node.children, key=lambda c: (c.value / max(1, c.visits)))
         return best
+
+    def run_simulations(self, num_simulations: int, max_depth: int = 10, parallel: bool = False, max_workers: int = 4):
+        if parallel and num_simulations >= 4:
+            self._run_parallel_simulations(num_simulations, max_depth, max_workers)
+        else:
+            for _ in range(num_simulations):
+                self._run_single_simulation(max_depth)
+    
+    def _run_single_simulation(self, max_depth: int):
+        node = self.select()
+        if node.state.get("depth", 0) >= max_depth:
+            return
+        if self.expand_fn:
+            child_state = self.expand_fn(node)
+            child = self.expand(node, child_state)
+        else:
+            child = node
+        reward = self.simulate(child)
+        self.backpropagate(child, reward)
+    
+    def _run_parallel_simulations(self, num_simulations: int, max_depth: int, max_workers: int):
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(self._run_single_simulation, max_depth) for _ in range(num_simulations)]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    pass
 
     def choose(self, exploit: float = 0.9, *, expand_fn: Optional[callable] = None, simulator: Optional[callable] = None) -> LATSNode:
         if random.random() < exploit:

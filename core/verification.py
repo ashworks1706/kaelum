@@ -203,8 +203,9 @@ class VerificationEngine:
 
         return errors, details
     
-    def verify(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
-        worker_type = self._infer_worker_type(query, reasoning_steps)
+    def verify(self, query: str, reasoning_steps: List[str], answer: str, worker_type: Optional[str] = None) -> dict:
+        if worker_type is None:
+            worker_type = self._infer_worker_type(query, reasoning_steps)
         
         if worker_type == "math":
             return self._verify_math(reasoning_steps)
@@ -222,19 +223,30 @@ class VerificationEngine:
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
         combined_text = query + " " + " ".join(reasoning_steps[:3])
         
-        math_indicators = sum(c in combined_text for c in '+-*/=^√∫∂∑')
-        code_indicators = sum(c in combined_text for c in '{}[]();')
-        logic_indicators = combined_text.lower().count('therefore') + combined_text.lower().count('thus')
+        # Prioritize mathematical content
+        math_equation_pattern = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', combined_text))
+        math_keywords = sum(1 for kw in ['derivative', 'integral', 'solve', 'equation', 'calculate'] 
+                           if kw in combined_text.lower())
         
-        if math_indicators > 3:
+        # Code patterns
+        code_keywords = {'function', 'class', 'def', 'import', 'return', 'algorithm', 'implementation'}
+        has_code = any(kw in combined_text.lower() for kw in code_keywords)
+        code_symbols = sum(c in combined_text for c in '{}[]();')
+        
+        # Logic patterns
+        logic_keywords = {'therefore', 'thus', 'premise', 'conclusion', 'implies', 'entails'}
+        has_logic = any(kw in combined_text.lower() for kw in logic_keywords)
+        
+        # Prioritize by strongest signal
+        if math_equation_pattern or math_keywords >= 2:
             return "math"
-        elif code_indicators > 5:
+        elif code_symbols > 5 or has_code:
             return "code"
-        elif logic_indicators > 0:
+        elif has_logic:
             return "logic"
-        elif any(kw in query.lower() for kw in ['story', 'poem', 'create', 'write', 'brainstorm']):
+        elif any(kw in query.lower() for kw in ['story', 'poem', 'write a', 'brainstorm', 'imagine']):
             return "creative"
-        elif any(kw in query.lower() for kw in ['what', 'when', 'where', 'who', 'define', 'explain']):
+        elif any(kw in query.lower() for kw in ['what is', 'define', 'explain', 'describe']):
             return "factual"
         else:
             return "analysis"
@@ -272,13 +284,26 @@ class VerificationEngine:
                 "details": {"syntax_valid": False}
             }
         
-        if 'python' in query.lower() or 'def ' in code or 'import ' in code:
+        language = self._detect_code_language(query, code)
+        syntax_valid = False
+        
+        if language == 'python':
             try:
                 ast.parse(code)
                 syntax_valid = True
             except SyntaxError as e:
                 syntax_valid = False
                 issues.append(f"Python syntax error: {str(e)}")
+        elif language == 'javascript':
+            if re.search(r'\bfunction\s+\w+\s*\(', code) or re.search(r'\bconst\s+\w+\s*=', code):
+                syntax_valid = True
+            else:
+                issues.append("JavaScript code structure unclear")
+        elif language == 'java':
+            if re.search(r'\b(public|private|class)\b', code) and '{' in code:
+                syntax_valid = True
+            else:
+                issues.append("Java code structure unclear")
         else:
             syntax_valid = True
         
@@ -292,8 +317,31 @@ class VerificationEngine:
             "passed": passed,
             "confidence": confidence,
             "issues": issues,
-            "details": {"syntax_valid": syntax_valid, "code_length": len(code)}
+            "details": {"syntax_valid": syntax_valid, "code_length": len(code), "language": language}
         }
+    
+    def _detect_code_language(self, query: str, code: str) -> str:
+        query_lower = query.lower()
+        
+        if 'python' in query_lower:
+            return 'python'
+        elif any(lang in query_lower for lang in ['javascript', 'js', 'node', 'typescript']):
+            return 'javascript'
+        elif any(lang in query_lower for lang in ['java', 'kotlin']):
+            return 'java'
+        elif any(lang in query_lower for lang in ['c++', 'cpp']):
+            return 'cpp'
+        
+        if re.search(r'\bdef\s+\w+\s*\(', code) or re.search(r'\bimport\s+\w+', code):
+            return 'python'
+        elif re.search(r'\bfunction\s+\w+\s*\(', code) or re.search(r'\b(const|let|var)\s+\w+\s*=', code):
+            return 'javascript'
+        elif re.search(r'\b(public|private|class)\s+\w+', code):
+            return 'java'
+        elif '#include' in code:
+            return 'cpp'
+        
+        return 'unknown'
     
     def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
         issues = []
@@ -365,22 +413,69 @@ class VerificationEngine:
         unique_words = len(set(w.lower() for w in words))
         diversity = unique_words / max(len(words), 1)
         
-        if diversity < 0.4:
+        has_intentional_repetition = self._detect_intentional_repetition(answer)
+        
+        min_diversity = 0.3
+        if diversity < min_diversity and not has_intentional_repetition:
             issues.append("Low vocabulary diversity")
         
         has_structure = '.' in answer or '\n' in answer or '!' in answer or '?' in answer
         if not has_structure:
             issues.append("Lacks structure (no punctuation or line breaks)")
         
-        confidence = diversity * (0.9 if has_structure else 0.7)
+        has_imagery = self._detect_imagery(answer)
+        has_narrative = len(answer) > 100 and has_structure
+        
+        creativity_score = (
+            diversity * 0.3 +
+            float(has_structure) * 0.2 +
+            float(has_imagery) * 0.2 +
+            float(has_narrative) * 0.2 +
+            float(has_intentional_repetition) * 0.1
+        )
+        
+        confidence = min(creativity_score, 0.95)
         passed = len(issues) == 0
         
         return {
             "passed": passed,
             "confidence": confidence,
             "issues": issues,
-            "details": {"diversity": diversity, "has_structure": has_structure, "word_count": len(words)}
+            "details": {
+                "diversity": diversity, 
+                "has_structure": has_structure, 
+                "word_count": len(words),
+                "has_imagery": has_imagery,
+                "has_intentional_repetition": has_intentional_repetition
+            }
         }
+    
+    def _detect_intentional_repetition(self, text: str) -> bool:
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        if len(lines) < 3:
+            return False
+        
+        starts = [line.split()[0].lower() if line.split() else '' for line in lines]
+        ends = [line.split()[-1].lower() if line.split() else '' for line in lines]
+        
+        start_repetition = len(starts) > 0 and len(set(starts)) / len(starts) < 0.7
+        end_repetition = len(ends) > 0 and len(set(ends)) / len(ends) < 0.7
+        
+        return start_repetition or end_repetition
+    
+    def _detect_imagery(self, text: str) -> bool:
+        imagery_words = {
+            'see', 'saw', 'look', 'bright', 'dark', 'color', 'light', 'shadow',
+            'hear', 'heard', 'sound', 'whisper', 'loud', 'quiet',
+            'smell', 'scent', 'fragrance', 'aroma',
+            'feel', 'felt', 'touch', 'soft', 'rough', 'smooth',
+            'taste', 'sweet', 'bitter', 'sour'
+        }
+        
+        words = text.lower().split()
+        imagery_count = sum(1 for w in words if w in imagery_words)
+        
+        return imagery_count >= 2
     
     def _verify_analysis(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []

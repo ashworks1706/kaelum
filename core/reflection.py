@@ -1,28 +1,46 @@
-from typing import List
+from typing import List, Optional
 from core.reasoning import LLMClient, Message
 
 
 class ReflectionEngine:
-    def __init__(self, llm_client: LLMClient, max_iterations: int = 2):
+    def __init__(self, llm_client: LLMClient, verification_engine=None, max_iterations: int = 2):
         self.llm = llm_client
+        self.verification_engine = verification_engine
         self.max_iterations = max_iterations
 
-    def enhance_reasoning(self, query: str, initial_trace: List[str], verification_issues: List[str] = None) -> List[str]:
+    def enhance_reasoning(self, query: str, initial_trace: List[str], 
+                         worker_type: Optional[str] = None,
+                         verification_issues: List[str] = None) -> List[str]:
         current_trace = initial_trace
         
-        # If specific verification issues provided, use them for targeted improvement
         if verification_issues and len(verification_issues) > 0:
             current_trace = self._improve_trace(query, current_trace, verification_issues)
         else:
-            # Otherwise do general reflection
             for iteration in range(self.max_iterations):
-                issues = self._verify_trace(query, current_trace)
-                
-                if not issues:
-                    break
-                
-                if iteration < self.max_iterations - 1:
-                    current_trace = self._improve_trace(query, current_trace, issues)
+                if self.verification_engine and worker_type:
+                    fake_answer = " ".join(current_trace[-2:]) if len(current_trace) >= 2 else ""
+                    
+                    result = self.verification_engine.verify(
+                        query=query,
+                        reasoning_steps=current_trace,
+                        answer=fake_answer,
+                        worker_type=worker_type
+                    )
+                    
+                    if result["passed"]:
+                        break
+                    
+                    issues = result.get("issues", [])
+                    if issues and iteration < self.max_iterations - 1:
+                        current_trace = self._improve_trace(query, current_trace, issues)
+                else:
+                    issues = self._verify_trace(query, current_trace)
+                    
+                    if not issues:
+                        break
+                    
+                    if iteration < self.max_iterations - 1:
+                        current_trace = self._improve_trace(query, current_trace, issues)
         
         return current_trace
     
