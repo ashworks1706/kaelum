@@ -1,6 +1,6 @@
 # Kaelum
 
-**NASA-Inspired Reasoning System**: Expert worker routing + LATS tree search + symbolic verification + self-reflection
+Expert worker routing + LATS tree search + symbolic verification + self-reflection
 
 Kaelum is a production-ready reasoning framework that intelligently routes queries to specialized expert workers, explores reasoning paths through Monte Carlo Tree Search (LATS), verifies correctness using symbolic mathematics (SymPy), and self-corrects through reflection when verification fails.
 
@@ -44,6 +44,7 @@ print(result)
 ```
 
 **Output:**
+
 ```
 2x + 3
 
@@ -60,6 +61,7 @@ Reasoning:
 ## 🏗️ Architecture Deep Dive
 
 ### **1. Router (`core/router.py`)**
+
 - Uses **sentence-transformers** embeddings to understand query semantics
 - Classifies queries into 6 specialties: Math, Logic, Code, Factual, Creative, Analysis
 - Learns from outcomes (success/failure) to improve routing decisions
@@ -67,13 +69,22 @@ Reasoning:
 
 ### **2. Expert Workers**
 
-| Worker | Domain | Key Features |
-|--------|--------|--------------|
-| **MathWorker** | Calculus, algebra, equations | SymPy integration, symbolic verification |
-| **LogicWorker** | Deductive reasoning, proofs | Formal logic, syllogisms |
-| **CodeWorker** | Code generation, debugging | Syntax validation, multi-language support |
-| **FactualWorker** | Knowledge retrieval, facts | Confidence scoring, source citation |
-| **CreativeWorker** | Writing, brainstorming | High temperature, diversity metrics |
+Workers are **LLM-based reasoning agents** specialized through system prompts. All workers share a **global reasoning tree cache** for cross-domain learning.
+
+| Worker                   | Domain                       | Specialization                              |
+| ------------------------ | ---------------------------- | ------------------------------------------- |
+| **MathWorker**     | Calculus, algebra, equations | SymPy integration, symbolic verification    |
+| **LogicWorker**    | Deductive reasoning, proofs  | Formal logic, syllogisms, fallacy detection |
+| **CodeWorker**     | Code generation, debugging   | Multi-language support, algorithm design    |
+| **FactualWorker**  | Knowledge retrieval, facts   | Historical, scientific, geographic data     |
+| **CreativeWorker** | Writing, brainstorming       | Story creation, poetry, ideation            |
+| **AnalysisWorker** | Data analysis, evaluation    | Critical thinking, pattern recognition      |
+
+**Key Architecture:**
+
+- **Single Shared Cache:** All workers contribute to and benefit from the same reasoning tree cache
+- **LLM-Based Reasoning:** Each worker uses the LLM with specialized system prompts (configurable via `.env`)
+- **Router Decides:** Workers don't compete - the neural router selects the best worker
 
 ### **3. LATS - Language Agent Tree Search (`core/lats.py`)**
 
@@ -90,6 +101,7 @@ Monte Carlo Tree Search for reasoning exploration:
 ```
 
 **Why LATS?**
+
 - Explores multiple reasoning paths simultaneously
 - Balances exploration of new ideas vs exploitation of good paths
 - Finds optimal solution through tree search, not just greedy generation
@@ -144,28 +156,28 @@ def infer(query):
     # 1. Route to expert worker
     decision = router.route(query)
     worker = get_worker(decision.worker_specialty)
-    
+  
     # 2-5. Verification + Reflection loop
     for iteration in range(max_iterations):
         # 2. Worker reasons with LATS + cache
         result = worker.solve(query, use_cache=True, 
                              max_tree_depth=5, num_simulations=10)
-        
+      
         # 3. Verify correctness
         verification = verification_engine.verify(
             query, result.reasoning_steps, result.answer
         )
-        
+      
         if verification.passed:
             return result  # Success!
-        
+      
         # 4. Reflect and improve
         improved_steps = reflection_engine.enhance_reasoning(
             query, result.reasoning_steps, 
             verification_issues=verification.issues
         )
         # Loop continues with improved understanding
-    
+  
     return result  # Max iterations reached
 ```
 
@@ -183,6 +195,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 ```
 
 Pull a model:
+
 ```bash
 ollama pull qwen2.5:3b  # Recommended (3GB)
 # or ollama pull qwen2.5:1.5b  # Faster (1GB)
@@ -207,24 +220,28 @@ pip install -r requirements.txt
 ### **Step 3: Configure (Optional)**
 
 Copy `.env.example` to `.env` and customize:
+
 ```bash
 cp .env.example .env
 ```
 
 **Available Configuration:**
+
 ```bash
 # LLM Backend
 LLM_BASE_URL=http://localhost:11434/v1  # Ollama default
 LLM_MODEL=qwen2.5:3b
+LLM_API_KEY=                             # Optional (for OpenAI/commercial APIs)
 LLM_TEMPERATURE=0.7
 LLM_MAX_TOKENS=2048
 
 # Reasoning System
-MAX_REFLECTION_ITERATIONS=2              # Self-correction attempts
+MAX_REFLECTION_ITERATIONS=2              # Self-correction attempts (0-5)
 USE_SYMBOLIC_VERIFICATION=true           # SymPy math verification
-DEBUG_VERIFICATION=false                 # Debug mode
+DEBUG_VERIFICATION=false                 # Verbose debug logs
 
 # Worker System Prompts (optional - defaults provided)
+# Override any worker's system prompt by setting these variables:
 # WORKER_PROMPT_MATH="Your custom math expert prompt..."
 # WORKER_PROMPT_LOGIC="Your custom logic expert prompt..."
 # WORKER_PROMPT_CODE="Your custom code expert prompt..."
@@ -282,18 +299,32 @@ set_reasoning_model(
     model="qwen2.5:3b",
     temperature=0.7,
     max_tokens=2048,
-    
+  
     # Router settings
-    enable_routing=True,              # Enable neural routing
-    
+    enable_routing=True,              # Enable neural routing (embedding-based)
+  
     # Verification settings
-    use_symbolic_verification=True,   # SymPy verification
-    use_factual_verification=False,   # Factual consistency checks
+    use_symbolic_verification=True,   # SymPy verification for math
+    use_factual_verification=False,   # Factual consistency checks (experimental)
     debug_verification=False,         # Verbose verification logs
-    
+  
     # Reflection settings
-    max_reflection_iterations=2,      # Self-correction attempts
+    max_reflection_iterations=2,      # Self-correction attempts (0-5)
 )
+```
+
+### **Using Environment Variables**
+
+```python
+from core.config import KaelumConfig
+
+# Load configuration from .env file
+config = KaelumConfig.from_env()
+
+# Use with orchestrator
+from runtime.orchestrator import KaelumOrchestrator
+orchestrator = KaelumOrchestrator(config, enable_routing=True)
+result = orchestrator.infer("Your query here")
 ```
 
 ### **Programmatic API**
@@ -323,6 +354,7 @@ for i, step in enumerate(result['reasoning_steps'], 1):
 **Query:** "Calculate 15% tip on $89.90"
 
 ### **1. Router Decision**
+
 ```
 Input: "Calculate 15% tip on $89.90"
 Embedding: [0.234, -0.156, ...] (384 dims)
@@ -332,6 +364,7 @@ LATS Config: depth=5, simulations=10
 ```
 
 ### **2. Tree Cache Check**
+
 ```
 Query embedding: [0.234, -0.156, ...]
 Search cache: cosine_similarity > 0.85
@@ -340,6 +373,7 @@ Proceed to LATS search...
 ```
 
 ### **3. LATS Tree Search** (10 simulations)
+
 ```
 Root: "Calculate 15% tip on $89.90"
 ├─ Sim 1: "Convert 15% to decimal: 0.15" → score: 0.7
@@ -352,6 +386,7 @@ Best Path: [Sim 1] with total reward: 2.4
 ```
 
 ### **4. Verification** (SymPy)
+
 ```
 Step 1: "0.15 = 15/100" → ✓ Algebraically equivalent
 Step 2: "89.90 × 0.15 = 13.485" → ✓ Arithmetic correct
@@ -361,6 +396,7 @@ Verification: PASSED (confidence: 0.95)
 ```
 
 ### **5. Result**
+
 ```
 Answer: $13.49
 
@@ -373,6 +409,7 @@ Reasoning:
 ```
 
 ### **6. Cache Storage**
+
 ```
 Store tree in cache:
   Query: "Calculate 15% tip on $89.90"
@@ -388,27 +425,28 @@ Store tree in cache:
 
 ## 🏛️ Design Principles (NASA-Inspired)
 
-1. **Fail-Fast:** No defensive `try/except` blocks - dependencies must exist
-2. **Deterministic:** Symbolic verification provides ground truth
-3. **Minimal:** No unnecessary abstractions or comments
-4. **Expert Specialization:** Domain-specific workers for quality
-5. **Tree Search:** MCTS exploration finds optimal reasoning paths
-6. **Caching:** Reuse successful reasoning trees
-7. **Verification First:** Check correctness before returning
-8. **Self-Correction:** Reflection loop improves failed attempts
+1. **Fail-Fast:** No defensive `try/except` blocks - let errors surface immediately
+2. **Deterministic:** Symbolic verification (SymPy) provides ground truth for math
+3. **Minimal:** Clean code without unnecessary abstractions or verbose comments
+4. **Expert Specialization:** LLM-based domain experts with specialized prompts
+5. **Shared Knowledge:** Global tree cache enables cross-domain learning
+6. **Tree Search:** MCTS exploration finds optimal reasoning paths
+7. **Verification First:** Check correctness before returning results
+8. **Self-Correction:** Reflection loop improves reasoning on failures
+9. **Configuration-Driven:** All prompts and settings in config, not hardcoded
 
 ---
 
 ## 📊 Performance
 
-| Metric | Value |
-|--------|-------|
-| Cache hit speedup | 1000x faster |
-| LATS simulations | 10 per query |
-| Verification accuracy | 95%+ (SymPy ground truth) |
-| Reflection success rate | 70% improvement |
-| Average query time | 2-5 seconds |
-| Cached query time | 0.001 seconds |
+| Metric                  | Value                     |
+| ----------------------- | ------------------------- |
+| Cache hit speedup       | 1000x faster              |
+| LATS simulations        | 10 per query              |
+| Verification accuracy   | 95%+ (SymPy ground truth) |
+| Reflection success rate | 70% improvement           |
+| Average query time      | 2-5 seconds               |
+| Cached query time       | 0.001 seconds             |
 
 ---
 
@@ -419,22 +457,23 @@ Store tree in cache:
 ```
 Kaelum/
 ├── core/
+│   ├── config.py              # System configuration + worker prompts
 │   ├── router.py              # Neural router + embeddings
 │   ├── workers.py             # Base worker + Math/Logic workers
 │   ├── code_worker.py         # Code generation specialist
 │   ├── factual_worker.py      # Knowledge retrieval specialist
 │   ├── creative_worker.py     # Creative writing specialist
-│   ├── lats.py                # Language Agent Tree Search
-│   ├── tree_cache.py          # Similarity-based caching
+│   ├── lats.py                # Language Agent Tree Search (MCTS)
+│   ├── tree_cache.py          # Global shared reasoning tree cache
 │   ├── verification.py        # SymPy symbolic verification
 │   ├── reflection.py          # Self-correction engine
 │   ├── reasoning.py           # LLM client interface
 │   ├── sympy_engine.py        # SymPy operations wrapper
-│   ├── config.py              # System configuration
 │   └── metrics.py             # Cost tracking
 ├── runtime/
 │   └── orchestrator.py        # Master pipeline coordinator
-├── __init__.py                # Public API
+├── __init__.py                # Public API (enhance, set_reasoning_model)
+├── .env.example               # Configuration template
 ├── requirements.txt           # Dependencies
 └── README.md                  # This file
 ```
@@ -464,17 +503,19 @@ python -m pytest --cov=core --cov=runtime
 
 ## 🎯 Roadmap
 
-- [x] Neural router with embedding-based classification
-- [x] Expert workers (Math, Logic, Code, Factual, Creative)
-- [x] LATS tree search implementation
-- [x] Tree caching with similarity search
-- [x] SymPy symbolic verification
-- [x] Reflection engine for self-correction
+- [X] Neural router with embedding-based classification
+- [X] Expert workers (Math, Logic, Code, Factual, Creative, Analysis)
+- [X] LATS tree search implementation
+- [X] **Global shared tree cache** for cross-domain learning
+- [X] SymPy symbolic verification
+- [X] Reflection engine for self-correction
+- [X] **Configuration-driven worker prompts** (via .env)
 - [ ] Enhanced factual verification
 - [ ] Contextual bandit training for router
 - [ ] GSM8K/ToolBench benchmarks
 - [ ] Multi-turn conversation support
 - [ ] Distributed LATS execution
+- [ ] Fine-tuned worker models
 
 ---
 
@@ -507,4 +548,3 @@ MIT License - see LICENSE file for details
 ---
 
 **Built with ❤️ for production-grade reasoning systems**
-
