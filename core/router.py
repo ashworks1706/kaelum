@@ -323,11 +323,9 @@ class Router:
         lexical_diversity = unique_words / max(word_count, 1)
         avg_word_length = sum(len(w) for w in words) / max(word_count, 1)
         
-        # Semantic question word detection
         question_words_set = {'what', 'why', 'how', 'when', 'where', 'who', 'which', 'whose', 'whom'}
         question_words = sum(1 for w in words if w.lower() in question_words_set)
         
-        # Math detection: equations and mathematical expressions
         has_math_symbols = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', query)) or \
                           any(sym in query for sym in ['√', '∫', '∂', '∑', '∏', 'derivative', 'integral'])
         

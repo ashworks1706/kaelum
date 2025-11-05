@@ -1,6 +1,8 @@
 import re
 import ast
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
 class CodeBlock:
@@ -15,17 +17,88 @@ class CodeExtractor:
     
     FENCE_PATTERN = r'```(\w+)?\n(.*?)```'
     
-    LANGUAGE_KEYWORDS = {
-        'python': ['def ', 'class ', 'import ', 'from ', 'self.', '__init__', 'elif ', 'lambda '],
-        'javascript': ['function ', 'const ', 'let ', 'var ', '=>', 'async ', 'await ', 'console.'],
-        'java': ['public class', 'private ', 'protected ', 'void ', 'static ', 'extends ', 'implements '],
-        'cpp': ['#include', 'std::', 'namespace ', 'template<', 'cout <<', 'cin >>'],
-        'go': ['package ', 'func ', 'import ', 'type ', 'interface ', 'struct ', 'go func'],
-        'rust': ['fn ', 'let mut', 'impl ', 'trait ', 'pub ', 'use ', 'mod '],
-    }
-    
     def __init__(self):
-        pass
+        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        self.language_signatures = {
+            'python': {
+                'exemplars': [
+                    "def function():\n    pass",
+                    "import module\nclass MyClass:\n    def __init__(self):\n        pass"
+                ],
+                'strong_patterns': [
+                    (r'^\s*def\s+\w+\s*\([^)]*\)\s*:', 0.9),
+                    (r'^\s*class\s+\w+.*:', 0.9),
+                    (r'^\s*import\s+\w+', 0.85),
+                    (r'^\s*from\s+\w+\s+import', 0.85)
+                ],
+                'ast_validator': self._validate_python_ast
+            },
+            'javascript': {
+                'exemplars': [
+                    "function test() { return true; }",
+                    "const data = async () => await fetch();"
+                ],
+                'strong_patterns': [
+                    (r'\bfunction\s+\w+\s*\([^)]*\)\s*\{', 0.85),
+                    (r'\b(const|let|var)\s+\w+\s*=', 0.75),
+                    (r'=>\s*\{', 0.80)
+                ],
+                'ast_validator': None
+            },
+            'java': {
+                'exemplars': [
+                    "public class Test {\n    public static void main(String[] args) {}\n}"
+                ],
+                'strong_patterns': [
+                    (r'\b(public|private)\s+class\s+\w+', 0.90),
+                    (r'\b(public|private|protected)\s+\w+\s+\w+\s*\(', 0.80),
+                    (r'System\.out\.print', 0.85)
+                ],
+                'ast_validator': None
+            },
+            'cpp': {
+                'exemplars': [
+                    "#include <iostream>\nint main() { std::cout << \"test\"; }"
+                ],
+                'strong_patterns': [
+                    (r'#include\s*<[^>]+>', 0.90),
+                    (r'std::\w+', 0.85),
+                    (r'\btemplate\s*<', 0.90)
+                ],
+                'ast_validator': None
+            },
+            'go': {
+                'exemplars': [
+                    "package main\nfunc main() { fmt.Println(\"test\") }"
+                ],
+                'strong_patterns': [
+                    (r'^\s*package\s+\w+', 0.90),
+                    (r'\bfunc\s+\w+\s*\(', 0.85),
+                    (r':=', 0.70)
+                ],
+                'ast_validator': None
+            },
+            'rust': {
+                'exemplars': [
+                    "fn main() { let x = 5; println!(\"{}\", x); }"
+                ],
+                'strong_patterns': [
+                    (r'\bfn\s+\w+\s*\(', 0.90),
+                    (r'\blet\s+mut\s+', 0.85),
+                    (r'\bimpl\s+\w+', 0.85)
+                ],
+                'ast_validator': None
+            }
+        }
+        
+        self._cache_embeddings()
+    
+    def _cache_embeddings(self):
+        self.lang_embeddings = {}
+        for lang, sig in self.language_signatures.items():
+            embeddings = self.encoder.encode(sig['exemplars'], convert_to_tensor=False)
+            self.lang_embeddings[lang] = embeddings
     
     def extract(self, text: str, expected_language: Optional[str] = None) -> List[CodeBlock]:
         blocks = []
@@ -129,39 +202,81 @@ class CodeExtractor:
         return blocks
     
     def _detect_language(self, code: str) -> Optional[str]:
+        if not code.strip():
+            return None
+        
         scores = {}
         
-        for lang, keywords in self.LANGUAGE_KEYWORDS.items():
-            score = sum(1 for kw in keywords if kw in code)
+        for lang, sig in self.language_signatures.items():
+            score = 0.0
+            
+            for pattern, weight in sig['strong_patterns']:
+                if re.search(pattern, code, re.MULTILINE):
+                    score += weight
+            
+            if sig['ast_validator']:
+                if sig['ast_validator'](code):
+                    score += 0.5
+            
             if score > 0:
                 scores[lang] = score
+        
+        if len(code) > 30:
+            semantic_scores = self._semantic_language_match(code)
+            for lang, sem_score in semantic_scores.items():
+                scores[lang] = scores.get(lang, 0.0) * 0.6 + sem_score * 0.4
         
         if not scores:
             return None
         
         return max(scores.items(), key=lambda x: x[1])[0]
     
+    def _semantic_language_match(self, code: str) -> Dict[str, float]:
+        code_embedding = self.encoder.encode(code, convert_to_tensor=False)
+        
+        scores = {}
+        for lang, exemplar_embeddings in self.lang_embeddings.items():
+            similarities = []
+            for exemplar_emb in exemplar_embeddings:
+                sim = np.dot(code_embedding, exemplar_emb) / (
+                    np.linalg.norm(code_embedding) * np.linalg.norm(exemplar_emb) + 1e-9
+                )
+                similarities.append(sim)
+            scores[lang] = float(np.max(similarities)) if similarities else 0.0
+        
+        return scores
+    
+    def _validate_python_ast(self, code: str) -> bool:
+        try:
+            ast.parse(code)
+            return True
+        except:
+            return False
+    
     def _looks_like_code(self, line: str, expected_language: Optional[str]) -> bool:
+        if not line.strip():
+            return False
+        
         code_indicators = [
-            r'\bdef\s+\w+\s*\(',
-            r'\bclass\s+\w+',
-            r'\bfunction\s+\w+\s*\(',
-            r'\bif\s*\(.+\)\s*{',
-            r'\bfor\s*\(.+\)',
-            r'\w+\s*=\s*.+[;{]',
-            r'[{}()\[\]]{2,}',
+            (r'\b(def|class|function|public|private|fn|func)\s+\w+', 0.9),
+            (r'[{}\[\]()].*[{}\[\]()]', 0.7),
+            (r'\w+\s*=\s*\w+', 0.6),
+            (r'(import|#include|package)\s+\w+', 0.8),
+            (r'(if|for|while)\s*\(', 0.7),
+            (r'->\s*\w+|=>\s*', 0.7)
         ]
         
-        for pattern in code_indicators:
+        total_score = 0.0
+        for pattern, weight in code_indicators:
             if re.search(pattern, line):
-                return True
+                total_score += weight
         
-        if expected_language:
-            keywords = self.LANGUAGE_KEYWORDS.get(expected_language, [])
-            if any(kw in line for kw in keywords):
-                return True
+        if expected_language and expected_language in self.language_signatures:
+            for pattern, weight in self.language_signatures[expected_language]['strong_patterns']:
+                if re.search(pattern, line):
+                    total_score += weight * 0.5
         
-        return False
+        return total_score > 0.6
     
     def _is_continuation(self, line: str, current_block: List[str]) -> bool:
         if not current_block:
@@ -179,23 +294,44 @@ class CodeExtractor:
         return False
     
     def _validate_syntax(self, code: str, language: str) -> bool:
-        if language == 'python':
-            try:
-                ast.parse(code)
-                return True
-            except:
-                return False
+        if language == 'python' and language in self.language_signatures:
+            validator = self.language_signatures[language]['ast_validator']
+            if validator:
+                return validator(code)
         
         bracket_pairs = {'(': ')', '[': ']', '{': '}'}
         stack = []
+        in_string = False
+        string_char = None
+        escape_next = False
         
-        for char in code:
+        for i, char in enumerate(code):
+            if escape_next:
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                escape_next = True
+                continue
+            
+            if char in ['"', "'", '`']:
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+                continue
+            
+            if in_string:
+                continue
+            
             if char in bracket_pairs:
-                stack.append(char)
+                stack.append((char, i))
             elif char in bracket_pairs.values():
                 if not stack:
                     return False
-                opening = stack.pop()
+                opening, pos = stack.pop()
                 if bracket_pairs[opening] != char:
                     return False
         

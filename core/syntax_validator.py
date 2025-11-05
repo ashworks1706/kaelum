@@ -3,7 +3,7 @@ import re
 import subprocess
 import tempfile
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 class SyntaxValidator:
@@ -11,7 +11,15 @@ class SyntaxValidator:
     SUPPORTED_LANGUAGES = ['python', 'javascript', 'typescript', 'java', 'cpp', 'go', 'rust']
     
     def __init__(self):
-        pass
+        self._validators = {
+            'python': self._validate_python,
+            'javascript': self._validate_javascript,
+            'typescript': self._validate_javascript,
+            'java': self._validate_java,
+            'cpp': self._validate_cpp,
+            'go': self._validate_go,
+            'rust': self._validate_rust
+        }
     
     def validate(self, code: str, language: str = 'python') -> Dict:
         language = language.lower()
@@ -23,20 +31,11 @@ class SyntaxValidator:
                 'method': 'unsupported'
             }
         
-        if language == 'python':
-            return self._validate_python(code)
-        elif language in ['javascript', 'typescript']:
-            return self._validate_javascript(code, language)
-        elif language == 'java':
-            return self._validate_java(code)
-        elif language == 'cpp':
-            return self._validate_cpp(code)
-        elif language == 'go':
-            return self._validate_go(code)
-        elif language == 'rust':
-            return self._validate_rust(code)
-        else:
-            return {'is_valid': False, 'error': 'Validator not implemented', 'method': 'unimplemented'}
+        validator = self._validators.get(language)
+        if validator:
+            return validator(code)
+        
+        return {'is_valid': False, 'error': 'Validator not implemented', 'method': 'unimplemented'}
     
     def _validate_python(self, code: str) -> Dict:
         try:
@@ -61,9 +60,10 @@ class SyntaxValidator:
                 'method': 'ast_parser'
             }
     
-    def _validate_javascript(self, code: str, language: str) -> Dict:
+    def _validate_javascript(self, code: str, language: str = 'javascript') -> Dict:
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+            suffix = '.ts' if language == 'typescript' else '.js'
+            with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
                 f.write(code)
                 temp_path = f.name
             
@@ -90,11 +90,7 @@ class SyntaxValidator:
             finally:
                 os.unlink(temp_path)
         except FileNotFoundError:
-            return {
-                'is_valid': False,
-                'error': 'Node.js not found in system',
-                'method': 'node_check'
-            }
+            return self._fallback_validate(code, language)
         except subprocess.TimeoutExpired:
             return {
                 'is_valid': False,
@@ -102,117 +98,145 @@ class SyntaxValidator:
                 'method': 'node_check'
             }
         except Exception as e:
-            return {
-                'is_valid': False,
-                'error': f'Validation error: {str(e)}',
-                'method': 'node_check'
-            }
+            return self._fallback_validate(code, language)
     
     def _validate_java(self, code: str) -> Dict:
-        basic_checks = [
-            (r'class\s+\w+', 'No class definition found'),
-            (r'(?:public|private|protected)?\s*(?:static\s+)?(?:void|int|String|boolean|double|float)\s+\w+\s*\(', 'No method signature found')
-        ]
+        structural_check = self._validate_structure(code, {
+            'class': r'\bclass\s+\w+',
+            'method': r'(?:public|private|protected)?\s*(?:static\s+)?(?:void|int|String|boolean|double|float)\s+\w+\s*\('
+        })
         
-        for pattern, error_msg in basic_checks:
-            if not re.search(pattern, code):
-                return {
-                    'is_valid': False,
-                    'error': error_msg,
-                    'method': 'regex_heuristic'
-                }
+        if not structural_check['is_valid']:
+            return structural_check
         
-        bracket_stack = []
-        for i, char in enumerate(code):
-            if char in '{[(':
-                bracket_stack.append((char, i))
-            elif char in '}])':
-                if not bracket_stack:
-                    return {
-                        'is_valid': False,
-                        'error': f'Unmatched closing bracket at position {i}',
-                        'method': 'bracket_matching'
-                    }
-                opening, _ = bracket_stack.pop()
-                expected = {'(': ')', '[': ']', '{': '}'}
-                if expected[opening] != char:
-                    return {
-                        'is_valid': False,
-                        'error': f'Mismatched brackets at position {i}',
-                        'method': 'bracket_matching'
-                    }
-        
-        if bracket_stack:
-            return {
-                'is_valid': False,
-                'error': f'Unclosed bracket at position {bracket_stack[-1][1]}',
-                'method': 'bracket_matching'
-            }
-        
-        return {
-            'is_valid': True,
-            'error': None,
-            'method': 'heuristic_validation'
-        }
+        return self._validate_balanced_syntax(code, 'java')
     
     def _validate_cpp(self, code: str) -> Dict:
-        required_patterns = [
-            (r'#include\s*<\w+>', 'Missing include statements'),
-        ]
+        if not re.search(r'#include\s*<[^>]+>|#include\s*"[^"]+"', code):
+            return {
+                'is_valid': False,
+                'error': 'Missing include directives',
+                'method': 'structural_analysis'
+            }
         
-        for pattern, error_msg in required_patterns:
-            if not re.search(pattern, code):
-                return {
-                    'is_valid': False,
-                    'error': error_msg,
-                    'method': 'regex_heuristic'
-                }
-        
-        return self._validate_brackets(code)
+        return self._validate_balanced_syntax(code, 'cpp')
     
     def _validate_go(self, code: str) -> Dict:
         if not re.search(r'package\s+\w+', code):
             return {
                 'is_valid': False,
                 'error': 'Missing package declaration',
-                'method': 'regex_heuristic'
+                'method': 'structural_analysis'
             }
         
-        return self._validate_brackets(code)
+        return self._validate_balanced_syntax(code, 'go')
     
     def _validate_rust(self, code: str) -> Dict:
-        return self._validate_brackets(code)
+        return self._validate_balanced_syntax(code, 'rust')
     
-    def _validate_brackets(self, code: str) -> Dict:
+    def _validate_structure(self, code: str, required_patterns: Dict[str, str]) -> Dict:
+        for name, pattern in required_patterns.items():
+            if not re.search(pattern, code):
+                return {
+                    'is_valid': False,
+                    'error': f'Missing {name} definition',
+                    'method': 'structural_analysis'
+                }
+        
+        return {'is_valid': True, 'error': None}
+    
+    def _validate_balanced_syntax(self, code: str, language: str) -> Dict:
+        in_string = False
+        in_char = False
+        in_comment = False
+        in_multiline_comment = False
+        escape_next = False
+        
         bracket_stack = []
-        for i, char in enumerate(code):
-            if char in '{[(':
-                bracket_stack.append((char, i))
-            elif char in '}])':
-                if not bracket_stack:
-                    return {
-                        'is_valid': False,
-                        'error': f'Unmatched closing bracket at position {i}',
-                        'method': 'bracket_matching'
-                    }
-                opening, _ = bracket_stack.pop()
-                expected = {'(': ')', '[': ']', '{': '}'}
-                if expected[opening] != char:
-                    return {
-                        'is_valid': False,
-                        'error': f'Mismatched brackets at position {i}',
-                        'method': 'bracket_matching'
-                    }
+        bracket_pairs = {'(': ')', '[': ']', '{': '}'}
+        
+        i = 0
+        while i < len(code):
+            char = code[i]
+            
+            if escape_next:
+                escape_next = False
+                i += 1
+                continue
+            
+            if char == '\\' and (in_string or in_char):
+                escape_next = True
+                i += 1
+                continue
+            
+            if not in_string and not in_char:
+                if language in ['cpp', 'java', 'javascript', 'rust', 'go']:
+                    if i + 1 < len(code) and code[i:i+2] == '//':
+                        in_comment = True
+                        i += 2
+                        continue
+                    
+                    if i + 1 < len(code) and code[i:i+2] == '/*':
+                        in_multiline_comment = True
+                        i += 2
+                        continue
+                    
+                    if in_multiline_comment and i + 1 < len(code) and code[i:i+2] == '*/':
+                        in_multiline_comment = False
+                        i += 2
+                        continue
+                
+                if language == 'python' and char == '#':
+                    in_comment = True
+            
+            if in_comment:
+                if char == '\n':
+                    in_comment = False
+                i += 1
+                continue
+            
+            if in_multiline_comment:
+                i += 1
+                continue
+            
+            if char == '"' and not in_char:
+                in_string = not in_string
+            elif char == "'" and not in_string:
+                in_char = not in_char
+            
+            if not in_string and not in_char:
+                if char in bracket_pairs:
+                    bracket_stack.append((char, i))
+                elif char in bracket_pairs.values():
+                    if not bracket_stack:
+                        return {
+                            'is_valid': False,
+                            'error': f'Unmatched closing bracket at position {i}',
+                            'method': 'syntax_analysis'
+                        }
+                    opening, pos = bracket_stack.pop()
+                    if bracket_pairs[opening] != char:
+                        return {
+                            'is_valid': False,
+                            'error': f'Mismatched brackets: expected {bracket_pairs[opening]} but got {char} at position {i}',
+                            'method': 'syntax_analysis'
+                        }
+            
+            i += 1
         
         if bracket_stack:
+            opening, pos = bracket_stack[-1]
             return {
                 'is_valid': False,
-                'error': f'Unclosed bracket at position {bracket_stack[-1][1]}',
-                'method': 'bracket_matching'
+                'error': f'Unclosed {opening} bracket at position {pos}',
+                'method': 'syntax_analysis'
             }
         
         return {
             'is_valid': True,
             'error': None,
-            'method': 'bracket_matching'
+            'method': 'syntax_analysis'
         }
+    
+    def _fallback_validate(self, code: str, language: str) -> Dict:
+        return self._validate_balanced_syntax(code, language)

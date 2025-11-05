@@ -240,30 +240,20 @@ class VerificationEngine:
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
         combined_text = query + " " + " ".join(reasoning_steps[:3])
         
-        # Prioritize mathematical content
-        math_equation_pattern = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', combined_text))
-        math_keywords = sum(1 for kw in ['derivative', 'integral', 'solve', 'equation', 'calculate'] 
-                           if kw in combined_text.lower())
-        
-        # Code patterns
-        code_keywords = {'function', 'class', 'def', 'import', 'return', 'algorithm', 'implementation'}
-        has_code = any(kw in combined_text.lower() for kw in code_keywords)
-        code_symbols = sum(c in combined_text for c in '{}[]();')
-        
-        # Logic patterns
-        logic_keywords = {'therefore', 'thus', 'premise', 'conclusion', 'implies', 'entails'}
-        has_logic = any(kw in combined_text.lower() for kw in logic_keywords)
-        
         classification = self.worker_classifier.classify_worker(query)
         
         if classification['confidence'] > 0.5:
             return classification['worker']
         
-        if math_equation_pattern or math_keywords >= 2:
+        math_pattern = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', combined_text))
+        code_pattern = bool(re.search(r'\b(def|class|function|import|return)\b', combined_text.lower()))
+        logic_pattern = bool(re.search(r'\b(therefore|thus|premise|conclusion|implies)\b', combined_text.lower()))
+        
+        if math_pattern:
             return "math"
-        elif code_symbols > 5 or has_code:
+        elif code_pattern:
             return "code"
-        elif has_logic:
+        elif logic_pattern:
             return "logic"
         else:
             return classification['worker']
