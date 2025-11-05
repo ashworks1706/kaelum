@@ -7,11 +7,14 @@ from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
+from core.conclusion_detector import ConclusionDetector
 
 
 class AnalysisWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
+        self.conclusion_detector = ConclusionDetector()
+        self.relevance_validator = RelevanceValidator()
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.ANALYSIS
@@ -76,8 +79,8 @@ class AnalysisWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                has_conclusion = any(next_step.lower().startswith(kw) for kw in ['therefore', 'in conclusion', 'overall', 'to summarize'])
-                is_final = depth >= max_tree_depth - 1 or has_conclusion or len(next_step) > 200
+                conclusion_result = self.conclusion_detector.detect(next_step, history)
+                is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion'] or len(next_step) > 200
                 
                 return {
                     "query": query,

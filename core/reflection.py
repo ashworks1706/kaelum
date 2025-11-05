@@ -1,5 +1,9 @@
-from typing import List, Optional
+import re
+from typing import List, Optional, Dict
+from transformers import pipeline
+
 from core.reasoning import LLMClient, Message
+from core.verification import VerificationEngine
 
 
 class ReflectionEngine:
@@ -52,12 +56,35 @@ class ReflectionEngine:
             Message(role="user", content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nList issues (or 'None'):"),
         ]
         
-        response = self.llm.generate(messages)
         
-        if "none" in response.lower() or not response.strip():
-            return []
+        response = self.llm_client.generate(messages).strip()
         
-        return [response.strip()]
+        if not response or not response.strip():
+            return None
+        
+        try:
+            nli = pipeline("text-classification", model="facebook/bart-large-mnli")
+            no_improvement_labels = [
+                "No improvements are needed",
+                "The answer is correct as is",
+                "Everything looks good"
+            ]
+            
+            for label in no_improvement_labels:
+                result = nli(f"{response}", f"hypothesis: {label}")
+                if result and result[0]['label'] == 'ENTAILMENT' and result[0]['score'] > 0.75:
+                    return None
+        except:
+            if "none" in response.lower() or "no improvement" in response.lower():
+                words_before = response.lower().split("none")[0] if "none" in response.lower() else ""
+                if not any(neg in words_before for neg in ["not", "no", "isn't", "aren't"]):
+                    return None
+        
+        improvements = self._parse_structured_list(response)
+        
+        return improvements if improvements else None
+    
+    def _parse_structured_list(self, text: str) -> List[str]:
     
     def _improve_trace(self, query: str, trace: List[str], issues: List[str]) -> List[str]:
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(trace))

@@ -131,10 +131,12 @@ class WorkerAgent(ABC):
         )
 
 
-class MathWorker(WorkerAgent):
+class LogicWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
+        self.conclusion_detector = ConclusionDetector()
+        self.conclusion_detector = ConclusionDetector()
         self.sympy_engine = SympyEngine
         
     def get_specialty(self) -> WorkerSpecialty:
@@ -201,9 +203,8 @@ class MathWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                has_answer_indicators = ('=' in next_step or 
-                                        next_step.lower().startswith(('therefore', 'thus', 'answer:', 'result:')))
-                is_final = depth >= max_tree_depth - 1 or has_answer_indicators
+                conclusion_result = self.conclusion_detector.detect(next_step, history)
+                is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
                 
                 return {
                     "query": query,
@@ -331,8 +332,8 @@ class LogicWorker(WorkerAgent):
                 response = self.llm_client.generate(messages)
                 next_step = response.strip()
                 
-                has_conclusion_indicators = next_step.lower().startswith(('therefore', 'thus', 'conclude', 'conclusion:', 'answer:'))
-                is_conclusion = depth >= max_tree_depth - 1 or has_conclusion_indicators
+                conclusion_result = self.conclusion_detector.detect(next_step, history)
+                is_conclusion = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
                 
                 return {
                     "query": query,

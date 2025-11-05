@@ -10,12 +10,16 @@ from core.config import KaelumConfig
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
+from core.language_detector import LanguageDetector
+from core.task_classifier import TaskClassifier
 
 
 class CodeWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
+        self.language_detector = LanguageDetector()
+        self.task_classifier = TaskClassifier()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
             'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'
@@ -167,55 +171,13 @@ class CodeWorker(WorkerAgent):
         )
     
     def _detect_language(self, query: str) -> Optional[str]:
-        query_lower = query.lower()
-        
-        # First check for explicit language mentions (most reliable)
-        # Check longer names first to avoid partial matches
-        language_patterns = {
-            'javascript': [r'\bjavascript\b', r'\bjs\b', r'\.js\b'],
-            'typescript': [r'\btypescript\b', r'\bts\b', r'\.ts\b'],
-            'python': [r'\bpython\b', r'\.py\b'],
-            'java': [r'\bjava\b', r'\.java\b'],
-            'c++': [r'\bc\+\+', r'\bcpp\b', r'\.cpp\b', r'\.hpp\b'],
-            'go': [r'\bgolang\b', r'\bgo\s', r'\.go\b'],
-            'rust': [r'\brust\b', r'\.rs\b'],
-            'ruby': [r'\bruby\b', r'\.rb\b'],
-            'php': [r'\bphp\b', r'\.php\b'],
-            'swift': [r'\bswift\b', r'\.swift\b'],
-            'kotlin': [r'\bkotlin\b', r'\.kt\b'],
-            'c': [r'\bc\s', r'\.c\b', r'\.h\b']  # C last, most likely to match accidentally
-        }
-        
-        for lang, patterns in language_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, query_lower):
-                    return lang
-        
-        # Then check for language-specific code patterns
-        if 'def ' in query or 'import ' in query or 'self.' in query:
-            return 'python'
-        elif 'function ' in query or 'const ' in query or 'let ' in query or 'var ' in query:
-            return 'javascript'
-        elif 'public class' in query or 'private void' in query or 'System.out' in query:
-            return 'java'
-        
-        return None
+        result = self.language_detector.detect(query, "")
+        return result['language'] if result['confidence'] > 0.3 else None
+    
     
     def _classify_task(self, query: str) -> str:
-        query_lower = query.lower()
-        
-        if any(kw in query_lower for kw in ['debug', 'fix', 'error', 'bug']):
-            return 'debugging'
-        elif any(kw in query_lower for kw in ['optimize', 'improve', 'refactor']):
-            return 'optimization'
-        elif any(kw in query_lower for kw in ['review', 'analyze', 'explain']):
-            return 'review'
-        elif any(kw in query_lower for kw in ['test', 'unittest', 'pytest']):
-            return 'testing'
-        elif any(kw in query_lower for kw in ['algorithm', 'data structure']):
-            return 'algorithm'
-        else:
-            return 'generation'
+        result = self.task_classifier.classify_single(query, 'code')
+        return result['task']
     
     def _build_prompt(
         self,

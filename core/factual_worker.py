@@ -8,6 +8,7 @@ from core.workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from core.reasoning import Message
 from core.lats import LATS, LATSNode
 from core.reward_model import RewardModel
+from core.task_classifier import TaskClassifier
 from sentence_transformers import SentenceTransformer, util
 
 
@@ -15,6 +16,7 @@ class FactualWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
         self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.task_classifier = TaskClassifier()
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
@@ -140,27 +142,8 @@ class FactualWorker(WorkerAgent):
         )
     
     def _classify_factual_query(self, query: str) -> str:
-        if not hasattr(self, '_type_embeddings'):
-            type_exemplars = {
-                'definition': "What is photosynthesis? Define machine learning.",
-                'historical': "When did the Renaissance begin? What year did World War II end?",
-                'geographical': "Where is Mount Everest located? What is the capital of Japan?",
-                'quantitative': "How many planets are in our solar system? What is the population of China?",
-                'biographical': "Who invented the telephone? Tell me about Marie Curie.",
-                'general': "Explain the water cycle. Describe how airplanes fly."
-            }
-            
-            self._type_names = list(type_exemplars.keys())
-            self._type_embeddings = self._encoder.encode(
-                list(type_exemplars.values()), 
-                convert_to_tensor=True
-            )
-        
-        query_embedding = self._encoder.encode(query, convert_to_tensor=True)
-        similarities = util.cos_sim(query_embedding, self._type_embeddings)[0]
-        max_idx = int(similarities.argmax())
-        
-        return self._type_names[max_idx]
+        result = self.task_classifier.classify_single(query, 'factual')
+        return result['task']
     
     def _build_prompt(
         self,

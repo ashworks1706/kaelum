@@ -321,27 +321,8 @@ class VerificationEngine:
         }
     
     def _detect_code_language(self, query: str, code: str) -> str:
-        query_lower = query.lower()
-        
-        if 'python' in query_lower:
-            return 'python'
-        elif any(lang in query_lower for lang in ['javascript', 'js', 'node', 'typescript']):
-            return 'javascript'
-        elif any(lang in query_lower for lang in ['java', 'kotlin']):
-            return 'java'
-        elif any(lang in query_lower for lang in ['c++', 'cpp']):
-            return 'cpp'
-        
-        if re.search(r'\bdef\s+\w+\s*\(', code) or re.search(r'\bimport\s+\w+', code):
-            return 'python'
-        elif re.search(r'\bfunction\s+\w+\s*\(', code) or re.search(r'\b(const|let|var)\s+\w+\s*=', code):
-            return 'javascript'
-        elif re.search(r'\b(public|private|class)\s+\w+', code):
-            return 'java'
-        elif '#include' in code:
-            return 'cpp'
-        
-        return 'unknown'
+        result = self.language_detector.detect(query, code)
+        return result['language']
     
     def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
         issues = []
@@ -349,8 +330,11 @@ class VerificationEngine:
         if len(reasoning_steps) < 2:
             issues.append("Insufficient logical reasoning steps")
         
-        conclusion_keywords = ['therefore', 'thus', 'conclude', 'hence']
-        has_conclusion = any(kw in step.lower() for step in reasoning_steps for kw in conclusion_keywords)
+        conclusion_result = self.conclusion_detector.detect(
+            reasoning_steps[-1] if reasoning_steps else answer,
+            reasoning_steps
+        )
+        has_conclusion = conclusion_result['is_conclusion']
         
         if not has_conclusion:
             issues.append("No clear logical conclusion")
@@ -359,18 +343,23 @@ class VerificationEngine:
         answer_embedding = self.semantic_encoder.encode(answer, convert_to_tensor=True)
         relevance = float(util.cos_sim(query_embedding, answer_embedding)[0][0])
         
-        if relevance < 0.3:
+        relevance_threshold = 0.35
+        if relevance < relevance_threshold:
             issues.append("Answer not relevant to query")
         
-        confidence = 0.7 if has_conclusion else 0.5
-        confidence *= (relevance + 0.5) / 1.5
+        base_confidence = 0.75 if has_conclusion else 0.55
+        confidence = base_confidence * ((relevance + 0.5) / 1.5)
         passed = len(issues) == 0
         
         return {
             "passed": passed,
             "confidence": confidence,
             "issues": issues,
-            "details": {"has_conclusion": has_conclusion, "relevance": relevance}
+            "details": {
+                "has_conclusion": has_conclusion,
+                "conclusion_confidence": conclusion_result['confidence'],
+                "relevance": relevance
+            }
         }
     
     def _verify_factual(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
