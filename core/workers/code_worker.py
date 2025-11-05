@@ -34,7 +34,8 @@ class CodeWorker(WorkerAgent):
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
-              num_simulations: int = 10, parallel: bool = False) -> WorkerResult:
+              num_simulations: int = 10, parallel: bool = False,
+              max_workers: int = 4) -> WorkerResult:
         start_time = time.time()
         
         if use_cache:
@@ -121,7 +122,7 @@ class CodeWorker(WorkerAgent):
         
         tree = LATS(root_state, simulator=simulate_code_step, expand_fn=expand_code_step)
         
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel)
+        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:

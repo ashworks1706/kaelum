@@ -1,0 +1,24 @@
+{
+  "result": {
+    "query": "What is 2+2?",
+    "reasoning_trace": [
+      "The first step to solving the problem \"What is 2+2?\" is simply to recognize that we need to perform an arithmetic operation involving addition.\n\nStep 1: Identify the numbers involved.\nIn this case, the two numbers are 2 and 2.\n\nStep 2: Apply the basic rule of addition.\nAddition involves combining quantities. Here, we're adding 2 and 2 together.\n\nStep 3: Perform the addition.\n2 + 2 = 4\n\nTherefore, the answer to the question \"What is 2+2?\" is 4."
+    ],
+    "answer": "The first step to solving the problem \"What is 2+2?\" is simply to recognize that we need to perform an arithmetic operation involving addition.\n\nStep 1: Identify the numbers involved.\nIn this case, the two numbers are 2 and 2.\n\nStep 2: Apply the basic rule of addition.\nAddition involves combining quantities. Here, we're adding 2 and 2 together.\n\nStep 3: Perform the addition.\n2 + 2 = 4\n\nTherefore, the answer to the question \"What is 2+2?\" is 4.",
+    "worker": "math",
+    "confidence": 1.0,
+    "verification_passed": true,
+    "iterations": 1,
+    "cache_hit": false,
+    "metrics": {
+      "total_time_ms": 42221.85659408569,
+      "execution_time_ms": 42219.48528289795,
+      "tree_depth": 1,
+      "num_simulations": 5,
+      "iterations": 1
+    }
+  },
+  "quality": "high",
+  "confidence": 1.0,
+  "worker": "math"
+}

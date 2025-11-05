@@ -28,6 +28,9 @@ class LLMClient:
         return headers
 
     def generate(self, messages: List[Message], stream: bool = False):
+        import logging
+        logger = logging.getLogger("kaelum.llm")
+        
         url = f"{self.base_url}/chat/completions"
         
         payload = {
@@ -37,6 +40,13 @@ class LLMClient:
             "max_tokens": self.config.max_tokens,
             "stream": stream,
         }
+        
+        logger.debug(f"LLM: Calling {url}")
+        logger.debug(f"LLM: Model = {self.config.model}")
+        logger.debug(f"LLM: Temperature = {self.config.temperature}")
+        logger.debug(f"LLM: Max tokens = {payload['max_tokens']}")
+        logger.debug(f"LLM: Stream = {stream}")
+        logger.debug(f"LLM: Messages count = {len(messages)}")
         
         try:
             if stream:
@@ -61,15 +71,48 @@ class LLMClient:
                 return stream_generator()
             else:
                 # Return complete response
+                import time
+                start_time = time.time()
+                
+                # Log the request
+                logger.info(f"\n{'─' * 80}")
+                logger.info(f"LLM REQUEST:")
+                logger.info(f"  Model: {self.config.model}")
+                logger.info(f"  Messages: {len(messages)} message(s)")
+                if len(messages) > 0:
+                    # Log system prompt if present
+                    if messages[0].role == "system":
+                        system_preview = messages[0].content[:100].replace('\n', ' ')
+                        logger.info(f"  System: {system_preview}...")
+                    # Log user message
+                    user_msg = next((m for m in messages if m.role == "user"), None)
+                    if user_msg:
+                        user_preview = user_msg.content[:200].replace('\n', ' ')
+                        logger.info(f"  User: {user_preview}...")
+                
                 with httpx.Client(timeout=60.0) as client:
                     response = client.post(url, json=payload, headers=self.headers)
                     response.raise_for_status()
                     data = response.json()
                     
+                    elapsed = time.time() - start_time
+                    
                     if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
                         raise RuntimeError("LLM returned empty response")
                     
-                    return data["choices"][0]["message"]["content"]
+                    content = data["choices"][0]["message"]["content"]
+                    
+                    # Log the response
+                    logger.info(f"\nLLM RESPONSE ({elapsed:.2f}s):")
+                    logger.info(f"  Length: {len(content)} chars")
+                    # Show first 500 chars of response
+                    preview = content[:500].replace('\n', '\n  ')
+                    logger.info(f"  Content:\n  {preview}")
+                    if len(content) > 500:
+                        logger.info(f"  ... ({len(content) - 500} more chars)")
+                    logger.info(f"{'─' * 80}\n")
+                    
+                    return content
         
         except httpx.ConnectError as e:
             raise ConnectionError(

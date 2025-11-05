@@ -14,12 +14,29 @@ class ReflectionEngine:
     def enhance_reasoning(self, query: str, initial_trace: List[str], 
                          worker_type: Optional[str] = None,
                          verification_issues: List[str] = None) -> List[str]:
+        import logging
+        logger = logging.getLogger("kaelum.reflection")
+        
         current_trace = initial_trace
         
         if verification_issues and len(verification_issues) > 0:
+            logger.info(f"\n{'─' * 80}")
+            logger.info(f"REFLECTION: Starting improvement with {len(verification_issues)} known issues")
+            for i, issue in enumerate(verification_issues[:3], 1):
+                logger.info(f"  Issue {i}: {issue}")
+            if len(verification_issues) > 3:
+                logger.info(f"  ... and {len(verification_issues) - 3} more")
+            
             current_trace = self._improve_trace(query, current_trace, verification_issues)
+            logger.info(f"REFLECTION: Trace improved ({len(initial_trace)} → {len(current_trace)} steps)")
+            logger.info(f"{'─' * 80}\n")
         else:
+            logger.info(f"\n{'─' * 80}")
+            logger.info(f"REFLECTION: Starting iterative improvement (max {self.max_iterations} iterations)")
+            
             for iteration in range(self.max_iterations):
+                logger.info(f"\nREFLECTION: Iteration {iteration + 1}/{self.max_iterations}")
+                
                 if self.verification_engine and worker_type:
                     fake_answer = " ".join(current_trace[-2:]) if len(current_trace) >= 2 else ""
                     
@@ -31,19 +48,27 @@ class ReflectionEngine:
                     )
                     
                     if result["passed"]:
+                        logger.info(f"REFLECTION: ✓ Verification passed on iteration {iteration + 1}")
                         break
                     
                     issues = result.get("issues", [])
                     if issues and iteration < self.max_iterations - 1:
+                        logger.info(f"REFLECTION: Found {len(issues)} issues, attempting improvement...")
                         current_trace = self._improve_trace(query, current_trace, issues)
+                        logger.info(f"REFLECTION: Trace updated ({len(current_trace)} steps)")
                 else:
                     issues = self._verify_trace(query, current_trace)
                     
                     if not issues:
+                        logger.info(f"REFLECTION: ✓ No issues found on iteration {iteration + 1}")
                         break
                     
                     if iteration < self.max_iterations - 1:
+                        logger.info(f"REFLECTION: Found issues, attempting improvement...")
                         current_trace = self._improve_trace(query, current_trace, issues)
+            
+            logger.info(f"REFLECTION: Complete ({len(initial_trace)} → {len(current_trace)} steps)")
+            logger.info(f"{'─' * 80}\n")
         
         return current_trace
     

@@ -42,16 +42,27 @@ class KaelumOrchestrator:
 
     def __init__(self, config: KaelumConfig, reasoning_system_prompt=None, 
                  reasoning_user_template=None, enable_routing: bool = True,
-                 enable_active_learning: bool = True):
+                 enable_active_learning: bool = True,
+                 cache_dir: str = ".kaelum/cache",
+                 router_data_dir: str = ".kaelum/routing",
+                 parallel: bool = False,
+                 max_workers: int = 4,
+                 max_tree_depth: Optional[int] = None,
+                 num_simulations: Optional[int] = None):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
         self.tree_cache = TreeCache(
+            cache_dir=cache_dir,
             embedding_model=config.embedding_model,
             llm_client=self.llm
         )
         
-        self.router = Router(learning_enabled=True, embedding_model=config.embedding_model) if enable_routing else None
+        self.router = Router(
+            learning_enabled=True, 
+            data_dir=router_data_dir,
+            embedding_model=config.embedding_model
+        ) if enable_routing else None
         if self.router:
             logger.info(f"Router enabled: Embedding-based intelligent routing ({config.embedding_model})")
         
@@ -74,13 +85,23 @@ class KaelumOrchestrator:
         
         self._workers = {}
         
+        # Store runtime parameters from command line
+        self.parallel = parallel
+        self.max_workers = max_workers
+        self.override_max_tree_depth = max_tree_depth  # User override from CLI
+        self.override_num_simulations = num_simulations  # User override from CLI
+        
         logger.info("=" * 70)
         logger.info("Kaelum Orchestrator Initialized")
         logger.info(f"  Embedding Model: {config.embedding_model}")
         logger.info(f"  Router: {'Enabled' if enable_routing else 'Disabled'}")
-        logger.info(f"  Cache Validation: LLM-powered semantic validation")
+        if enable_routing:
+            logger.info(f"    - Router data dir: {router_data_dir}")
+        logger.info(f"  Tree Cache: Enabled")
+        logger.info(f"    - Cache dir: {cache_dir}")
         logger.info(f"  Verification: Symbolic={config.use_symbolic_verification}, Factual={config.use_factual_verification}")
         logger.info(f"  Reflection: Max {config.max_reflection_iterations} iterations")
+        logger.info(f"  Parallel LATS: {'Enabled' if parallel else 'Disabled'} (max {max_workers} workers)")
         logger.info("=" * 70)
 
     def _get_worker(self, specialty: str):
@@ -133,19 +154,33 @@ class KaelumOrchestrator:
             return cache_result
         
         # Step 2: Route query to appropriate expert worker (only on cache miss)
+        logger.info("\n" + "=" * 70)
+        logger.info("STEP 2: ROUTING TO EXPERT WORKER")
+        logger.info("=" * 70)
         if self.router:
             routing_decision = self.router.route(query)
             worker_specialty = routing_decision.worker_specialty
             use_cache = False
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
-            logger.info(f"ROUTING: Selected {worker_specialty} worker")
+            logger.info(f"ROUTING: ✓ Selected {worker_specialty.upper()} worker")
+            logger.info(f"ROUTING: Confidence = {routing_decision.confidence:.3f}")
+            logger.info(f"ROUTING: Complexity = {routing_decision.complexity_score:.3f}")
         else:
             worker_specialty = "logic"
             use_cache = False
             max_depth = 5
             num_sims = 10
-            logger.info(f"ROUTING: Default to {worker_specialty} worker (router disabled)")
+            logger.info(f"ROUTING: Default to {worker_specialty.upper()} worker (router disabled)")
+        
+        # Apply CLI overrides if provided
+        if self.override_max_tree_depth is not None:
+            logger.info(f"ROUTING: Overriding max_tree_depth: {max_depth} → {self.override_max_tree_depth} (from CLI)")
+            max_depth = self.override_max_tree_depth
+        
+        if self.override_num_simulations is not None:
+            logger.info(f"ROUTING: Overriding num_simulations: {num_sims} → {self.override_num_simulations} (from CLI)")
+            num_sims = self.override_num_simulations
         
         worker = self._get_worker(worker_specialty)
         
@@ -168,60 +203,97 @@ class KaelumOrchestrator:
             logger.info(f"{'=' * 70}")
             
             # Step 2: Worker reasons using LATS + caching
-            logger.info(f"WORKER: {worker_specialty} executing with LATS")
-            logger.info(f"  Config: depth={max_depth}, sims={num_sims}, cache={use_cache}")
+            logger.info("\n" + "=" * 70)
+            logger.info(f"STEP 3: WORKER EXECUTION ({worker_specialty.upper()})")
+            logger.info("=" * 70)
+            logger.info(f"WORKER: Executing {worker_specialty.upper()} worker with LATS tree search")
+            logger.info(f"  - Max tree depth: {max_depth}")
+            logger.info(f"  - Num simulations: {num_sims}")
+            logger.info(f"  - Parallel: {self.parallel}")
+            if self.parallel:
+                logger.info(f"  - Max workers: {self.max_workers}")
+            logger.info(f"  - Use cache: {use_cache}")
             
+            worker_start_time = time.time()
             result = worker.solve(
                 query,
                 context=None,
                 use_cache=False,
                 max_tree_depth=max_depth,
-                num_simulations=num_sims
+                num_simulations=num_sims,
+                parallel=self.parallel,
+                max_workers=self.max_workers
             )
+            worker_time = time.time() - worker_start_time
             
+            logger.info(f"WORKER: ✓ Execution complete in {worker_time:.2f}s")
             logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
-            logger.info(f"WORKER: Confidence = {result.confidence:.2f}")
+            logger.info(f"WORKER: Confidence = {result.confidence:.3f}")
+            logger.info(f"WORKER: Answer preview: {result.answer[:100]}...")
             
             # Step 3: Verification - check if reasoning is correct
-            logger.info(f"\nVERIFICATION: Checking reasoning correctness...")
+            logger.info("\n" + "=" * 70)
+            logger.info("STEP 4: VERIFICATION")
+            logger.info("=" * 70)
+            logger.info(f"VERIFICATION: Checking reasoning correctness for {worker_specialty.upper()} worker output")
+            
+            verification_start_time = time.time()
             verification_result = self.verification_engine.verify(
                 query=query,
                 reasoning_steps=result.reasoning_steps,
                 answer=result.answer,
                 worker_type=worker_specialty
             )
+            verification_time = time.time() - verification_start_time
             
             verification_passed = verification_result["passed"]
             confidence = verification_result["confidence"]
             issues = verification_result.get("issues", [])
             
+            logger.info(f"VERIFICATION: Completed in {verification_time:.2f}s")
+            
             if verification_passed:
-                logger.info(f"VERIFICATION: ✓ PASSED (confidence={confidence:.2f})")
+                logger.info(f"VERIFICATION: ✓ PASSED")
+                logger.info(f"  - Confidence: {confidence:.3f}")
+                logger.info(f"  - Symbolic check: {verification_result.get('symbolic_passed', 'N/A')}")
+                logger.info(f"  - Factual check: {verification_result.get('factual_passed', 'N/A')}")
                 final_result = result
                 final_result.verification_passed = True
                 final_result.confidence = confidence
             else:
-                logger.info(f"VERIFICATION: ✗ FAILED (confidence={confidence:.2f})")
+                logger.info(f"VERIFICATION: ✗ FAILED")
+                logger.info(f"  - Confidence: {confidence:.3f}")
                 if issues:
-                    logger.info(f"VERIFICATION: Issues found:")
-                    for issue in issues:
-                        logger.info(f"  - {issue}")
+                    logger.info(f"  - Issues found ({len(issues)}):")
+                    for i, issue in enumerate(issues, 1):
+                        logger.info(f"    {i}. {issue}")
                 
                 # Step 4: Reflection - improve reasoning if not last iteration
                 if iteration < max_iterations:
-                    logger.info(f"\nREFLECTION: Improving reasoning based on verification failures...")
+                    logger.info("\n" + "=" * 70)
+                    logger.info("STEP 5: REFLECTION")
+                    logger.info("=" * 70)
+                    logger.info(f"REFLECTION: Improving reasoning based on verification failures")
+                    logger.info(f"REFLECTION: Issues to address: {len(issues)}")
+                    
+                    reflection_start_time = time.time()
                     improved_steps = self.reflection_engine.enhance_reasoning(
                         query=query,
                         initial_trace=result.reasoning_steps,
                         worker_type=worker_specialty,
                         verification_issues=issues
                     )
+                    reflection_time = time.time() - reflection_start_time
                     
                     # Update worker's reasoning for next iteration
                     # (Next iteration will generate new answer based on improved understanding)
+                    logger.info(f"REFLECTION: ✓ Completed in {reflection_time:.2f}s")
                     logger.info(f"REFLECTION: Generated {len(improved_steps)} improved reasoning steps")
+                    logger.info(f"REFLECTION: Will retry with iteration {iteration + 1}/{max_iterations}")
                 else:
-                    logger.info(f"REFLECTION: Max iterations reached, using best attempt")
+                    logger.info("\n" + "=" * 70)
+                    logger.info("REFLECTION: Max iterations reached, using best attempt")
+                    logger.info("=" * 70)
                     final_result = result
                     final_result.verification_passed = False
                     final_result.confidence = confidence

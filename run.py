@@ -2,10 +2,69 @@
 """
 Kaelum AI - Production Test Runner
 Neural routing, LATS search, verification, and reflection system
+
+Directory Structure (.kaelum/):
+================================
+.kaelum/
+├── routing/                    # Neural router learning data
+│   ├── model.pt               # Trained router model weights
+│   └── training_data.json     # Query outcomes for training
+│
+├── cache/                      # LATS tree cache (worker results)
+│   ├── metadata.json          # Cache index with embeddings
+│   └── trees/                 # Serialized LATS trees
+│       └── *.json
+│
+├── active_learning/            # Training data collection
+│   └── query_pool.jsonl       # Queries for fine-tuning
+│
+├── analytics/                  # Performance metrics
+│   ├── metrics.jsonl          # Per-inference metrics
+│   └── summary.json           # Aggregated statistics
+│
+├── cache_validation/           # (Optional) Cache quality validation
+├── calibration/                # (Optional) Confidence calibration
+└── tree_cache/                 # (Legacy) Old cache location - now uses cache/ dir
+
+Notes:
+- cache/ is the active cache directory (configurable via --cache-dir)
+- tree_cache/ is legacy and should be empty for new installations
+- cache_validation/ and calibration/ are optional features (currently unused)
 """
 
 import argparse
-from kaelum import kaelum_enhance_reasoning, set_reasoning_model
+import logging
+from kaelum import kaelum_enhance_reasoning, set_reasoning_model, get_metrics
+
+def setup_logging(verbose: bool = False):
+    """Configure logging for the entire application."""
+    level = logging.DEBUG if verbose else logging.INFO
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=level,
+        format='%(message)s',
+        force=True  # Override any existing configuration
+    )
+    
+    # Silence noisy third-party libraries
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    logging.getLogger("transformers").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    logging.getLogger("filelock").setLevel(logging.WARNING)
+    
+    # Set levels for Kaelum loggers (research-focused: show key decisions)
+    logging.getLogger("kaelum.orchestrator").setLevel(logging.INFO)
+    logging.getLogger("kaelum.router").setLevel(logging.INFO)
+    logging.getLogger("kaelum.lats").setLevel(logging.INFO)
+    logging.getLogger("kaelum.llm").setLevel(logging.INFO)  # Show LLM calls
+    logging.getLogger("kaelum.worker").setLevel(logging.INFO)
+    logging.getLogger("kaelum.verification").setLevel(logging.INFO)  # Show verification outcomes
+    logging.getLogger("kaelum.reflection").setLevel(logging.INFO)  # Show self-correction
+    logging.getLogger("kaelum.reward").setLevel(logging.DEBUG if verbose else logging.WARNING)  # Domain scoring (verbose only)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -49,8 +108,8 @@ Examples:
                         help="Sentence transformer model for embeddings (default: all-MiniLM-L6-v2)")
     llm_group.add_argument("--temperature", type=float, default=0.7,
                         help="LLM temperature, higher = more creative (default: 0.7, range: 0.0-2.0)")
-    llm_group.add_argument("--max-tokens", type=int, default=2048,
-                        help="Max tokens for LLM response (default: 2048)")
+    llm_group.add_argument("--max-tokens", type=int, default=1024,
+                        help="Max tokens for LLM response (default: 1024)")
     
     # Routing Configuration
     routing_group = parser.add_argument_group('Routing & Worker Configuration')
@@ -95,7 +154,20 @@ Examples:
     reflection_group.add_argument("--no-active-learning", action="store_true",
                         help="Disable active learning query collection for fine-tuning")
     
+    # Logging Configuration
+    logging_group = parser.add_argument_group('Logging Configuration')
+    logging_group.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose logging (shows DEBUG level logs)")
+    
     args = parser.parse_args()
+    
+    # Setup logging based on arguments
+    setup_logging(verbose=args.verbose or args.debug_verification)
+    
+    logger = logging.getLogger("kaelum.run")
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"{'Kaelum AI - Reasoning System':^80}")
+    logger.info(f"{'=' * 80}")
     
     print("=" * 80)
     print(" " * 22 + "Kaelum AI - Reasoning System")
@@ -149,7 +221,13 @@ Examples:
         use_factual_verification=not args.no_factual_verification,
         max_reflection_iterations=args.max_reflection_iterations,
         debug_verification=args.debug_verification,
-        enable_active_learning=not args.no_active_learning
+        enable_active_learning=not args.no_active_learning,
+        cache_dir=args.cache_dir,
+        router_data_dir=args.router_data_dir,
+        parallel=args.parallel,
+        max_workers=args.max_workers,
+        max_tree_depth=args.max_tree_depth,
+        num_simulations=args.num_simulations,
     )
     
     # If a single query is provided, run it and exit
@@ -178,6 +256,50 @@ Examples:
             if reasoning:
                 for j, step in enumerate(reasoning, 1):
                     print(f"  {j}. {step}")
+            
+            # Display metrics
+            print(f"\n{'─' * 80}")
+            print("METRICS:")
+            print(f"{'─' * 80}")
+            
+            try:
+                metrics = get_metrics()
+                
+                # Session metrics
+                if 'session' in metrics and metrics['session']:
+                    session = metrics['session']
+                    print(f"\n📊 Session Stats:")
+                    print(f"  Total Inferences: {session.get('total_inferences', 0)}")
+                    print(f"  Cache Hits: {session.get('cache_hits', 0)}")
+                    print(f"  Cache Hit Rate: {session.get('cache_hit_rate', 0)*100:.1f}%")
+                    print(f"  Avg Latency: {session.get('avg_latency_ms', 0):.0f}ms")
+                    
+                    if session.get('total_input_tokens', 0) > 0:
+                        print(f"\n🔤 Token Usage:")
+                        print(f"  Input Tokens: {session.get('total_input_tokens', 0):,}")
+                        print(f"  Output Tokens: {session.get('total_output_tokens', 0):,}")
+                        print(f"  Total Tokens: {session.get('total_tokens', 0):,}")
+                
+                # Analytics
+                if 'analytics' in metrics and metrics['analytics']:
+                    analytics = metrics['analytics']
+                    
+                    if analytics.get('worker_distribution'):
+                        print(f"\n👷 Worker Distribution:")
+                        for worker, count in analytics['worker_distribution'].items():
+                            print(f"  {worker}: {count}")
+                    
+                    if analytics.get('verification_rate') is not None:
+                        print(f"\n✓ Verification:")
+                        print(f"  Pass Rate: {analytics.get('verification_rate', 0)*100:.1f}%")
+                    
+                    if analytics.get('avg_simulations') is not None:
+                        print(f"\n🌳 LATS Stats:")
+                        print(f"  Avg Simulations: {analytics.get('avg_simulations', 0):.1f}")
+                        print(f"  Avg Tree Depth: {analytics.get('avg_tree_depth', 0):.1f}")
+            
+            except Exception as e:
+                print(f"  Could not load metrics: {e}")
             
             print()
             return

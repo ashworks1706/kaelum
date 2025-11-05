@@ -59,16 +59,27 @@ class RewardModel:
     def get_reward(worker_type: str, state: Dict[str, Any], depth: int,
                    has_answer: bool = False, has_partial: bool = False,
                    syntax_valid: bool = False, query_complexity: float = 0.5) -> float:
+        import logging
+        logger = logging.getLogger("kaelum.reward")
+        
         config = RewardModel.CONFIGS.get(worker_type, RewardModel.CONFIGS["math"])
         
         if has_answer:
             if worker_type == "code" and syntax_valid:
-                return config["syntax_valid"]
-            return config.get("has_answer", config.get("complete", 0.85))
+                reward = config["syntax_valid"]
+                logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (syntax valid code at depth {depth})")
+                return reward
+            reward = config.get("has_answer", config.get("complete", 0.85))
+            logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (complete answer at depth {depth})")
+            return reward
         
         if has_partial:
-            return config["partial"]
+            reward = config["partial"]
+            logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (partial solution at depth {depth})")
+            return reward
         
         adaptive_penalty = AdaptivePenalty.get_penalty(worker_type, query_complexity)
+        reward = max(0.1, config["base"] - depth * adaptive_penalty)
+        logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (base={config['base']:.2f}, depth_penalty={adaptive_penalty:.3f}, depth={depth})")
         
-        return max(0.1, config["base"] - depth * adaptive_penalty)
+        return reward

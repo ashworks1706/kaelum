@@ -59,14 +59,31 @@ class LATS:
         return exploit + explore
 
     def select(self) -> LATSNode:
+        import logging
+        logger = logging.getLogger("kaelum.lats")
+        
         node = self.root
+        depth = 0
         while node.children:
             unpruned = [c for c in node.children if not c.pruned]
             if not unpruned:
+                logger.debug(f"LATS-SELECT: All children pruned at depth {depth}")
                 break
+            
             scores = [self.uct_score(node, c) for c in unpruned]
             max_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
-            node = unpruned[max_idx]
+            selected_child = unpruned[max_idx]
+            
+            # Log selection details
+            avg_reward = selected_child.value / max(1, selected_child.visits)
+            logger.debug(f"LATS-SELECT: Depth {depth} → Node {selected_child.id} "
+                        f"(UCT={scores[max_idx]:.3f}, visits={selected_child.visits}, "
+                        f"avg_reward={avg_reward:.3f}, {len(unpruned)} unpruned children)")
+            
+            node = selected_child
+            depth += 1
+        
+        logger.debug(f"LATS-SELECT: Leaf node {node.id} selected at depth {depth}")
         return node
 
     def expand(self, parent: LATSNode, child_state: Dict[str, Any], child_id: Optional[str] = None) -> LATSNode:
@@ -91,16 +108,27 @@ class LATS:
             raise RuntimeError(f"Simulator must return a numeric reward: {e}")
 
     def backpropagate(self, node: LATSNode, reward: float) -> None:
+        import logging
+        logger = logging.getLogger("kaelum.lats")
+        
         cur = node
+        depth = 0
         while cur is not None:
             cur.visits += 1
             cur.value += reward
             cur.last_updated = time.time()
             
-            if cur.visits >= 3 and (cur.value / cur.visits) < 0.3:
-                cur.pruned = True
+            avg_reward = cur.value / cur.visits
+            
+            # Early pruning check
+            if cur.visits >= 3 and avg_reward < 0.3:
+                if not cur.pruned:  # Only log when first pruned
+                    cur.pruned = True
+                    logger.info(f"LATS-PRUNE: Node {cur.id} pruned at depth {depth} "
+                               f"(visits={cur.visits}, avg_reward={avg_reward:.3f} < 0.3)")
             
             cur = cur.parent
+            depth += 1
 
     def best_child(self, node: Optional['LATSNode'] = None) -> Optional['LATSNode']:
         if node is None:
@@ -120,11 +148,28 @@ class LATS:
         return total_value / total_visits
 
     def run_simulations(self, num_simulations: int, max_depth: int = 10, parallel: bool = False, max_workers: int = 4):
+        import logging
+        logger = logging.getLogger("kaelum.lats")
+        
+        logger.info(f"LATS: Starting {num_simulations} simulations (max_depth={max_depth}, parallel={parallel})")
+        start_time = time.time()
+        
         if parallel and num_simulations >= 4:
+            logger.info(f"LATS: Using parallel execution with {max_workers} workers")
             self._run_parallel_simulations(num_simulations, max_depth, max_workers)
         else:
-            for _ in range(num_simulations):
+            logger.info(f"LATS: Using sequential execution")
+            for i in range(num_simulations):
+                if i % 5 == 0 and i > 0:
+                    logger.debug(f"LATS: Completed {i}/{num_simulations} simulations")
                 self._run_single_simulation(max_depth)
+        
+        elapsed = time.time() - start_time
+        avg_reward = self.get_avg_reward()
+        total_nodes = len(self.nodes)
+        logger.info(f"LATS: ✓ Simulations complete in {elapsed:.2f}s")
+        logger.info(f"LATS: Total nodes explored: {total_nodes}")
+        logger.info(f"LATS: Average reward: {avg_reward:.3f}")
     
     def _run_single_simulation(self, max_depth: int):
         node = self.select()

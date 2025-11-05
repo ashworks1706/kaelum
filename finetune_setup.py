@@ -35,7 +35,7 @@ class ReasoningTrace:
 class ReasoningDataset(Dataset):
     """PyTorch dataset for reasoning traces."""
     
-    def __init__(self, traces: List[ReasoningTrace], tokenizer, max_length: int = 2048):
+    def __init__(self, traces: List[ReasoningTrace], tokenizer, max_length: int = 1024):
         self.traces = traces
         self.tokenizer = tokenizer
         self.max_length = max_length

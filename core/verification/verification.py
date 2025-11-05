@@ -149,6 +149,8 @@ class VerificationEngine:
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False, embedding_model: str = "all-MiniLM-L6-v2"):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
+        self.use_factual = use_factual
+        self.factual_verifier = None  # TODO: Implement factual verifier if needed
         self.debug = debug
         self.semantic_encoder = SentenceTransformer(embedding_model)
         self.syntax_validator = SyntaxValidator()
@@ -221,21 +223,42 @@ class VerificationEngine:
         return errors, details
     
     def verify(self, query: str, reasoning_steps: List[str], answer: str, worker_type: Optional[str] = None) -> dict:
+        import logging
+        logger = logging.getLogger("kaelum.verification")
+        
         if worker_type is None:
             worker_type = self._infer_worker_type(query, reasoning_steps)
         
+        logger.info(f"\n{'═' * 80}")
+        logger.info(f"VERIFICATION: Starting verification for {worker_type.upper()} worker")
+        logger.info(f"  Query: {query[:100]}...")
+        logger.info(f"  Steps: {len(reasoning_steps)} reasoning steps")
+        
         if worker_type == "math":
-            return self._verify_math(reasoning_steps)
+            result = self._verify_math(reasoning_steps)
         elif worker_type == "code":
-            return self._verify_code(query, answer, reasoning_steps)
+            result = self._verify_code(query, answer, reasoning_steps)
         elif worker_type == "logic":
-            return self._verify_logic(query, reasoning_steps, answer)
+            result = self._verify_logic(query, reasoning_steps, answer)
         elif worker_type == "factual":
-            return self._verify_factual(query, answer, reasoning_steps)
+            result = self._verify_factual(query, answer, reasoning_steps)
         elif worker_type == "creative":
-            return self._verify_creative(answer, reasoning_steps)
+            result = self._verify_creative(answer, reasoning_steps)
         else:
-            return self._verify_analysis(query, answer, reasoning_steps)
+            result = self._verify_analysis(query, answer, reasoning_steps)
+        
+        status = "✓ PASSED" if result["passed"] else "✗ FAILED"
+        logger.info(f"\nVERIFICATION: {status}")
+        logger.info(f"  Confidence: {result['confidence']:.3f}")
+        if not result["passed"] and result.get("issues"):
+            logger.info(f"  Issues found: {len(result['issues'])}")
+            for i, issue in enumerate(result["issues"][:3], 1):  # Show first 3 issues
+                logger.info(f"    {i}. {issue}")
+            if len(result['issues']) > 3:
+                logger.info(f"    ... and {len(result['issues']) - 3} more")
+        logger.info(f"{'═' * 80}\n")
+        
+        return result
     
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
         combined_text = query + " " + " ".join(reasoning_steps[:3])
@@ -328,8 +351,44 @@ class VerificationEngine:
         }
     
     def _detect_code_language(self, query: str, code: str) -> str:
-        result = self.language_detector.detect(query, code)
-        return result['language']
+        """Detect programming language from code content."""
+        code_lower = code.lower()
+        query_lower = query.lower()
+        
+        # Check query for explicit language mentions
+        if 'python' in query_lower or 'py' in query_lower:
+            return 'python'
+        elif 'javascript' in query_lower or 'js' in query_lower:
+            return 'javascript'
+        elif 'typescript' in query_lower or 'ts' in query_lower:
+            return 'typescript'
+        elif 'java' in query_lower and 'javascript' not in query_lower:
+            return 'java'
+        elif 'c++' in query_lower or 'cpp' in query_lower:
+            return 'cpp'
+        elif 'rust' in query_lower:
+            return 'rust'
+        elif 'go' in query_lower and 'golang' in query_lower:
+            return 'go'
+        
+        # Check code patterns
+        if 'def ' in code or 'import ' in code or 'from ' in code:
+            return 'python'
+        elif 'function ' in code or 'const ' in code or 'let ' in code or 'var ' in code:
+            if ': ' in code and 'interface ' in code:
+                return 'typescript'
+            return 'javascript'
+        elif 'public class' in code or 'private ' in code:
+            return 'java'
+        elif '#include' in code:
+            return 'cpp'
+        elif 'fn ' in code or 'let mut' in code:
+            return 'rust'
+        elif 'func ' in code and 'package ' in code:
+            return 'go'
+        
+        # Default to python
+        return 'python'
     
     def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
         issues = []

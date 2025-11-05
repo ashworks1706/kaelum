@@ -77,7 +77,8 @@ class WorkerAgent(ABC):
     @abstractmethod
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
-              num_simulations: int = 10) -> WorkerResult:
+              num_simulations: int = 10, parallel: bool = False,
+              max_workers: int = 4) -> WorkerResult:
         pass
     
     def _check_cache(self, query: str) -> Optional[WorkerResult]:
@@ -149,7 +150,8 @@ class MathWorker(WorkerAgent):
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
-              num_simulations: int = 10) -> WorkerResult:
+              num_simulations: int = 10, parallel: bool = False,
+              max_workers: int = 4) -> WorkerResult:
         start_time = time.time()
         
         if use_cache:
@@ -227,7 +229,7 @@ class MathWorker(WorkerAgent):
         
         tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step)
         
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=False)
+        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -285,7 +287,8 @@ class LogicWorker(WorkerAgent):
     
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
-              num_simulations: int = 10, parallel: bool = False) -> WorkerResult:
+              num_simulations: int = 10, parallel: bool = False,
+              max_workers: int = 4) -> WorkerResult:
         start_time = time.time()
         
         if use_cache:
@@ -363,7 +366,7 @@ class LogicWorker(WorkerAgent):
         
         tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step)
         
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel)
+        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:

@@ -17,13 +17,19 @@ def set_reasoning_model(
     api_key: Optional[str] = None,
     embedding_model: str = "all-MiniLM-L6-v2",
     temperature: float = 0.7,
-    max_tokens: int = 2048,
+    max_tokens: int = 1024,
     max_reflection_iterations: int = 2,
     use_symbolic_verification: bool = True,
     use_factual_verification: bool = False,
     enable_routing: bool = True,
     enable_active_learning: bool = True,
     debug_verification: bool = False,
+    cache_dir: str = ".kaelum/cache",
+    router_data_dir: str = ".kaelum/routing",
+    parallel: bool = False,
+    max_workers: int = 4,
+    max_tree_depth: Optional[int] = None,
+    num_simulations: Optional[int] = None,
 ):
     global _orchestrator, _embedding_model
     
@@ -47,7 +53,13 @@ def set_reasoning_model(
     _orchestrator = KaelumOrchestrator(
         config,
         enable_routing=enable_routing,
-        enable_active_learning=enable_active_learning
+        enable_active_learning=enable_active_learning,
+        cache_dir=cache_dir,
+        router_data_dir=router_data_dir,
+        parallel=parallel,
+        max_workers=max_workers,
+        max_tree_depth=max_tree_depth,
+        num_simulations=num_simulations,
     )
 
 

@@ -63,13 +63,20 @@ class AnalyticsDashboard:
         summary['last_updated'] = datetime.now().isoformat()
         
         with open(self.summary_file, 'w') as f:
-            json.dumps(summary, indent=2, fp=f)
+            json.dump(summary, f, indent=2)
     
     def _load_summary(self) -> Dict[str, Any]:
         """Load existing summary or create new one."""
         if self.summary_file.exists():
-            with open(self.summary_file, 'r') as f:
-                return json.load(f)
+            try:
+                with open(self.summary_file, 'r') as f:
+                    content = f.read().strip()
+                    if not content:
+                        return {}
+                    return json.loads(content)
+            except (json.JSONDecodeError, ValueError):
+                # If file is corrupted, start fresh
+                return {}
         return {}
     
     def get_summary(self) -> Dict[str, Any]:

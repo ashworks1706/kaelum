@@ -190,28 +190,76 @@ class Router:
     def route(self, query: str, context: Optional[Dict] = None) -> RoutingDecision:
         start_time = time.time()
         
+        logger.info("=" * 80)
+        logger.info("ROUTER: Starting query analysis")
+        logger.info(f"ROUTER: Query = '{query}'")
+        
         features = self._extract_features(query, context)
         
-        self.policy_network.eval()
-        with torch.no_grad():
-            feature_tensor = features.to_tensor().unsqueeze(0).to(self.device)
-            outputs = self.policy_network(feature_tensor)
-            
-            worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
-            worker_idx = torch.argmax(worker_probs, dim=-1).item()
-            confidence = worker_probs[0, worker_idx].item()
-            
-            max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
-            num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
-            use_cache = torch.sigmoid(outputs['cache_logits']).item() > 0.5
+        logger.info("ROUTER: Feature extraction complete")
+        logger.info(f"  - Word count: {features.word_count}")
+        logger.info(f"  - Has numbers: {features.has_numbers}")
+        logger.info(f"  - Has math symbols: {features.has_math_symbols}")
+        logger.info(f"  - Has code keywords: {features.has_code_keywords}")
+        logger.info(f"  - Has logic keywords: {features.has_logic_keywords}")
+        logger.info(f"  - Question words: {features.question_words}")
+        logger.info(f"  - Complexity score: {features.complexity_score:.3f}")
         
-        worker_specialty = self.idx_to_worker[worker_idx]
-        query_type = self._classify_query_type(query)
+        # HEURISTIC OVERRIDE: Simple math queries should always go to math worker
+        import re
+        simple_math_pattern = r'(?:what\s+(?:is|are|does)?\s*)?(\d+)\s*([+\-*/×÷^])\s*(\d+)'
+        math_match = re.search(simple_math_pattern, query.lower())
         
-        reasoning = f"Neural router: {worker_specialty} (conf={confidence:.2f}, comp={features.complexity_score:.2f})"
+        if math_match:
+            logger.info("ROUTER: HEURISTIC MATCH - Simple arithmetic detected")
+            logger.info(f"  - Pattern: {math_match.group(0)}")
+            logger.info(f"  - Numbers: {math_match.group(1)}, {math_match.group(3)}")
+            logger.info(f"  - Operation: {math_match.group(2)}")
+            worker_specialty = "math"
+            confidence = 0.99
+            max_tree_depth = 3  # Simple math doesn't need deep trees
+            num_simulations = 5  # Few simulations needed
+            use_cache = True
+            query_type = QueryType.MATH
+            reasoning = f"Heuristic override: Simple arithmetic detected ({math_match.group(0)})"
+            
+        else:
+            logger.info("ROUTER: Running neural network classification")
+            self.policy_network.eval()
+            with torch.no_grad():
+                feature_tensor = features.to_tensor().unsqueeze(0).to(self.device)
+                outputs = self.policy_network(feature_tensor)
+                
+                worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
+                worker_idx = torch.argmax(worker_probs, dim=-1).item()
+                confidence = worker_probs[0, worker_idx].item()
+                
+                # Log all worker probabilities
+                logger.info("ROUTER: Worker probabilities:")
+                for idx, prob in enumerate(worker_probs[0]):
+                    worker_name = self.idx_to_worker[idx]
+                    logger.info(f"  - {worker_name}: {prob.item():.3f}")
+                
+                max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
+                num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
+                use_cache = torch.sigmoid(outputs['cache_logits']).item() > 0.5
+            
+            worker_specialty = self.idx_to_worker[worker_idx]
+            query_type = self._classify_query_type(query)
+            
+            reasoning = f"Neural router: {worker_specialty} (conf={confidence:.2f}, comp={features.complexity_score:.2f})"
         
         routing_time = (time.time() - start_time) * 1000
-        logger.info(f"Route: {worker_specialty} | conf={confidence:.2f} | depth={max_tree_depth} | sims={num_simulations} | {routing_time:.1f}ms")
+        
+        logger.info(f"ROUTER: DECISION - {worker_specialty.upper()}")
+        logger.info(f"  - Confidence: {confidence:.3f}")
+        logger.info(f"  - Query type: {query_type.value}")
+        logger.info(f"  - Max tree depth: {max_tree_depth}")
+        logger.info(f"  - Num simulations: {num_simulations}")
+        logger.info(f"  - Use cache: {use_cache}")
+        logger.info(f"  - Routing time: {routing_time:.1f}ms")
+        logger.info(f"  - Reasoning: {reasoning}")
+        logger.info("=" * 80)
         
         return RoutingDecision(
             query_type=query_type,
@@ -262,12 +310,20 @@ class Router:
             "use_cache": decision.use_tree_cache
         })
         
+        logger.info(f"ROUTER LEARNING: Recorded outcome #{len(self.outcomes)}")
+        logger.info(f"  - Worker: {decision.worker_specialty}")
+        logger.info(f"  - Success: {result.get('verification_passed', False)}")
+        logger.info(f"  - Confidence: {result.get('confidence', 0.0):.3f}")
+        logger.info(f"  - Reward: {reward:.3f}")
+        logger.info(f"  - Training buffer: {len(self.training_buffer)}/32")
+        
+        # Save training data immediately after every query (not just every 10)
+        self._save_training_data()
+        
         if len(self.training_buffer) >= 32:
+            logger.info(f"ROUTER TRAINING: Buffer full ({len(self.training_buffer)} samples), starting training...")
             self._train_step()
             self.training_buffer = []
-        
-        if len(self.outcomes) % 10 == 0:
-            self._save_training_data()
     
     def _train_step(self):
         if len(self.training_buffer) < 8:
@@ -302,9 +358,16 @@ class Router:
         torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
         self.optimizer.step()
         
-        if len(self.outcomes) % 100 == 0:
-            self.save_model()
-            logger.info(f"Router trained on {len(self.outcomes)} outcomes. Loss: {total_loss.item():.4f}")
+        logger.info(f"ROUTER TRAINING: Completed training step")
+        logger.info(f"  - Total outcomes: {len(self.outcomes)}")
+        logger.info(f"  - Loss: {total_loss.item():.4f}")
+        logger.info(f"    - Worker loss: {worker_loss.item():.4f}")
+        logger.info(f"    - Depth loss: {depth_loss.item():.4f}")
+        logger.info(f"    - Sims loss: {sims_loss.item():.4f}")
+        logger.info(f"    - Cache loss: {cache_loss.item():.4f}")
+        
+        # Save model after every training (not just every 100)
+        self.save_model()
     
     def _extract_features(self, query: str, context: Optional[Dict] = None) -> NeuralRoutingFeatures:
         import re
@@ -390,6 +453,7 @@ class Router:
             "input_dim": 398,
             "hidden_dim": 256,
         }, self.model_file)
+        logger.info(f"ROUTER: Model saved to {self.model_file}")
     
     def _save_training_data(self):
         data = [
@@ -408,4 +472,6 @@ class Router:
         training_file = self.data_dir / "training_data.json"
         with open(training_file, "w") as f:
             json.dump(data, f, indent=2)
+        
+        logger.debug(f"ROUTER: Saved {len(data)} training examples to {training_file}")
 
