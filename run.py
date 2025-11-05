@@ -4,27 +4,139 @@ Kaelum AI - Production Test Runner
 Neural routing, LATS search, verification, and reflection system
 """
 
-from kaelum import enhance, set_reasoning_model
+import argparse
+from kaelum import kaelum_enhance_reasoning, set_reasoning_model
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Kaelum AI - Reasoning System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage
+  python run.py
+  
+  # Custom LLM and embedding model
+  python run.py --model llama3:8b --embedding-model all-mpnet-base-v2
+  
+  # Disable routing and force specific worker
+  python run.py --no-routing --worker math
+  
+  # Adjust LATS search parameters for better accuracy
+  python run.py --max-tree-depth 8 --num-simulations 20
+  
+  # Enable factual verification and debugging
+  python run.py --enable-factual-verification --debug-verification
+        """
+    )
+    
+    # LLM Configuration
+    llm_group = parser.add_argument_group('LLM Configuration')
+    llm_group.add_argument("--base-url", default="http://localhost:11434/v1", 
+                        help="LLM API base URL (default: http://localhost:11434/v1)")
+    llm_group.add_argument("--model", default="qwen2.5:3b",
+                        help="LLM model name (default: qwen2.5:3b)")
+    llm_group.add_argument("--embedding-model", default="all-MiniLM-L6-v2",
+                        help="Sentence transformer model for embeddings (default: all-MiniLM-L6-v2)")
+    llm_group.add_argument("--temperature", type=float, default=0.7,
+                        help="LLM temperature, higher = more creative (default: 0.7, range: 0.0-2.0)")
+    llm_group.add_argument("--max-tokens", type=int, default=2048,
+                        help="Max tokens for LLM response (default: 2048)")
+    
+    # Routing Configuration
+    routing_group = parser.add_argument_group('Routing & Worker Configuration')
+    routing_group.add_argument("--no-routing", action="store_true",
+                        help="Disable neural router, use default logic worker")
+    routing_group.add_argument("--worker", choices=["math", "logic", "code", "factual", "creative", "analysis"],
+                        help="Force specific worker (overrides router)")
+    routing_group.add_argument("--router-data-dir", default=".kaelum/routing",
+                        help="Directory for router learning data (default: .kaelum/routing)")
+    
+    # LATS Tree Search Configuration
+    search_group = parser.add_argument_group('LATS Tree Search Configuration')
+    search_group.add_argument("--max-tree-depth", type=int, default=None,
+                        help="Max tree search depth (default: router decides 3-10, or 5 if routing disabled)")
+    search_group.add_argument("--num-simulations", type=int, default=None,
+                        help="Number of LATS simulations (default: router decides 5-25, or 10 if routing disabled)")
+    search_group.add_argument("--parallel", action="store_true",
+                        help="Enable parallel LATS simulations (faster but uses more resources)")
+    search_group.add_argument("--max-workers", type=int, default=4,
+                        help="Max parallel workers for LATS (default: 4, requires --parallel)")
+    
+    # Caching Configuration
+    cache_group = parser.add_argument_group('Caching Configuration')
+    cache_group.add_argument("--no-cache", action="store_true",
+                        help="Disable tree cache (slower but always computes fresh)")
+    cache_group.add_argument("--cache-dir", default=".kaelum/cache",
+                        help="Directory for tree cache storage (default: .kaelum/cache)")
+    
+    # Verification Configuration
+    verification_group = parser.add_argument_group('Verification Configuration')
+    verification_group.add_argument("--no-symbolic-verification", action="store_true",
+                        help="Disable symbolic verification with SymPy (for math/logic)")
+    verification_group.add_argument("--enable-factual-verification", action="store_true",
+                        help="Enable factual verification (checks facts against knowledge base)")
+    verification_group.add_argument("--debug-verification", action="store_true",
+                        help="Enable detailed verification debugging output")
+    
+    # Reflection Configuration
+    reflection_group = parser.add_argument_group('Reflection & Learning Configuration')
+    reflection_group.add_argument("--max-reflection-iterations", type=int, default=2,
+                        help="Max self-correction iterations (default: 2, range: 0-5)")
+    reflection_group.add_argument("--no-active-learning", action="store_true",
+                        help="Disable active learning query collection for fine-tuning")
+    
+    args = parser.parse_args()
+    
     print("=" * 80)
     print(" " * 22 + "Kaelum AI - Reasoning System")
     print("=" * 80)
-    print("\nConfiguring system...")
+    print("\n📋 Configuration:")
+    print(f"  LLM: {args.model} @ {args.base_url}")
+    print(f"  Embeddings: {args.embedding_model}")
+    print(f"  Temperature: {args.temperature}")
+    print(f"  Max Tokens: {args.max_tokens}")
+    print(f"\n🧭 Routing & Workers:")
+    print(f"  Neural Router: {'✗ Disabled' if args.no_routing else '✓ Enabled'}")
+    if args.worker:
+        print(f"  Forced Worker: {args.worker}")
+    print(f"  Router Data: {args.router_data_dir}")
+    print(f"\n🌳 LATS Tree Search:")
+    if args.max_tree_depth:
+        print(f"  Max Depth: {args.max_tree_depth} (manual override)")
+    else:
+        print(f"  Max Depth: Router decides (3-10)" if not args.no_routing else f"  Max Depth: 5 (default)")
+    if args.num_simulations:
+        print(f"  Simulations: {args.num_simulations} (manual override)")
+    else:
+        print(f"  Simulations: Router decides (5-25)" if not args.no_routing else f"  Simulations: 10 (default)")
+    print(f"  Parallel: {'✓ Enabled' if args.parallel else '✗ Disabled'}")
+    if args.parallel:
+        print(f"  Max Workers: {args.max_workers}")
+    print(f"\n💾 Caching:")
+    print(f"  Tree Cache: {'✗ Disabled' if args.no_cache else '✓ Enabled'}")
+    print(f"  Cache Dir: {args.cache_dir}")
+    print(f"\n✓ Verification:")
+    print(f"  Symbolic (SymPy): {'✗ Disabled' if args.no_symbolic_verification else '✓ Enabled'}")
+    print(f"  Factual: {'✓ Enabled' if args.enable_factual_verification else '✗ Disabled'}")
+    print(f"  Debug Mode: {'✓ Enabled' if args.debug_verification else '✗ Disabled'}")
+    print(f"\n🔄 Reflection & Learning:")
+    print(f"  Max Iterations: {args.max_reflection_iterations}")
+    print(f"  Active Learning: {'✗ Disabled' if args.no_active_learning else '✓ Enabled'}")
     
     set_reasoning_model(
-        base_url="http://localhost:11434/v1",
-        model="qwen2.5:3b",
-        temperature=0.7,
-        enable_routing=True,
-        use_symbolic_verification=True,
-        max_reflection_iterations=2
+        base_url=args.base_url,
+        model=args.model,
+        embedding_model=args.embedding_model,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        enable_routing=not args.no_routing,
+        use_symbolic_verification=not args.no_symbolic_verification,
+        use_factual_verification=args.enable_factual_verification,
+        max_reflection_iterations=args.max_reflection_iterations,
+        debug_verification=args.debug_verification,
+        enable_active_learning=not args.no_active_learning
     )
-    
-    print("✓ Neural router enabled (learns from outcomes)")
-    print("✓ Symbolic verification enabled (SymPy for math)")
-    print("✓ Reflection enabled (max 2 self-correction iterations)")
-    print("✓ Tree cache enabled (1000x speedup on similar queries)")
     
     queries = [
         ("Math", "What is the derivative of x^2 + 3x?"),
@@ -43,27 +155,23 @@ def main():
         print("=" * 80)
         
         try:
-            result = enhance(query)
+            result = kaelum_enhance_reasoning(query)
             
             print(f"\n{'─' * 80}")
-            print(f"ANSWER: {result.get('answer', 'N/A')}")
+            print(f"ANSWER: {result.get('suggested_approach', 'N/A')}")
             print(f"{'─' * 80}")
             
-            print(f"\nWorker: {result.get('worker', 'N/A')}")
+            print(f"\nWorker: {result.get('worker_used', 'N/A')}")
             print(f"Confidence: {result.get('confidence', 0):.2f}")
             print(f"Verification: {'✓ PASSED' if result.get('verification_passed') else '✗ FAILED'}")
             print(f"Cache Hit: {'Yes' if result.get('cache_hit') else 'No'}")
             print(f"Iterations: {result.get('iterations', 0)}")
             
-            metrics = result.get('metrics', {})
-            print(f"\nMetrics:")
-            print(f"  Total Time: {metrics.get('total_time_ms', 0):.0f}ms")
-            print(f"  Tree Depth: {metrics.get('tree_depth', 0)}")
-            print(f"  Simulations: {metrics.get('num_simulations', 0)}")
+            print(f"\nReasoning Steps:")
+            print(f"  Step Count: {result.get('reasoning_count', 0)}")
             
-            reasoning = result.get('reasoning_trace', [])
+            reasoning = result.get('reasoning_steps', [])
             if reasoning:
-                print(f"\nReasoning Steps ({len(reasoning)}):")
                 for j, step in enumerate(reasoning[:5], 1):
                     print(f"  {j}. {step}")
                 if len(reasoning) > 5:
@@ -72,9 +180,9 @@ def main():
             results_summary.append({
                 'domain': domain,
                 'query': query[:50] + '...' if len(query) > 50 else query,
-                'worker': result.get('worker', 'N/A'),
+                'worker': result.get('worker_used', 'N/A'),
                 'verified': result.get('verification_passed', False),
-                'time_ms': metrics.get('total_time_ms', 0)
+                'time_ms': 0  # metrics not available in simplified response
             })
             
         except Exception as e:

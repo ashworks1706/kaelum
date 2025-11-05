@@ -84,6 +84,7 @@ Support conclusions with evidence and logical arguments.""")
 class KaelumConfig(BaseModel):
     reasoning_llm: LLMConfig = Field(default_factory=LLMConfig)
     worker_prompts: WorkerPrompts = Field(default_factory=WorkerPrompts)
+    embedding_model: str = Field(default="all-MiniLM-L6-v2")
     max_reflection_iterations: int = Field(default=2, ge=0, le=5)
     use_symbolic_verification: bool = Field(default=True)
     use_factual_verification: bool = Field(default=False)

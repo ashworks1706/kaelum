@@ -9,13 +9,13 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 class CompletenessDetector:
     
-    def __init__(self):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
         try:
             self.nli_pipeline = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
         except:
             self.nli_pipeline = None
         
-        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.encoder = SentenceTransformer(embedding_model)
         
         try:
             self.qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2", device=-1)

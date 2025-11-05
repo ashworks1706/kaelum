@@ -19,7 +19,7 @@ class CodeWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self.task_classifier = TaskClassifier()
+        self.task_classifier = TaskClassifier(embedding_model=self.config.embedding_model)
         self.confidence_calibrator = ConfidenceCalibrator()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',

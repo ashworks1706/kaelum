@@ -8,7 +8,7 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class ConclusionDetector:
-    def __init__(self):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
         try:
             self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli", device=-1)
             self.use_zero_shot = True
@@ -20,7 +20,7 @@ class ConclusionDetector:
                 self.classifier = None
                 self.use_zero_shot = False
         
-        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.encoder = SentenceTransformer(embedding_model)
         self.threshold_calibrator = ThresholdCalibrator()
         
         self.conclusion_exemplars = [

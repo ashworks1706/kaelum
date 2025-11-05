@@ -19,8 +19,8 @@ class RelevanceValidator:
         'default': 0.40
     }
     
-    def __init__(self):
-        self.model = SentenceTransformer('all-mpnet-base-v2')
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        self.model = SentenceTransformer(embedding_model)
         try:
             self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
         except:

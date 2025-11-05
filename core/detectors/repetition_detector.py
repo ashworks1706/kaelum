@@ -10,8 +10,8 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 class RepetitionDetector:
     
-    def __init__(self):
-        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        self.encoder = SentenceTransformer(embedding_model)
         self.tfidf = TfidfVectorizer(max_features=100, stop_words=None)
         self._calibrated_thresholds = {
             'semantic': 0.85,

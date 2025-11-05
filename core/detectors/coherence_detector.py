@@ -7,8 +7,8 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 
 class CoherenceDetector:
-    def __init__(self):
-        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        self.encoder = SentenceTransformer(embedding_model)
         try:
             self.nli_pipeline = pipeline('text-classification', 
                                          model='facebook/bart-large-mnli',

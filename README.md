@@ -57,8 +57,12 @@ Run:
 
 ```bash
 python run.py
-# or with Docker
-./docker-run.sh
+```
+
+**Docker:**
+
+```bash
+docker-compose up -d
 ```
 
 ---

@@ -156,8 +156,8 @@ class PolicyNetwork(nn.Module):
 
 
 class Router:
-    def __init__(self, learning_enabled: bool = True, data_dir: str = ".kaelum/routing", 
-                 model_path: Optional[str] = None, device: str = "cpu"):
+    def __init__(self, learning_enabled: bool = True, data_dir: str = ".kaelum/routing",
+                 model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2"):
         self.learning_enabled = learning_enabled
         self.device = device
         self.data_dir = Path(data_dir)
@@ -167,11 +167,11 @@ class Router:
         self.model_file = self.data_dir / "model.pt"
         self.outcomes = []
         
-        self.encoder = SentenceTransformer('all-mpnet-base-v2')
+        self.encoder = SentenceTransformer(embedding_model)
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=0.001)
         self.training_buffer = []
-        self.domain_classifier = DomainClassifier()
+        self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
         
         if model_path and Path(model_path).exists():
             self._load_model(model_path)

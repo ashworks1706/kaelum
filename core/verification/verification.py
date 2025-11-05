@@ -14,7 +14,7 @@ class SymbolicVerifier:
         r'(?<![a-zA-Z])([0-9.]+(?:\s*[+\-*/×÷^]\s*[0-9.]+)*)\s*=\s*([0-9.]+)(?![a-zA-Z*])'
     )
     
-    def __init__(self, debug: bool = False):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', debug: bool = False):
         self.debug = debug
         # Enable SympyEngine debug mode if verification debug is enabled
         SympyEngine.set_debug(debug)
@@ -146,15 +146,15 @@ from ..detectors.domain_classifier import DomainClassifier
 
 class VerificationEngine:
 
-    def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False):
+    def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False, embedding_model: str = "all-MiniLM-L6-v2"):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
         self.debug = debug
-        self.semantic_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.semantic_encoder = SentenceTransformer(embedding_model)
         self.syntax_validator = SyntaxValidator()
-        self.conclusion_detector = ConclusionDetector()
-        self.worker_classifier = WorkerTypeClassifier()
-        self.domain_classifier = DomainClassifier()
+        self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
+        self.worker_classifier = WorkerTypeClassifier(embedding_model=embedding_model)
+        self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
     
     def _log_debug(self, message: str):
         if self.debug:

@@ -46,17 +46,18 @@ class KaelumOrchestrator:
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
-        self.tree_cache = TreeCache()
+        self.tree_cache = TreeCache(embedding_model=config.embedding_model)
         
-        self.router = Router(learning_enabled=True) if enable_routing else None
+        self.router = Router(learning_enabled=True, embedding_model=config.embedding_model) if enable_routing else None
         if self.router:
-            logger.info("Router enabled: Embedding-based intelligent routing")
+            logger.info(f"Router enabled: Embedding-based intelligent routing ({config.embedding_model})")
         
         self.verification_engine = VerificationEngine(
             self.llm,
             use_symbolic=config.use_symbolic_verification,
             use_factual=config.use_factual_verification,
-            debug=config.debug_verification
+            debug=config.debug_verification,
+            embedding_model=config.embedding_model
         )
         self.reflection_engine = ReflectionEngine(
             self.llm,
@@ -64,7 +65,7 @@ class KaelumOrchestrator:
             max_iterations=config.max_reflection_iterations
         )
         
-        self.active_learning = ActiveLearningEngine() if enable_active_learning else None
+        self.active_learning = ActiveLearningEngine(embedding_model=config.embedding_model) if enable_active_learning else None
         if self.active_learning:
             logger.info("Active learning enabled: Intelligent query selection for fine-tuning")
         
@@ -72,6 +73,7 @@ class KaelumOrchestrator:
         
         logger.info("=" * 70)
         logger.info("Kaelum Orchestrator Initialized")
+        logger.info(f"  Embedding Model: {config.embedding_model}")
         logger.info(f"  Router: {'Enabled' if enable_routing else 'Disabled'}")
         logger.info(f"  Verification: Symbolic={config.use_symbolic_verification}, Factual={config.use_factual_verification}")
         logger.info(f"  Reflection: Max {config.max_reflection_iterations} iterations")

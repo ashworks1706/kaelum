@@ -50,7 +50,7 @@ class CachedTree:
 
 
 class TreeCache:
-    def __init__(self, cache_dir: str = ".kaelum/tree_cache", similarity_threshold: float = 0.85):
+    def __init__(self, cache_dir: str = ".kaelum/tree_cache", similarity_threshold: float = 0.85, embedding_model: str = "all-MiniLM-L6-v2"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -60,7 +60,7 @@ class TreeCache:
         self.metadata_file = self.cache_dir / "metadata.json"
         self.similarity_threshold = similarity_threshold
         
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer(embedding_model)
         self.cached_trees: List[CachedTree] = self._load_metadata()
         
     def _load_metadata(self) -> List[CachedTree]:

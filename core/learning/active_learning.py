@@ -17,13 +17,13 @@ class QuerySelector:
     4. Complexity sampling - Select queries with high reasoning complexity
     """
     
-    def __init__(self, storage_dir: str = ".kaelum/active_learning"):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', storage_dir: str = ".kaelum/active_learning"):
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         
         self.query_pool_file = self.storage_dir / "query_pool.jsonl"
         self.selected_file = self.storage_dir / "selected_queries.jsonl"
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.embedding_model = SentenceTransformer(embedding_model)
         
         self.query_pool = []
         self.selected_queries = []
@@ -215,8 +215,8 @@ class QuerySelector:
 class ActiveLearningEngine:
     """Active learning engine for continuous model improvement."""
     
-    def __init__(self, query_selector: Optional[QuerySelector] = None):
-        self.query_selector = query_selector or QuerySelector()
+    def __init__(self, embedding_model: str = "all-MiniLM-L6-v2", query_selector: Optional[QuerySelector] = None):
+        self.query_selector = query_selector or QuerySelector(embedding_model=embedding_model)
         self.storage_dir = Path(".kaelum/active_learning")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.training_data_file = self.storage_dir / "training_data.jsonl"

@@ -20,9 +20,9 @@ class CreativeWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
-        self.task_classifier = CreativeTaskClassifier()
+        self.task_classifier = CreativeTaskClassifier(embedding_model=self.config.embedding_model)
         self.confidence_calibrator = ConfidenceCalibrator()
-        self.coherence_detector = CoherenceDetector()
+        self.coherence_detector = CoherenceDetector(embedding_model=self.config.embedding_model)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
     

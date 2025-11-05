@@ -8,11 +8,13 @@ from core.search import Router, QueryType, ReasoningStrategy
 from core.learning import ActiveLearningEngine, QuerySelector
 
 _orchestrator: Optional[KaelumOrchestrator] = None
+_embedding_model: str = "all-MiniLM-L6-v2"  # Global embedding model
 
 
 def set_reasoning_model(
     base_url: str = "http://localhost:11434/v1",
     model: str = "qwen2.5:3b",
+    embedding_model: str = "all-MiniLM-L6-v2",
     temperature: float = 0.7,
     max_tokens: int = 2048,
     max_reflection_iterations: int = 2,
@@ -22,7 +24,9 @@ def set_reasoning_model(
     enable_active_learning: bool = True,
     debug_verification: bool = False,
 ):
-    global _orchestrator
+    global _orchestrator, _embedding_model
+    
+    _embedding_model = embedding_model
     
     config = KaelumConfig(
         reasoning_llm=LLMConfig(
@@ -31,6 +35,7 @@ def set_reasoning_model(
             temperature=temperature,
             max_tokens=max_tokens,
         ),
+        embedding_model=embedding_model,
         max_reflection_iterations=max_reflection_iterations,
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
@@ -42,6 +47,11 @@ def set_reasoning_model(
         enable_routing=enable_routing,
         enable_active_learning=enable_active_learning
     )
+
+
+def get_embedding_model() -> str:
+    """Get the currently configured embedding model name."""
+    return _embedding_model
 
 
 def enhance(query: str) -> str:

@@ -16,12 +16,12 @@ from sentence_transformers import SentenceTransformer, util
 
 
 class FactualWorker(WorkerAgent):
-    def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        self.task_classifier = TaskClassifier()
-        self.conclusion_detector = ConclusionDetector()
-        self.completeness_detector = CompletenessDetector()
+        self._encoder = SentenceTransformer(embedding_model)
+        self.task_classifier = TaskClassifier(embedding_model=embedding_model)
+        self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
+        self.completeness_detector = CompletenessDetector(embedding_model=embedding_model)
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL

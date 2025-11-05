@@ -7,8 +7,8 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 class WorkerTypeClassifier:
     
-    def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        self.model = SentenceTransformer(embedding_model)
         self.threshold_calibrator = ThresholdCalibrator()
         
         self.worker_profiles = {
