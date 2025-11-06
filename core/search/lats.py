@@ -21,25 +21,70 @@ class LATSNode:
     pruned: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        """Iterative serialization to avoid stack overflow on deep trees."""
+        result = {
             'id': self.id,
             'state': self.state,
             'visits': self.visits,
             'value': self.value,
             'pruned': self.pruned,
-            'children': [c.to_dict() for c in self.children],
+            'children': []
         }
+        
+        # Use stack to traverse tree iteratively
+        stack = [(self, result['children'])]
+        
+        while stack:
+            current_node, parent_children_list = stack.pop()
+            
+            for child in current_node.children:
+                child_dict = {
+                    'id': child.id,
+                    'state': child.state,
+                    'visits': child.visits,
+                    'value': child.value,
+                    'pruned': child.pruned,
+                    'children': []
+                }
+                parent_children_list.append(child_dict)
+                
+                # Add child to stack for processing its children
+                if child.children:
+                    stack.append((child, child_dict['children']))
+        
+        return result
 
     @staticmethod
     def from_dict(d: Dict[str, Any], parent: Optional['LATSNode'] = None) -> 'LATSNode':
-        node = LATSNode(id=d['id'], state=d.get('state', {}), parent=parent)
-        node.visits = d.get('visits', 0)
-        node.value = d.get('value', 0.0)
-        node.pruned = d.get('pruned', False)
-        for c in d.get('children', []):
-            child = LATSNode.from_dict(c, parent=node)
-            node.children.append(child)
-        return node
+        """Iterative deserialization to avoid stack overflow on deep trees."""
+        root = LATSNode(
+            id=d['id'],
+            state=d.get('state', {}),
+            parent=parent,
+            visits=d.get('visits', 0),
+            value=d.get('value', 0.0),
+            pruned=d.get('pruned', False)
+        )
+        
+        # Use queue for breadth-first reconstruction
+        queue = [(root, d)]
+        
+        while queue:
+            current_node, current_dict = queue.pop(0)
+            
+            for child_dict in current_dict.get('children', []):
+                child = LATSNode(
+                    id=child_dict['id'],
+                    state=child_dict.get('state', {}),
+                    parent=current_node,
+                    visits=child_dict.get('visits', 0),
+                    value=child_dict.get('value', 0.0),
+                    pruned=child_dict.get('pruned', False)
+                )
+                current_node.children.append(child)
+                queue.append((child, child_dict))
+        
+        return root
 
 
 class LATS:
