@@ -76,6 +76,7 @@ class TreeCache:
         self.encoder = get_shared_encoder(embedding_model, device='cpu')
         self.validator = CacheValidator(llm_client=llm_client)
         self.cached_trees: List[CachedTree] = self._load_metadata()
+        self.access_times: Dict[str, float] = {}  # Track access times for LRU
         
     def _load_metadata(self) -> List[CachedTree]:
         if not self.metadata_path.exists():
@@ -142,7 +143,7 @@ class TreeCache:
             worker_specialty=worker,
             confidence=confidence,
             success=success,
-            timestamp=time.time()
+            created_at=time.time()
         )
         
         self.cached_trees.append(cached_tree)

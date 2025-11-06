@@ -685,75 +685,44 @@ The workflow is designed for **quality over speed** on first attempt, but **spee
 
 ## Quick Start
 
-Kaelum can be used in two ways:
-
-1. **CLI Mode** - Command-line interface for direct queries
-2. **Full-Stack Demo** - Web UI with Flask backend + Next.js frontend
-
-### CLI Usage
-
-#### 1. Clone Repository
+### 1. Clone Repository
 
 ```bash
 git clone https://github.com/ashworks1706/KaelumAI.git
 cd KaelumAI
 ```
 
-#### 2. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Backend dependencies
 pip install -r requirements.txt
+
+# Frontend dependencies  
+cd frontend
+npm install
+cd ..
 ```
 
-#### 3. Start LLM Backend (vLLM Recommended)
+### 3. Start vLLM Backend (Recommended)
 
 ```bash
 # Install vLLM
 pip install vllm
 
-# Start server with a small fast model (recommended for testing)
+# Start server with a balanced model (recommended)
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-7B-Instruct \
+    --port 8000 \
+    --gpu-memory-utilization 0.7
+
+# Or use a small fast model for testing
 python -m vllm.entrypoints.openai.api_server \
     --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
     --port 8000
-
-# Or use a balanced model for production
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --port 8000
 ```
 
-#### 4. Run Kaelum CLI
-
-```bash
-# Basic usage
-python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
-
-# With custom reasoning parameters
-python run.py --model microsoft/phi-4 \
-    --base-url http://localhost:8000/v1 \
-    --temperature 0.7 \
-    --max-tree-depth 8 \
-    --num-simulations 5
-
-# See all options
-python run.py --help
-```
-
-### Full-Stack Demo (WebUI)
-
-Experience Kaelum through a beautiful web interface with real-time metrics, visualizations, and system analytics.
-
-**Features:**
-
-- Interactive query interface with live results
-- Neural router analytics and training visualization
-- Cache validation statistics and performance metrics
-- System architecture diagram and feature showcase
-- Real-time metrics dashboard with per-worker breakdowns
-
-#### Quick Start
+### 4. Start Kaelum Web Interface
 
 **Option 1: Automatic (recommended)**
 
@@ -764,38 +733,34 @@ Experience Kaelum through a beautiful web interface with real-time metrics, visu
 **Option 2: Manual**
 
 ```bash
-# Terminal 1 - Install frontend dependencies (first time only)
-cd frontend
-npm install
-
-# Terminal 2 - Start backend (port 5000)
+# Terminal 1 - Start backend (port 5000)
 cd backend
 python app.py
 
-# Terminal 3 - Start frontend (port 3000)
+# Terminal 2 - Start frontend (port 3000)
 cd frontend
 npm run dev
 ```
 
 Then open http://localhost:3000 in your browser.
 
-#### Demo Architecture
+### Architecture
 
-- **Backend (Flask)**: REST API on port 5000
-
-  - `/api/query` - Process reasoning queries
-  - `/api/metrics` - System-wide metrics
+- **Backend (Flask)**: REST API on port 5000 with full logging and analytics
+  - `/api/query` - Process reasoning queries with streaming support
+  - `/api/metrics` - System-wide metrics and analytics
+  - `/api/logs` - Real-time system logs
   - `/api/stats/*` - Router, cache, and calibration statistics
   - `/api/config` - Configuration management
-- **Frontend (Next.js)**: Web UI on port 3000
 
-  - Query interface with results visualization
-  - System architecture showcase
+- **Frontend (Next.js)**: Interactive web UI on port 3000
+  - Query interface with live streaming results and logs
+  - System architecture visualization
   - Router training and worker distribution charts
-  - Cache validation analytics
-  - Comprehensive metrics dashboard
+  - Cache validation analytics  
+  - Comprehensive metrics dashboard with real-time updates
 
-#### Example Queries to Try
+### Example Queries to Try
 
 **Math**:
 
@@ -1055,12 +1020,8 @@ python run.py --model Qwen/Qwen2.5-1.5B-Instruct --base-url http://localhost:114
 
 ```
 Kaelum/
-├── run.py                 # CLI entry point
-├── kaelum.py             # Python API
-├── start_demo.sh         # Demo startup script
-├── requirements.txt      # Python dependencies
 ├── backend/
-│   ├── app.py            # Flask REST API
+│   ├── app.py            # Flask REST API with streaming & logging
 │   └── requirements.txt  # Backend dependencies
 ├── frontend/
 │   ├── app/
@@ -1078,94 +1039,73 @@ Kaelum/
 │   └── learning/        # Active learning
 ├── runtime/
 │   └── orchestrator.py  # Main orchestration
-└── .kaelum/             # Persistent data
-    ├── routing/         # Router training data
-    ├── cache/           # Cached LATS trees
-    ├── cache_validation/ # LLM validation logs
-    └── calibration/     # Threshold calibration
+├── kaelum.py           # Python API
+├── start_demo.sh       # Quick start script
+├── requirements.txt    # Python dependencies
+└── .kaelum/            # Persistent data
+    ├── routing/        # Router training data
+    ├── cache/          # Cached LATS trees
+    ├── analytics/      # Performance metrics
+    └── calibration/    # Threshold calibration
 ```
 
-## Configuration Options
+## Configuration
 
-All configuration is now via **command-line arguments** (no `.env` file needed):
+Configuration is managed through the web interface or via the Flask API `/api/config` endpoint.
 
+**Default Configuration:**
+```json
+{
+  "base_url": "http://localhost:8000/v1",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "embedding_model": "all-MiniLM-L6-v2",
+  "enable_routing": true,
+  "use_symbolic_verification": true,
+  "use_factual_verification": false,
+  "max_reflection_iterations": 2,
+  "parallel": false,
+  "max_workers": 4,
+  "router_learning_rate": 0.001,
+  "router_buffer_size": 32,
+  "router_exploration_rate": 0.1,
+  "cache_dir": ".kaelum/cache",
+  "router_data_dir": ".kaelum/routing",
+  "enable_active_learning": true
+}
+```
+
+**Update Configuration via API:**
 ```bash
-python run.py --help
+curl -X POST http://localhost:5000/api/config \
+  -H "Content-Type: application/json" \
+  -d '{"temperature": 0.8, "max_tree_depth": 8}'
 ```
 
-**Key Options:**
-| Category | Argument | Description | Default |
-|---|---|---|---|
-| LLM | `--model` | Model name (required) | (required) |
-|  | `--base-url` | API endpoint | `http://localhost:8000/v1` |
-|  | `--temperature` | Creativity (0.0–2.0) | `0.7` |
-|  | `--max-tokens` | Max response length | `2048` |
-| Embeddings | `--embedding-model` | Sentence transformer | `all-MiniLM-L6-v2` |
-| Search | `--max-tree-depth` | LATS depth | Router decides (3–10) |
-|  | `--num-simulations` | LATS simulations | Router decides (5–25) |
-|  | `--parallel` | Enable parallel search | Disabled |
-| Routing | `--no-routing` | Disable neural router | Enabled (routing ON) |
-|  | `--worker` | Force specific worker | Auto |
-| Cache | `--no-cache` | Disable caching | Enabled |
-| Verification | `--no-symbolic-verification` | Disable SymPy symbolic checks | Enabled |
-|  | `--enable-factual-verification` | Enable factual checks | Disabled |
-| Reflection | `--max-reflection-iterations` | Self-correction attempts | `2` |
-|  | `--no-active-learning` | Disable active learning | Enabled |
-
-**Examples:**
-
-```bash
-# High accuracy mode (slower)
-python run.py --model microsoft/phi-4 \
-    --base-url http://localhost:8000/v1 \
-    --max-tree-depth 10 \
-    --num-simulations 25
-
-# Fast mode (less accurate)
-python run.py --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
-    --base-url http://localhost:8000/v1 \
-    --max-tree-depth 3 \
-    --num-simulations 5
-
-# Math-only with forced worker
-python run.py --no-routing --worker math
-
-# Debug mode
-python run.py --debug-verification --enable-factual-verification
-
-# Production settings
-python run.py \
-    --model qwen2.5:14b \
-    --parallel \
-    --max-workers 8 \
-    --cache-dir /data/kaelum/cache
-```
-
----
-
-## Example: Python API
+## Python API Example
 
 ```python
-from kaelum import enhance, set_reasoning_model, get_metrics
+from kaelum import kaelum_enhance_reasoning, set_reasoning_model
 
-# Optional: configure model / router settings
+# Configure the system
 set_reasoning_model(
-  base_url="http://localhost:11434/v1",
-  model="Qwen/Qwen2.5-1.5B-Instruct",
-  temperature=0.7,
-  max_tokens=2048,
-  enable_routing=True,
-  use_symbolic_verification=True,
-  max_reflection_iterations=2,
+    base_url="http://localhost:8000/v1",
+    model="Qwen/Qwen2.5-7B-Instruct",
+    temperature=0.7,
+    enable_routing=True,
+    use_symbolic_verification=True,
+    cache_dir=".kaelum/cache",
+    router_data_dir=".kaelum/routing"
 )
 
-# Solve a query
-result = enhance("What is the derivative of x^2 + 3x?")
-print(result)
+# Process a query
+result = kaelum_enhance_reasoning("What is the derivative of x² + 3x?")
 
-# Inspect metrics
-metrics = get_metrics()
-print(metrics["analytics"])
+print(f"Answer: {result['suggested_approach']}")
+print(f"Worker: {result['worker_used']}")
+print(f"Confidence: {result['confidence']:.2f}")
+print(f"Reasoning steps: {len(result['reasoning_steps'])}")
 ```
 
 ---

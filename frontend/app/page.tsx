@@ -7,7 +7,6 @@ import { SystemArchitecture } from '../components/SystemArchitecture'
 import { RouterVisualization } from '../components/RouterVisualization'
 import { CacheVisualization } from '../components/CacheVisualization'
 import { ConfigPanel } from '../components/ConfigPanel'
-import { LogViewer } from '../components/LogViewer'
 import { FineTuningPanel } from '../components/FineTuningPanel'
 
 export default function Home() {
@@ -69,7 +68,6 @@ export default function Home() {
           <div className="flex space-x-4 overflow-x-auto">
             {[
               { id: 'query', label: 'Query Interface', icon: '💬' },
-              { id: 'logs', label: 'Live Logs', icon: '📝' },
               { id: 'metrics', label: 'Metrics', icon: '📊' },
               { id: 'router', label: 'Neural Router', icon: '🧠' },
               { id: 'cache', label: 'Smart Cache', icon: '⚡' },
@@ -97,7 +95,6 @@ export default function Home() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'query' && <QueryInterface />}
-        {activeTab === 'logs' && <LogViewer />}
         {activeTab === 'metrics' && <MetricsDashboard />}
         {activeTab === 'router' && <RouterVisualization />}
         {activeTab === 'cache' && <CacheVisualization />}

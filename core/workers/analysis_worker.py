@@ -67,9 +67,9 @@ class AnalysisWorker(WorkerAgent):
             prompt = f"Query: {query}\n\nAnalyze this systematically and critically."
             if history:
                 prompt += "\n\nAnalysis so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nWhat is the next analytical insight or conclusion?"
+                prompt += "\n\nProvide ONLY the next analytical insight or observation. Keep it concise (1-3 sentences). Do not provide the complete analysis yet."
             else:
-                prompt += "\n\nWhat is the first analytical observation?"
+                prompt += "\n\nProvide ONLY the first analytical observation. Keep it concise (1-3 sentences)."
             
             try:
                 messages = [

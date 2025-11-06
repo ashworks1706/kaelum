@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface StreamEvent {
-  type: 'status' | 'router' | 'reasoning_step' | 'answer' | 'verification' | 'done' | 'error'
+  type: 'status' | 'router' | 'reasoning_step' | 'answer' | 'verification' | 'done' | 'error' | 'log'
   message?: string
   worker?: string
   confidence?: number
@@ -13,16 +13,50 @@ interface StreamEvent {
   execution_time?: number
   cache_hit?: boolean
   iterations?: number
-  metadata?: any
+  metadata?: Record<string, unknown>
+  // Log-specific fields
+  level?: string
+  logger?: string
+  timestamp?: number
+}
+
+interface LogEntry {
+  timestamp: string
+  level: 'info' | 'error' | 'success'
+  message: string
+}
+
+interface QueryResult {
+  query: string
+  answer: string
+  reasoning_steps: string[]
+  worker: string
+  confidence: number
+  verification_passed: boolean
+  execution_time: number
+  cache_hit: boolean
+  iterations: number
+  metadata: Record<string, unknown>
 }
 
 export function QueryInterface() {
   const [query, setQuery] = useState('')
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<QueryResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [streamingStatus, setStreamingStatus] = useState<string>('')
   const [streamingSteps, setStreamingSteps] = useState<string[]>([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const logsEndRef = useRef<HTMLDivElement>(null)
+
+  const addLog = (level: 'info' | 'error' | 'success', message: string) => {
+    const timestamp = new Date().toLocaleTimeString()
+    setLogs(prev => [...prev, { timestamp, level, message }])
+  }
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
 
   const exampleQueries = [
     "What is the derivative of x² + 3x?",
@@ -41,16 +75,25 @@ export function QueryInterface() {
     setResult(null)
     setStreamingStatus('')
     setStreamingSteps([])
+    setLogs([]) // Clear previous logs
+
+    addLog('info', `Starting query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`)
 
     try {
+      addLog('info', 'Connecting to backend at http://localhost:5000/api/query')
+      
       const response = await fetch('http://localhost:5000/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, stream: true })
       })
 
+      addLog('info', `Response status: ${response.status} ${response.statusText}`)
+
       if (!response.ok) {
-        throw new Error('API request failed')
+        const errorText = await response.text()
+        addLog('error', `API request failed: ${errorText}`)
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`)
       }
 
       // Handle Server-Sent Events
@@ -59,7 +102,11 @@ export function QueryInterface() {
 
       if (!reader) throw new Error('No response body')
 
-      let partialResult: any = {
+      addLog('success', 'SSE stream started, receiving events...')
+
+      const partialResult: QueryResult = {
+        query,
+        answer: '',
         reasoning_steps: [],
         worker: 'unknown',
         confidence: 0,
@@ -72,7 +119,10 @@ export function QueryInterface() {
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        if (done) {
+          addLog('success', 'Stream completed')
+          break
+        }
 
         const chunk = decoder.decode(value)
         const lines = chunk.split('\n')
@@ -83,31 +133,46 @@ export function QueryInterface() {
               const eventData: StreamEvent = JSON.parse(line.slice(6))
 
               switch (eventData.type) {
+                case 'log':
+                  // Handle real-time logs from backend
+                  if (eventData.message) {
+                    const logLevel = eventData.level?.toLowerCase()
+                    const level = logLevel === 'info' ? 'info' : logLevel === 'error' ? 'error' : 'success'
+                    const loggerName = eventData.logger ? `[${eventData.logger}]` : ''
+                    addLog(level, `${loggerName} ${eventData.message}`)
+                  }
+                  break
+
                 case 'status':
                   setStreamingStatus(eventData.message || '')
+                  addLog('info', `Status: ${eventData.message}`)
                   break
 
                 case 'router':
                   partialResult.worker = eventData.worker || 'unknown'
                   partialResult.confidence = eventData.confidence || 0
                   setStreamingStatus(`Routing to ${eventData.worker} worker...`)
+                  addLog('success', `Routed to ${eventData.worker} worker (confidence: ${((eventData.confidence || 0) * 100).toFixed(0)}%)`)
                   break
 
                 case 'reasoning_step':
                   if (eventData.content) {
                     setStreamingSteps(prev => [...prev, eventData.content!])
                     partialResult.reasoning_steps.push(eventData.content)
+                    addLog('info', `Reasoning step ${(eventData.index || 0) + 1}: ${eventData.content.substring(0, 60)}...`)
                   }
                   break
 
                 case 'answer':
                   partialResult.answer = eventData.content || ''
                   setStreamingStatus('Generating answer...')
+                  addLog('success', `Answer generated (${eventData.content?.length || 0} chars)`)
                   break
 
                 case 'verification':
                   partialResult.verification_passed = eventData.passed || false
                   setStreamingStatus('Verifying answer...')
+                  addLog(eventData.passed ? 'success' : 'error', `Verification ${eventData.passed ? 'PASSED' : 'FAILED'}`)
                   break
 
                 case 'done':
@@ -117,19 +182,23 @@ export function QueryInterface() {
                   partialResult.metadata = eventData.metadata || {}
                   setResult(partialResult)
                   setStreamingStatus('Complete!')
+                  addLog('success', `Query completed in ${(eventData.execution_time || 0).toFixed(2)}s`)
                   break
 
                 case 'error':
+                  addLog('error', `Error: ${eventData.message}`)
                   throw new Error(eventData.message || 'Unknown error')
               }
             } catch (parseError) {
-              console.error('Failed to parse SSE event:', parseError)
+              addLog('error', `Failed to parse SSE event: ${parseError}`)
             }
           }
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to process query')
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to process query'
+      setError(errorMsg)
+      addLog('error', errorMsg)
     } finally {
       setLoading(false)
     }
@@ -315,6 +384,37 @@ export function QueryInterface() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Live Logs Panel */}
+      {logs.length > 0 && (
+        <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
+          <div className="bg-gray-100 dark:bg-gray-700 px-6 py-3 border-b border-gray-200 dark:border-gray-600">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              System Logs ({logs.length})
+            </h3>
+          </div>
+          <div className="p-4 max-h-96 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+            {logs.map((log, index) => (
+              <div
+                key={index}
+                className={`flex items-start py-2 px-3 rounded mb-2 text-sm font-mono ${
+                  log.level === 'error'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+                    : log.level === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300'
+                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'
+                }`}
+              >
+                <span className="opacity-60 mr-3 shrink-0">
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>
+                <span className="break-all">{log.message}</span>
+              </div>
+            ))}
+            <div ref={logsEndRef} />
+          </div>
         </div>
       )}
     </div>

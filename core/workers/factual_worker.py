@@ -76,7 +76,7 @@ class FactualWorker(WorkerAgent):
             prompt = self._build_prompt(query, query_type, None)
             if history:
                 prompt += "\n\nFacts gathered so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nProvide additional relevant information or conclude."
+                prompt += "\n\nProvide ONLY the next relevant fact or information piece. Keep it concise (1-3 sentences). Do not provide the complete answer yet."
             
             try:
                 messages = [

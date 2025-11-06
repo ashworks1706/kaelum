@@ -8,19 +8,118 @@ This API exposes endpoints for:
 - Research data exports
 """
 
+# Force CPU-only mode to avoid GPU memory conflicts with vLLM
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable CUDA for this process
+os.environ['OMP_NUM_THREADS'] = '4'  # Limit CPU threads for efficiency
+
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 import sys
-import os
 import json
 import time
+import logging
+import io
 from typing import Dict, Any
 
 # Add parent directory to path to import kaelum
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Force PyTorch to CPU if imported
+try:
+    import torch
+    torch.set_default_device('cpu')
+    if torch.cuda.is_available():
+        torch.cuda.is_available = lambda: False  # Override CUDA detection
+except ImportError:
+    pass  # PyTorch not installed, skip
+
 import kaelum
 from core.config import KaelumConfig
+
+
+# Custom logging handler to capture logs for streaming to frontend
+class LogCaptureHandler(logging.Handler):
+    """Custom handler to capture log messages for streaming."""
+    def __init__(self):
+        super().__init__()
+        self.logs = []
+        self.max_logs = 1000  # Keep last 1000 logs
+    
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.logs.append({
+                'timestamp': record.created,
+                'level': record.levelname,
+                'logger': record.name,
+                'message': msg
+            })
+            # Trim to max size
+            if len(self.logs) > self.max_logs:
+                self.logs = self.logs[-self.max_logs:]
+        except Exception:
+            self.handleError(record)
+    
+    def get_logs(self, since=None):
+        """Get logs since a given timestamp."""
+        if since is None:
+            return self.logs
+        return [log for log in self.logs if log['timestamp'] > since]
+    
+    def clear_logs(self):
+        """Clear all captured logs."""
+        self.logs = []
+
+
+# Global log capture handler
+log_capture = LogCaptureHandler()
+
+
+def setup_backend_logging():
+    """Configure logging for backend API with log capture."""
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        force=True
+    )
+    
+    # Silence noisy third-party libraries
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    logging.getLogger("transformers").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    logging.getLogger("filelock").setLevel(logging.WARNING)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)  # Flask logs
+    
+    # Set levels for Kaelum loggers - show important events
+    logging.getLogger("kaelum.orchestrator").setLevel(logging.INFO)
+    logging.getLogger("kaelum.router").setLevel(logging.INFO)
+    logging.getLogger("kaelum.lats").setLevel(logging.INFO)
+    logging.getLogger("kaelum.llm").setLevel(logging.INFO)
+    logging.getLogger("kaelum.worker").setLevel(logging.INFO)
+    logging.getLogger("kaelum.verification").setLevel(logging.INFO)
+    logging.getLogger("kaelum.reflection").setLevel(logging.INFO)
+    logging.getLogger("kaelum.cache").setLevel(logging.INFO)
+    logging.getLogger("kaelum.cache_validator").setLevel(logging.INFO)
+    logging.getLogger("kaelum.reward").setLevel(logging.WARNING)
+    
+    # Add our custom handler to capture logs
+    log_capture.setFormatter(logging.Formatter('%(message)s'))
+    logging.getLogger().addHandler(log_capture)
+    
+    # Also add console handler for backend console output
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter('[%(levelname)s] %(name)s: %(message)s'))
+    logging.getLogger().addHandler(console)
+
+
+# Setup logging on import
+setup_backend_logging()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for Next.js frontend
@@ -31,7 +130,7 @@ current_config = {
     "model": "Qwen/Qwen2.5-1.5B-Instruct",
     "api_key": "EMPTY",
     "temperature": 0.7,
-    "max_tokens": 2048,
+    "max_tokens": 512,  # Reduced from 2048 to 512 to fit within 2048 total context
     "embedding_model": "all-MiniLM-L6-v2",
     "use_symbolic_verification": True,
     "use_factual_verification": False,
@@ -42,7 +141,48 @@ current_config = {
     "router_learning_rate": 0.001,
     "router_buffer_size": 32,
     "router_exploration_rate": 0.1,
+    "cache_dir": ".kaelum/cache",
+    "router_data_dir": ".kaelum/routing",
+    "enable_active_learning": True,  # Enable analytics collection
 }
+
+
+# Initialize kaelum with proper configuration on startup
+def initialize_kaelum():
+    """Initialize Kaelum system with full configuration."""
+    print("=" * 80)
+    print("Initializing Kaelum AI Backend")
+    print("=" * 80)
+    print(f"LLM: {current_config['model']} @ {current_config['base_url']}")
+    print(f"Cache Dir: {current_config['cache_dir']}")
+    print(f"Router Dir: {current_config['router_data_dir']}")
+    print(f"Active Learning: {current_config['enable_active_learning']}")
+    print("=" * 80)
+    
+    kaelum.set_reasoning_model(
+        base_url=current_config["base_url"],
+        model=current_config["model"],
+        api_key=current_config.get("api_key"),
+        temperature=current_config["temperature"],
+        max_tokens=current_config["max_tokens"],
+        embedding_model=current_config["embedding_model"],
+        use_symbolic_verification=current_config["use_symbolic_verification"],
+        use_factual_verification=current_config["use_factual_verification"],
+        max_reflection_iterations=current_config["max_reflection_iterations"],
+        enable_routing=current_config["enable_routing"],
+        parallel=current_config["parallel"],
+        max_workers=current_config["max_workers"],
+        router_learning_rate=current_config.get("router_learning_rate", 0.001),
+        router_buffer_size=current_config.get("router_buffer_size", 32),
+        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
+        cache_dir=current_config.get("cache_dir", ".kaelum/cache"),
+        router_data_dir=current_config.get("router_data_dir", ".kaelum/routing"),
+        enable_active_learning=current_config.get("enable_active_learning", True),
+    )
+
+
+# Initialize on module load
+initialize_kaelum()
 
 
 @app.route('/api/health', methods=['GET'])
@@ -119,36 +259,92 @@ def query():
     if use_stream:
         def generate():
             import json
+            import traceback
             
             try:
+                print(f"[STREAM] Starting query: {query_text[:50]}...")
+                
+                # Clear previous logs and capture timestamp
+                log_capture.clear_logs()
+                log_start_time = time.time()
+                last_log_index = 0
+                
                 # Send initial status
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Processing query...'})}\n\n"
                 
+                # Helper to send new logs
+                def send_new_logs():
+                    nonlocal last_log_index
+                    logs = log_capture.get_logs(since=log_start_time)
+                    if len(logs) > last_log_index:
+                        for log in logs[last_log_index:]:
+                            log_event = {
+                                'type': 'log',
+                                'level': log['level'],
+                                'logger': log['logger'].replace('kaelum.', ''),  # Shorten logger names
+                                'message': log['message'],
+                                'timestamp': log['timestamp']
+                            }
+                            yield f"data: {json.dumps(log_event)}\n\n"
+                        last_log_index = len(logs)
+                
+                # Send logs before processing
+                for event in send_new_logs():
+                    yield event
+                
+                print("[STREAM] Calling kaelum.kaelum_enhance_reasoning...")
                 start_time = time.time()
+                
+                # Call kaelum (this generates logs synchronously)
                 result = kaelum.kaelum_enhance_reasoning(query_text)
                 execution_time = time.time() - start_time
+                
+                # Send all logs that were generated during processing
+                for event in send_new_logs():
+                    yield event
+                
+                print(f"[STREAM] Got result in {execution_time:.2f}s: worker={result.get('worker_used')}")
                 
                 # Send router decision
                 yield f"data: {json.dumps({'type': 'router', 'worker': result.get('worker_used', 'unknown'), 'confidence': result.get('confidence', 0.0)})}\n\n"
                 
                 # Send reasoning steps
-                for i, step in enumerate(result.get("reasoning_steps", [])):
+                reasoning_steps = result.get("reasoning_steps", [])
+                print(f"[STREAM] Sending {len(reasoning_steps)} reasoning steps")
+                for i, step in enumerate(reasoning_steps):
                     yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
-                    time.sleep(0.05)  # Small delay for visual effect
                 
                 # Send answer
-                yield f"data: {json.dumps({'type': 'answer', 'content': result.get('suggested_approach', '')})}\n\n"
+                answer = result.get('suggested_approach', '')
+                print(f"[STREAM] Sending answer: {answer[:50]}...")
+                yield f"data: {json.dumps({'type': 'answer', 'content': answer})}\n\n"
                 
                 # Send verification status
-                yield f"data: {json.dumps({'type': 'verification', 'passed': result.get('verification_passed', False)})}\n\n"
+                verification_passed = result.get('verification_passed', False)
+                print(f"[STREAM] Verification: {verification_passed}")
+                yield f"data: {json.dumps({'type': 'verification', 'passed': verification_passed})}\n\n"
                 
                 # Send completion metadata
+                print("[STREAM] Sending completion metadata")
                 yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': result.get('cache_hit', False), 'iterations': result.get('iterations', 1), 'metadata': {'reasoning_count': result.get('reasoning_count', 0), 'domain': result.get('domain', 'general')}})}\n\n"
+                
+                # Send any final logs
+                for event in send_new_logs():
+                    yield event
+                
+                print("[STREAM] Stream completed successfully")
             
             except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+                print(f"[STREAM ERROR] {error_msg}")
+                print(f"[STREAM ERROR TRACE]\n{error_trace}")
+                yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
         
-        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+        response = Response(stream_with_context(generate()), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        return response
     
     try:
         start_time = time.time()
@@ -175,6 +371,30 @@ def query():
             "error": str(e),
             "type": type(e).__name__
         }), 500
+
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """Get captured logs from backend.
+    
+    Query params:
+    - since: Unix timestamp to get logs since (optional)
+    - limit: Max number of logs to return (default: 100)
+    """
+    since = request.args.get('since', type=float)
+    limit = request.args.get('limit', type=int, default=100)
+    
+    logs = log_capture.get_logs(since=since)
+    
+    # Apply limit
+    if len(logs) > limit:
+        logs = logs[-limit:]
+    
+    return jsonify({
+        "logs": logs,
+        "count": len(logs),
+        "timestamp": time.time()
+    })
 
 
 @app.route('/api/metrics', methods=['GET'])
@@ -540,6 +760,7 @@ if __name__ == '__main__':
     )
     
     print("🚀 Kaelum API Server Starting...")
+    print("💻 CPU-ONLY MODE: All operations forced to CPU (GPU reserved for vLLM)")
     print(f"📍 API: http://localhost:5000")
     print(f"🔗 Health: http://localhost:5000/api/health")
     print(f"📊 Metrics: http://localhost:5000/api/metrics")

@@ -77,7 +77,7 @@ class CreativeWorker(WorkerAgent):
             prompt = self._build_creative_prompt(query, task_type)
             if history:
                 prompt += "\n\nContent created so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nContinue or conclude the creative work."
+                prompt += "\n\nProvide ONLY the next creative element or section. Keep it focused and concise (2-5 sentences). Build upon previous content."
             
             try:
                 messages = [

@@ -87,7 +87,7 @@ class CodeWorker(WorkerAgent):
             prompt = self._build_prompt(query, language, task_type, context)
             if history:
                 prompt += "\n\nPrevious steps:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nWhat is the next implementation step?"
+                prompt += "\n\nProvide ONLY the next implementation step. Keep it concise (describe the step or provide a small code snippet). Do not generate the entire solution."
             
             try:
                 messages = [

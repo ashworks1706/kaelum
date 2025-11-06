@@ -234,9 +234,9 @@ class MathWorker(WorkerAgent):
             prompt = f"Query: {query}\n\n"
             if history:
                 prompt += "Previous steps:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nWhat is the next step?"
+                prompt += "\n\nProvide ONLY the next single step. Keep it concise (1-3 sentences). Do not solve the entire problem."
             else:
-                prompt += "What is the first step to solve this?"
+                prompt += "Provide ONLY the first step to solve this. Keep it concise (1-3 sentences)."
             
             try:
                 messages = [
@@ -371,9 +371,9 @@ class LogicWorker(WorkerAgent):
             prompt = f"Query: {query}\n\n"
             if history:
                 prompt += "Reasoning so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
-                prompt += "\n\nWhat is the next logical step?"
+                prompt += "\n\nProvide ONLY the next single logical step. Keep it concise (1-3 sentences). Do not complete the entire reasoning."
             else:
-                prompt += "Apply logical reasoning. What is the first step?"
+                prompt += "Apply logical reasoning. Provide ONLY the first step (1-3 sentences)."
             
             try:
                 messages = [
