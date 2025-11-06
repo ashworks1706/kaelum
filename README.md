@@ -9,6 +9,7 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 
 <img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/b53996f8-36d2-4e54-86f0-3dbe0a107d9e" />
 <img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/4725ce30-33be-4d5a-a5ef-58eb6d1f6bf6" />
+<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/f5363583-5ad9-483b-a954-3b680fe087e5" />
 <img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-01" src="https://github.com/user-attachments/assets/c58a413a-9c81-4022-988b-d28809ce790f" />
 <img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-10" src="https://github.com/user-attachments/assets/e8b2693d-3b80-499d-9e52-0b4eb7b20a6e" />
 <img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-15" src="https://github.com/user-attachments/assets/b7b59351-a64d-4a03-96e6-97c145034e87" />
