@@ -92,14 +92,19 @@ export function QueryInterface() {
           // Process new log entries
           for (const logData of data.logs) {
             if (logData.message) {
-              const logLevel = logData.level?.toLowerCase()
-              const level = logLevel === 'error' ? 'error' : 
-                           logLevel === 'warning' ? 'error' : 
-                           logLevel === 'success' ? 'success' : 'info'
+              const message = logData.message
               
-              const loggerName = logData.logger ? `[${logData.logger}] ` : ''
+              // Determine log level based on component prefix or message content
+              let level: 'info' | 'error' | 'success' = 'info'
+              
+              if (message.includes('✅ [VERIFICATION]') || message.includes('✓') || message.includes('passed')) {
+                level = 'success'
+              } else if (message.includes('ERROR') || message.includes('FAILED') || message.includes('✗') || message.includes('failed')) {
+                level = 'error'
+              }
+              
               const timestamp = logData.timestamp ? new Date(logData.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()
-              setLogs(prev => [...prev, { timestamp, level, message: `${loggerName}${logData.message}` }])
+              setLogs(prev => [...prev, { timestamp, level, message }])
             }
           }
         }
@@ -454,23 +459,72 @@ export function QueryInterface() {
             </h3>
           </div>
           <div className="p-4 max-h-96 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-            {logs.map((log, index) => (
-              <div
-                key={index}
-                className={`flex items-start py-2 px-3 rounded mb-2 text-sm font-mono ${
-                  log.level === 'error'
-                    ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
-                    : log.level === 'success'
-                    ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300'
-                }`}
-              >
-                <span className="opacity-60 mr-3 shrink-0">
-                  {new Date(log.timestamp).toLocaleTimeString()}
-                </span>
-                <span className="break-all">{log.message}</span>
-              </div>
-            ))}
+            {logs.map((log, index) => {
+              // Extract component prefix and message (now includes more emojis)
+              const componentMatch = log.message.match(/^([🧭🎯🌳👷✅🔄💾🔍🤖⭐🔗📋🎬🏷️🔁📝🔀➗🧠💻📚🎨🔬]\s*\[[\w\s]+\])\s*(.*)/)
+              const componentPrefix = componentMatch ? componentMatch[1] : ''
+              const messageText = componentMatch ? componentMatch[2] : log.message
+              
+              // Color based on component type
+              let componentColor = ''
+              // Core components
+              if (componentPrefix.includes('ROUTER')) componentColor = 'text-purple-600 dark:text-purple-400'
+              else if (componentPrefix.includes('ORCHESTRATOR')) componentColor = 'text-blue-600 dark:text-blue-400'
+              else if (componentPrefix.includes('TREE SEARCH')) componentColor = 'text-green-600 dark:text-green-400'
+              else if (componentPrefix.includes('VERIFICATION')) componentColor = 'text-emerald-600 dark:text-emerald-400'
+              else if (componentPrefix.includes('REFLECTION')) componentColor = 'text-cyan-600 dark:text-cyan-400'
+              else if (componentPrefix.includes('CACHE VALIDATOR')) componentColor = 'text-violet-600 dark:text-violet-400'
+              else if (componentPrefix.includes('CACHE')) componentColor = 'text-indigo-600 dark:text-indigo-400'
+              else if (componentPrefix.includes('LLM')) componentColor = 'text-pink-600 dark:text-pink-400'
+              else if (componentPrefix.includes('REWARD')) componentColor = 'text-yellow-600 dark:text-yellow-400'
+              // Detectors
+              else if (componentPrefix.includes('COHERENCE')) componentColor = 'text-teal-600 dark:text-teal-400'
+              else if (componentPrefix.includes('COMPLETENESS')) componentColor = 'text-lime-600 dark:text-lime-400'
+              else if (componentPrefix.includes('CONCLUSION')) componentColor = 'text-amber-600 dark:text-amber-400'
+              else if (componentPrefix.includes('DOMAIN')) componentColor = 'text-rose-600 dark:text-rose-400'
+              else if (componentPrefix.includes('REPETITION')) componentColor = 'text-fuchsia-600 dark:text-fuchsia-400'
+              else if (componentPrefix.includes('TASK TYPE')) componentColor = 'text-sky-600 dark:text-sky-400'
+              else if (componentPrefix.includes('WORKER TYPE')) componentColor = 'text-slate-600 dark:text-slate-400'
+              // Workers
+              else if (componentPrefix.includes('MATH')) componentColor = 'text-red-600 dark:text-red-400'
+              else if (componentPrefix.includes('LOGIC')) componentColor = 'text-purple-600 dark:text-purple-400'
+              else if (componentPrefix.includes('CODE')) componentColor = 'text-blue-600 dark:text-blue-400'
+              else if (componentPrefix.includes('FACTUAL')) componentColor = 'text-green-600 dark:text-green-400'
+              else if (componentPrefix.includes('CREATIVE')) componentColor = 'text-pink-600 dark:text-pink-400'
+              else if (componentPrefix.includes('ANALYSIS')) componentColor = 'text-orange-600 dark:text-orange-400'
+              else if (componentPrefix.includes('WORKER')) componentColor = 'text-orange-600 dark:text-orange-400' // Generic worker
+              
+              return (
+                <div
+                  key={index}
+                  className={`flex items-start py-2 px-3 rounded mb-2 text-sm ${
+                    log.level === 'error'
+                      ? 'bg-red-50 dark:bg-red-900/20'
+                      : log.level === 'success'
+                      ? 'bg-green-50 dark:bg-green-900/20'
+                      : 'bg-blue-50 dark:bg-blue-900/20'
+                  }`}
+                >
+                  <span className="opacity-60 mr-3 shrink-0 text-xs">
+                    {log.timestamp}
+                  </span>
+                  {componentPrefix && (
+                    <span className={`font-bold mr-2 shrink-0 ${componentColor}`}>
+                      {componentPrefix}
+                    </span>
+                  )}
+                  <span className={`break-all font-mono text-xs ${
+                    log.level === 'error'
+                      ? 'text-red-800 dark:text-red-300'
+                      : log.level === 'success'
+                      ? 'text-green-800 dark:text-green-300'
+                      : 'text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {messageText}
+                  </span>
+                </div>
+              )
+            })}
             <div ref={logsEndRef} />
           </div>
         </div>

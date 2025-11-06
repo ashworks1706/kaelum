@@ -374,8 +374,60 @@ def export_training():
 
 
 @app.route('/api/workers', methods=['GET'])
-def list_workers():
-    return jsonify({"workers": WORKER_INFO})
+def get_workers():
+    """Get list of available workers"""
+    return jsonify({
+        'workers': ['math', 'logic', 'code', 'factual', 'creative', 'analysis']
+    })
+
+
+@app.route('/api/trees', methods=['GET'])
+def get_reasoning_trees():
+    """Get all reasoning trees from cache for visualization"""
+    try:
+        from core.paths import DEFAULT_TREE_CACHE_DIR
+        import json
+        from pathlib import Path
+        
+        trees_dir = Path(DEFAULT_TREE_CACHE_DIR)
+        trees = []
+        
+        if not trees_dir.exists():
+            return jsonify({'trees': [], 'total': 0})
+        
+        # Read all tree files
+        for tree_file in sorted(trees_dir.glob('tree_*.json'), key=lambda f: f.stat().st_mtime, reverse=True):
+            try:
+                with open(tree_file, 'r') as f:
+                    tree_data = json.load(f)
+                    
+                    # Convert to format expected by frontend
+                    tree_info = {
+                        'tree_id': tree_file.stem,
+                        'query': tree_data.get('query', 'Unknown query'),
+                        'worker': tree_data.get('worker', 'unknown'),
+                        'timestamp': tree_data.get('timestamp', ''),
+                        'root': tree_data.get('root', {}),
+                        'best_path': tree_data.get('best_path', []),
+                        'total_nodes': tree_data.get('total_nodes', 0),
+                        'pruned_nodes': tree_data.get('pruned_nodes', 0),
+                        'max_depth': tree_data.get('max_depth', 0),
+                        'avg_reward': tree_data.get('avg_reward', 0.0),
+                        'cache_status': tree_data.get('quality', 'none'),
+                        'execution_time': tree_data.get('execution_time', 0.0),
+                        'verification_passed': tree_data.get('verification_passed', False)
+                    }
+                    trees.append(tree_info)
+            except Exception as e:
+                print(f"Error reading tree file {tree_file}: {e}")
+                continue
+        
+        return jsonify({
+            'trees': trees,
+            'total': len(trees)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'trees': []}), 500
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ import { RouterVisualization } from '../components/RouterVisualization'
 import { CacheVisualization } from '../components/CacheVisualization'
 import { ConfigPanel } from '../components/ConfigPanel'
 import { FineTuningPanel } from '../components/FineTuningPanel'
+import { TreesVisualization } from '../components/TreesVisualization'
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('query')
@@ -69,6 +70,7 @@ export default function Home() {
             {[
               { id: 'query', label: 'Query Interface', icon: '💬' },
               { id: 'metrics', label: 'Metrics', icon: '📊' },
+              { id: 'trees', label: 'Reasoning Trees', icon: '🌳' },
               { id: 'router', label: 'Neural Router', icon: '🧠' },
               { id: 'cache', label: 'Smart Cache', icon: '⚡' },
               { id: 'config', label: 'Configuration', icon: '⚙️' },
@@ -96,6 +98,7 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'query' && <QueryInterface />}
         {activeTab === 'metrics' && <MetricsDashboard />}
+        {activeTab === 'trees' && <TreesVisualization />}
         {activeTab === 'router' && <RouterVisualization />}
         {activeTab === 'cache' && <CacheVisualization />}
         {activeTab === 'config' && <ConfigPanel />}
