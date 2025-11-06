@@ -39,6 +39,9 @@ current_config = {
     "enable_routing": True,
     "parallel": False,
     "max_workers": 4,
+    "router_learning_rate": 0.001,
+    "router_buffer_size": 32,
+    "router_exploration_rate": 0.1,
 }
 
 
@@ -78,6 +81,9 @@ def config():
         enable_routing=current_config["enable_routing"],
         parallel=current_config["parallel"],
         max_workers=current_config["max_workers"],
+        router_learning_rate=current_config.get("router_learning_rate", 0.001),
+        router_buffer_size=current_config.get("router_buffer_size", 32),
+        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
     )
     
     return jsonify({
@@ -273,9 +279,20 @@ def router_stats():
         else:
             training_data = []
         
-        # Check if model exists
+        # Check if model exists and read metadata
         model_file = ".kaelum/routing/model.pt"
         model_trained = os.path.exists(model_file)
+        training_steps = 0
+        exploration_rate = current_config.get("router_exploration_rate", 0.1)
+        
+        if model_trained:
+            try:
+                import torch
+                checkpoint = torch.load(model_file, map_location='cpu')
+                training_steps = checkpoint.get("training_step_count", 0)
+                exploration_rate = checkpoint.get("exploration_rate", exploration_rate)
+            except:
+                pass
         
         # Compute stats
         total_queries = len(training_data)
@@ -290,14 +307,24 @@ def router_stats():
             success_count = sum(1 for e in training_data if e.get('success', False))
             success_rate = success_count / total_queries if total_queries > 0 else 0.0
         
+        buffer_size = current_config.get("router_buffer_size", 32)
+        
         return jsonify({
             "total_queries": total_queries,
             "model_trained": model_trained,
-            "training_buffer_size": total_queries % 32,  # Trains every 32 queries
-            "next_training_at": 32 - (total_queries % 32) if not model_trained else "continuous",
+            "training_steps": training_steps,
+            "training_buffer_size": total_queries % buffer_size,
+            "next_training_at": buffer_size - (total_queries % buffer_size) if not model_trained else "continuous",
             "success_rate": success_rate,
             "workers_distribution": workers_used,
-            "recent_queries": training_data[-5:] if training_data else []
+            "recent_queries": training_data[-5:] if training_data else [],
+            "online_learning": {
+                "enabled": True,
+                "learning_rate": current_config.get("router_learning_rate", 0.001),
+                "buffer_size": buffer_size,
+                "exploration_rate": exploration_rate,
+                "training_steps": training_steps
+            }
         })
     
     except Exception as e:
@@ -485,6 +512,9 @@ if __name__ == '__main__':
         enable_routing=current_config["enable_routing"],
         parallel=current_config["parallel"],
         max_workers=current_config["max_workers"],
+        router_learning_rate=current_config.get("router_learning_rate", 0.001),
+        router_buffer_size=current_config.get("router_buffer_size", 32),
+        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
     )
     
     print("🚀 Kaelum API Server Starting...")

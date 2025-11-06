@@ -157,7 +157,8 @@ class PolicyNetwork(nn.Module):
 
 class Router:
     def __init__(self, learning_enabled: bool = True, data_dir: str = ".kaelum/routing",
-                 model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2"):
+                 model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2",
+                 buffer_size: int = 32, learning_rate: float = 0.001, exploration_rate: float = 0.1):
         self.learning_enabled = learning_enabled
         self.device = device
         self.data_dir = Path(data_dir)
@@ -167,9 +168,14 @@ class Router:
         self.model_file = self.data_dir / "model.pt"
         self.outcomes = []
         
+        # Online learning parameters
+        self.buffer_size = buffer_size
+        self.exploration_rate = exploration_rate
+        self.training_step_count = 0
+        
         self.encoder = SentenceTransformer(embedding_model)
         self.policy_network = PolicyNetwork().to(device)
-        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=0.001)
+        self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
         self.training_buffer = []
         self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
         
@@ -231,8 +237,15 @@ class Router:
                 outputs = self.policy_network(feature_tensor)
                 
                 worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
-                worker_idx = torch.argmax(worker_probs, dim=-1).item()
-                confidence = worker_probs[0, worker_idx].item()
+                
+                # Epsilon-greedy exploration for online learning
+                if self.learning_enabled and np.random.random() < self.exploration_rate:
+                    worker_idx = np.random.randint(0, len(self.idx_to_worker))
+                    confidence = worker_probs[0, worker_idx].item()
+                    logger.info(f"ROUTER: EXPLORATION MODE - Random worker selected")
+                else:
+                    worker_idx = torch.argmax(worker_probs, dim=-1).item()
+                    confidence = worker_probs[0, worker_idx].item()
                 
                 # Log all worker probabilities
                 logger.info("ROUTER: Worker probabilities:")
@@ -315,12 +328,13 @@ class Router:
         logger.info(f"  - Success: {result.get('verification_passed', False)}")
         logger.info(f"  - Confidence: {result.get('confidence', 0.0):.3f}")
         logger.info(f"  - Reward: {reward:.3f}")
-        logger.info(f"  - Training buffer: {len(self.training_buffer)}/32")
+        logger.info(f"  - Training buffer: {len(self.training_buffer)}/{self.buffer_size}")
         
-        # Save training data immediately after every query (not just every 10)
+        # Save training data immediately after every query
         self._save_training_data()
         
-        if len(self.training_buffer) >= 32:
+        # Train when buffer reaches configured size
+        if len(self.training_buffer) >= self.buffer_size:
             logger.info(f"ROUTER TRAINING: Buffer full ({len(self.training_buffer)} samples), starting training...")
             self._train_step()
             self.training_buffer = []
@@ -358,16 +372,27 @@ class Router:
         torch.nn.utils.clip_grad_norm_(self.policy_network.parameters(), 1.0)
         self.optimizer.step()
         
-        logger.info(f"ROUTER TRAINING: Completed training step")
+        self.training_step_count += 1
+        
+        logger.info(f"ROUTER TRAINING: Completed training step #{self.training_step_count}")
         logger.info(f"  - Total outcomes: {len(self.outcomes)}")
+        logger.info(f"  - Batch size: {len(self.training_buffer)}")
         logger.info(f"  - Loss: {total_loss.item():.4f}")
         logger.info(f"    - Worker loss: {worker_loss.item():.4f}")
         logger.info(f"    - Depth loss: {depth_loss.item():.4f}")
         logger.info(f"    - Sims loss: {sims_loss.item():.4f}")
         logger.info(f"    - Cache loss: {cache_loss.item():.4f}")
+        logger.info(f"  - Avg reward: {rewards.mean().item():.3f}")
         
-        # Save model after every training (not just every 100)
+        # Save model after every training step
         self.save_model()
+        
+        # Gradually reduce exploration rate over time
+        if self.training_step_count % 10 == 0:
+            old_rate = self.exploration_rate
+            self.exploration_rate = max(0.05, self.exploration_rate * 0.95)
+            if old_rate != self.exploration_rate:
+                logger.info(f"  - Exploration rate decreased: {old_rate:.3f} → {self.exploration_rate:.3f}")
     
     def _extract_features(self, query: str, context: Optional[Dict] = None) -> NeuralRoutingFeatures:
         import re
@@ -445,6 +470,13 @@ class Router:
         self.policy_network.load_state_dict(checkpoint["model_state_dict"])
         if "optimizer_state_dict" in checkpoint:
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if "training_step_count" in checkpoint:
+            self.training_step_count = checkpoint["training_step_count"]
+        if "exploration_rate" in checkpoint:
+            self.exploration_rate = checkpoint["exploration_rate"]
+        logger.info(f"ROUTER: Model loaded from {path}")
+        logger.info(f"  - Training steps: {self.training_step_count}")
+        logger.info(f"  - Exploration rate: {self.exploration_rate:.3f}")
     
     def save_model(self):
         torch.save({
@@ -452,8 +484,14 @@ class Router:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "input_dim": 398,
             "hidden_dim": 256,
+            "training_step_count": self.training_step_count,
+            "exploration_rate": self.exploration_rate,
+            "total_outcomes": len(self.outcomes)
         }, self.model_file)
         logger.info(f"ROUTER: Model saved to {self.model_file}")
+        logger.info(f"  - Training steps: {self.training_step_count}")
+        logger.info(f"  - Total outcomes: {len(self.outcomes)}")
+        logger.info(f"  - Exploration rate: {self.exploration_rate:.3f}")
     
     def _save_training_data(self):
         data = [

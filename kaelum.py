@@ -30,6 +30,9 @@ def set_reasoning_model(
     max_workers: int = 4,
     max_tree_depth: Optional[int] = None,
     num_simulations: Optional[int] = None,
+    router_learning_rate: float = 0.001,
+    router_buffer_size: int = 32,
+    router_exploration_rate: float = 0.1,
 ):
     global _orchestrator, _embedding_model
     
@@ -60,6 +63,9 @@ def set_reasoning_model(
         max_workers=max_workers,
         max_tree_depth=max_tree_depth,
         num_simulations=num_simulations,
+        router_learning_rate=router_learning_rate,
+        router_buffer_size=router_buffer_size,
+        router_exploration_rate=router_exploration_rate,
     )
 
 

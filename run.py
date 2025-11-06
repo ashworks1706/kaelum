@@ -155,6 +155,12 @@ Examples:
                         help="Max self-correction iterations (default: 2, range: 0-5)")
     reflection_group.add_argument("--no-active-learning", action="store_true",
                         help="Disable active learning query collection for fine-tuning")
+    reflection_group.add_argument("--router-learning-rate", type=float, default=0.001,
+                        help="Learning rate for online router training (default: 0.001)")
+    reflection_group.add_argument("--router-buffer-size", type=int, default=32,
+                        help="Training buffer size before router update (default: 32)")
+    reflection_group.add_argument("--router-exploration-rate", type=float, default=0.1,
+                        help="Exploration rate for router diversity (default: 0.1, range: 0.0-0.5)")
     
     # Logging Configuration
     logging_group = parser.add_argument_group('Logging Configuration')
@@ -210,6 +216,9 @@ Examples:
     print(f"\n🔄 Reflection & Learning:")
     print(f"  Max Iterations: {args.max_reflection_iterations}")
     print(f"  Active Learning: {'✗ Disabled' if args.no_active_learning else '✓ Enabled'}")
+    print(f"  Router Learning Rate: {args.router_learning_rate}")
+    print(f"  Router Buffer Size: {args.router_buffer_size}")
+    print(f"  Router Exploration: {args.router_exploration_rate}")
     
     set_reasoning_model(
         base_url=args.base_url,
@@ -230,6 +239,9 @@ Examples:
         max_workers=args.max_workers,
         max_tree_depth=args.max_tree_depth,
         num_simulations=args.num_simulations,
+        router_learning_rate=args.router_learning_rate,
+        router_buffer_size=args.router_buffer_size,
+        router_exploration_rate=args.router_exploration_rate,
     )
     
     # If a single query is provided, run it and exit

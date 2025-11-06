@@ -48,7 +48,10 @@ class KaelumOrchestrator:
                  parallel: bool = False,
                  max_workers: int = 4,
                  max_tree_depth: Optional[int] = None,
-                 num_simulations: Optional[int] = None):
+                 num_simulations: Optional[int] = None,
+                 router_learning_rate: float = 0.001,
+                 router_buffer_size: int = 32,
+                 router_exploration_rate: float = 0.1):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()
@@ -61,10 +64,14 @@ class KaelumOrchestrator:
         self.router = Router(
             learning_enabled=True, 
             data_dir=router_data_dir,
-            embedding_model=config.embedding_model
+            embedding_model=config.embedding_model,
+            buffer_size=router_buffer_size,
+            learning_rate=router_learning_rate,
+            exploration_rate=router_exploration_rate
         ) if enable_routing else None
         if self.router:
             logger.info(f"Router enabled: Embedding-based intelligent routing ({config.embedding_model})")
+            logger.info(f"  - Online learning: buffer_size={router_buffer_size}, lr={router_learning_rate}, exploration={router_exploration_rate}")
         
         self.verification_engine = VerificationEngine(
             self.llm,

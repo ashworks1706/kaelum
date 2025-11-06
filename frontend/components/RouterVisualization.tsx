@@ -5,11 +5,19 @@ import { useState, useEffect } from 'react'
 interface RouterStats {
   total_queries: number
   model_trained: boolean
+  training_steps: number
   training_buffer_size: number
   next_training_at: string | number
   success_rate: number
   workers_distribution: Record<string, number>
   recent_queries: any[]
+  online_learning: {
+    enabled: boolean
+    learning_rate: number
+    buffer_size: number
+    exploration_rate: number
+    training_steps: number
+  }
 }
 
 export function RouterVisualization() {
@@ -65,7 +73,7 @@ export function RouterVisualization() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg">
           <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Queries</div>
           <div className="text-3xl font-bold text-slate-900 dark:text-white">{stats.total_queries}</div>
@@ -81,6 +89,11 @@ export function RouterVisualization() {
             )}
           </div>
         </div>
+        
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg">
+          <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Training Steps</div>
+          <div className="text-3xl font-bold text-purple-600">{stats.training_steps || 0}</div>
+        </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg">
           <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Success Rate</div>
@@ -89,13 +102,59 @@ export function RouterVisualization() {
 
         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-lg">
           <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Next Training</div>
-          <div className="text-3xl font-bold text-purple-600">
+          <div className="text-2xl font-bold text-indigo-600">
             {typeof stats.next_training_at === 'number' 
               ? `${stats.next_training_at} queries`
               : stats.next_training_at}
           </div>
         </div>
       </div>
+      
+      {/* Online Learning Status */}
+      {stats.online_learning && (
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-green-900 dark:text-green-100">
+              ⚡ Online Learning Active
+            </h3>
+            <span className="px-3 py-1 bg-green-500 text-white rounded-full text-sm font-medium animate-pulse">
+              LIVE
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Learning Rate</div>
+              <div className="text-lg font-bold text-slate-900 dark:text-white">
+                {stats.online_learning.learning_rate}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Buffer Size</div>
+              <div className="text-lg font-bold text-slate-900 dark:text-white">
+                {stats.online_learning.buffer_size}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Exploration Rate</div>
+              <div className="text-lg font-bold text-slate-900 dark:text-white">
+                {(stats.online_learning.exploration_rate * 100).toFixed(1)}%
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Current Buffer</div>
+              <div className="text-lg font-bold text-slate-900 dark:text-white">
+                {stats.training_buffer_size}/{stats.online_learning.buffer_size}
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mt-2">
+                <div
+                  className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${(stats.training_buffer_size / stats.online_learning.buffer_size) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Worker Distribution */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
@@ -167,23 +226,31 @@ export function RouterVisualization() {
 
       {/* How It Works */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
-        <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-3">🧠 How Neural Routing Works</h3>
+        <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-3">🧠 Online Learning Process</h3>
         <div className="space-y-2 text-sm text-blue-800 dark:text-blue-200">
           <p>
-            <strong>1. Feature Extraction:</strong> Query converted to 384-dim embedding + 14 structural features 
-            (length, math symbols, code keywords, etc.) → 398-dim input
+            <strong>1. Feature Extraction:</strong> Query → 384-dim embedding + 14 structural features 
+            (length, math symbols, code keywords, etc.) = 398-dim input vector
           </p>
           <p>
-            <strong>2. Neural Network:</strong> 398 → 256 → 128 architecture with ReLU + Dropout. 
-            Outputs worker probabilities + optimal depth + simulation count
+            <strong>2. Neural Network:</strong> PolicyNetwork (398 → 256 → 128) with ReLU + Dropout. 
+            Outputs: worker probabilities + optimal depth + simulation count + cache decision
           </p>
           <p>
-            <strong>3. Learning:</strong> After every query, records (worker, success, avg_reward, depth, sims). 
-            Trains after 32 examples using gradient descent (Adam optimizer, lr=0.001)
+            <strong>3. Exploration:</strong> {stats.online_learning ? 
+              `${(stats.online_learning.exploration_rate * 100).toFixed(0)}% chance` : '10% chance'} of random 
+            worker selection for diversity and discovering new patterns
           </p>
           <p>
-            <strong>4. Continuous Improvement:</strong> Model gets smarter over time by learning which workers 
-            succeed for different query types and what search parameters work best
+            <strong>4. Online Training:</strong> After every query, records (worker, success, reward). 
+            Trains model using Adam optimizer (lr={stats.online_learning?.learning_rate || 0.001}) when buffer reaches {stats.online_learning?.buffer_size || 32} samples
+          </p>
+          <p>
+            <strong>5. Continuous Improvement:</strong> Model automatically saves after each training step. 
+            Exploration rate gradually decreases (×0.95 every 10 steps, min 5%) as model becomes more confident
+          </p>
+          <p className="pt-2 border-t border-blue-200 dark:border-blue-700 font-semibold">
+            📊 Current Status: {stats.training_steps || 0} training steps completed, learning rate adapts dynamically
           </p>
         </div>
       </div>

@@ -15,6 +15,9 @@ interface Config {
   enable_routing: boolean
   parallel: boolean
   max_workers: number
+  router_learning_rate: number
+  router_buffer_size: number
+  router_exploration_rate: number
 }
 
 export function ConfigPanel() {
@@ -217,6 +220,68 @@ export function ConfigPanel() {
             </label>
           </div>
         </div>
+        
+        {/* Online Learning Settings */}
+        {config.enable_routing && (
+          <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <h4 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">⚡ Online Learning</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Learning Rate
+                </label>
+                <input
+                  type="number"
+                  min="0.0001"
+                  max="0.01"
+                  step="0.0001"
+                  value={config.router_learning_rate}
+                  onChange={(e) => updateConfig('router_learning_rate', parseFloat(e.target.value))}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  How fast the router learns (0.001 = default)
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Buffer Size
+                </label>
+                <input
+                  type="number"
+                  min="8"
+                  max="128"
+                  step="8"
+                  value={config.router_buffer_size}
+                  onChange={(e) => updateConfig('router_buffer_size', parseInt(e.target.value))}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Queries before model update (32 = default)
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Exploration Rate
+                </label>
+                <input
+                  type="number"
+                  min="0.0"
+                  max="0.5"
+                  step="0.05"
+                  value={config.router_exploration_rate}
+                  onChange={(e) => updateConfig('router_exploration_rate', parseFloat(e.target.value))}
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Random exploration for diversity (0.1 = 10%)
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Verification Settings */}
