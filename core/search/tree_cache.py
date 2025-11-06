@@ -10,6 +10,13 @@ from sentence_transformers import SentenceTransformer
 from .lats import LATS, LATSNode
 from core.cache_validator import CacheValidator
 
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    faiss = None
+
 
 WORKER_THRESHOLDS = {
     "math": 0.90,
@@ -69,26 +76,29 @@ class TreeCache:
         self.cached_trees: List[CachedTree] = self._load_metadata()
         
     def _load_metadata(self) -> List[CachedTree]:
-        if not self.metadata_file.exists():
+        if not self.metadata_path.exists():
             return []
         
+        cached_trees = []
         try:
-            with open(self.metadata_file, 'r') as f:
-                data = json.load(f)
-            
-            cached_trees = []
-            for item in data:
-                # Remove old fingerprint data if present
-                item.pop('query_fingerprint', None)
-                cached_trees.append(CachedTree.from_dict(item))
-            
+            with open(self.metadata_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                        cached_trees.append(CachedTree.from_dict(item))
+                    except json.JSONDecodeError:
+                        continue
             return cached_trees
-        except Exception as e:
+        except Exception:
             return []
     
     def _save_metadata(self):
-        with open(self.metadata_file, 'w') as f:
-            json.dump([tree.to_dict() for tree in self.cached_trees], f, indent=2)
+        with open(self.metadata_path, 'w') as f:
+            for tree in self.cached_trees:
+                f.write(json.dumps(tree.to_dict()) + '\n')
     
     def _compute_embedding(self, query: str) -> np.ndarray:
         return self.encoder.encode(query, show_progress_bar=False)
@@ -139,6 +149,10 @@ class TreeCache:
         if len(self.cached_trees) > self.max_cache_size:
             self._evict_entries()
         
+        if self.use_faiss or (FAISS_AVAILABLE and len(self.cached_trees) > 50):
+            self.use_faiss = True
+            self._build_faiss_index()
+        
         self._save_metadata()
         
         logger.info(f"CACHE: Stored tree {tree_id} (worker={worker}, confidence={confidence:.3f}, success={success})")
@@ -182,7 +196,28 @@ class TreeCache:
         evicted_ids = {tree.tree_id for tree, _ in to_evict}
         self.cached_trees = [t for t in self.cached_trees if t.tree_id not in evicted_ids]
         
+        if self.use_faiss:
+            self._build_faiss_index()
+        
         logger.info(f"CACHE EVICTION: Removed {num_to_evict} low-quality/old entries ({len(self.cached_trees)}/{self.max_cache_size} remain)")
+    
+    def _build_faiss_index(self):
+        if not self.cached_trees or not FAISS_AVAILABLE:
+            self.faiss_index = None
+            return
+        
+        import logging
+        logger = logging.getLogger("kaelum.cache")
+        
+        embeddings = np.array([tree.query_embedding for tree in self.cached_trees]).astype('float32')
+        
+        dimension = embeddings.shape[1]
+        self.faiss_index = faiss.IndexFlatIP(dimension)
+        
+        faiss.normalize_L2(embeddings)
+        self.faiss_index.add(embeddings)
+        
+        logger.info(f"CACHE: Built FAISS index with {len(self.cached_trees)} entries")
     
     def _check_symbolic_equivalence(self, query1: str, query2: str, worker: str) -> bool:
         if worker != "math":
@@ -236,18 +271,42 @@ class TreeCache:
         best_match = None
         best_similarity = 0.0
         
-        for cached_tree in self.cached_trees:
-            if not cached_tree.success:
-                continue
+        if self.use_faiss and self.faiss_index is not None:
+            query_emb_normalized = query_embedding.astype('float32').reshape(1, -1)
+            faiss.normalize_L2(query_emb_normalized)
             
-            similarity = self._cosine_similarity(query_embedding, cached_tree.query_embedding)
+            k = min(10, len(self.cached_trees))
+            similarities, indices = self.faiss_index.search(query_emb_normalized, k)
             
-            if similarity < similarity_threshold:
-                continue
-            
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = cached_tree
+            for i, idx in enumerate(indices[0]):
+                if idx == -1:
+                    break
+                
+                cached_tree = self.cached_trees[idx]
+                if not cached_tree.success:
+                    continue
+                
+                similarity = float(similarities[0][i])
+                
+                if similarity < similarity_threshold:
+                    continue
+                
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_match = cached_tree
+        else:
+            for cached_tree in self.cached_trees:
+                if not cached_tree.success:
+                    continue
+                
+                similarity = self._cosine_similarity(query_embedding, cached_tree.query_embedding)
+                
+                if similarity < similarity_threshold:
+                    continue
+                
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_match = cached_tree
         
         if best_match is None:
             logger.debug(f"CACHE: No similarity match found (threshold={similarity_threshold})")

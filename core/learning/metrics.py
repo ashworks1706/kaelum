@@ -66,16 +66,14 @@ class AnalyticsDashboard:
             json.dump(summary, f, indent=2)
     
     def _load_summary(self) -> Dict[str, Any]:
-        """Load existing summary or create new one."""
         if self.summary_file.exists():
             try:
                 with open(self.summary_file, 'r') as f:
-                    content = f.read().strip()
-                    if not content:
+                    content = f.read(1024 * 1024)
+                    if not content.strip():
                         return {}
                     return json.loads(content)
             except (json.JSONDecodeError, ValueError):
-                # If file is corrupted, start fresh
                 return {}
         return {}
     

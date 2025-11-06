@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import random
+import torch
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
@@ -30,14 +31,21 @@ class QuerySelector:
         self._load_pools()
     
     def _load_pools(self):
-        """Load existing query pools from disk."""
         if self.query_pool_file.exists():
             with open(self.query_pool_file, 'r') as f:
-                self.query_pool = [json.loads(line) for line in f]
+                for line in f:
+                    try:
+                        self.query_pool.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
         
         if self.selected_file.exists():
             with open(self.selected_file, 'r') as f:
-                self.selected_queries = [json.loads(line) for line in f]
+                for line in f:
+                    try:
+                        self.selected_queries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
     
     def add_query(self, query: str, result: Dict[str, Any]):
         """Add query and its execution result to the pool."""
@@ -86,7 +94,6 @@ class QuerySelector:
         return sorted_queries[:n]
     
     def select_by_diversity(self, n: int = 10) -> List[Dict[str, Any]]:
-        """Select queries that are semantically diverse."""
         unselected = [q for q in self.query_pool if not q.get("selected", False)]
         
         if len(unselected) <= n:
@@ -98,28 +105,27 @@ class QuerySelector:
         selected_indices = []
         selected_indices.append(random.randint(0, len(unselected) - 1))
         
+        selected_embeddings = embeddings[[selected_indices[0]]]
+        
         while len(selected_indices) < n:
-            max_min_distance = -1
-            best_candidate = -1
+            unselected_mask = torch.ones(len(unselected), dtype=torch.bool, device=embeddings.device)
+            unselected_mask[selected_indices] = False
             
-            for i in range(len(unselected)):
-                if i in selected_indices:
-                    continue
-                
-                min_distance = float('inf')
-                for j in selected_indices:
-                    similarity = util.pytorch_cos_sim(embeddings[i], embeddings[j]).item()
-                    distance = 1 - similarity
-                    min_distance = min(min_distance, distance)
-                
-                if min_distance > max_min_distance:
-                    max_min_distance = min_distance
-                    best_candidate = i
-            
-            if best_candidate != -1:
-                selected_indices.append(best_candidate)
-            else:
+            if not unselected_mask.any():
                 break
+            
+            unselected_embs = embeddings[unselected_mask]
+            similarities = util.pytorch_cos_sim(unselected_embs, selected_embeddings)
+            
+            max_similarities_per_candidate, _ = similarities.max(dim=1)
+            
+            min_max_similarity, best_relative_idx = max_similarities_per_candidate.min(dim=0)
+            
+            unselected_indices = torch.where(unselected_mask)[0]
+            best_candidate = unselected_indices[best_relative_idx].item()
+            
+            selected_indices.append(best_candidate)
+            selected_embeddings = embeddings[selected_indices]
         
         return [unselected[i] for i in selected_indices]
     

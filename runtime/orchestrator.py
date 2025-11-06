@@ -91,6 +91,7 @@ class KaelumOrchestrator:
             logger.info("Active learning enabled: Intelligent query selection for fine-tuning")
         
         self._workers = {}
+        self._encoder = None
         
         # Store runtime parameters from command line
         self.parallel = parallel
@@ -147,10 +148,11 @@ class KaelumOrchestrator:
         logger.info(f"QUERY: {query}")
         logger.info("=" * 70)
         
-        # Step 1: Check cache FIRST (before routing/detectors)
-        from sentence_transformers import SentenceTransformer
-        encoder = SentenceTransformer(self.config.embedding_model)
-        query_embedding = encoder.encode(query)
+        if self._encoder is None:
+            from sentence_transformers import SentenceTransformer
+            self._encoder = SentenceTransformer(self.config.embedding_model)
+        
+        query_embedding = self._encoder.encode(query)
         
         cached_tree = self.tree_cache.get(query, query_embedding, similarity_threshold=0.85)
         if cached_tree and cached_tree.get("quality") == "high":
@@ -239,12 +241,39 @@ class KaelumOrchestrator:
             if ensemble_workers:
                 logger.info(f"ENSEMBLE: Running {len(ensemble_workers)} workers in parallel")
                 
+                from concurrent.futures import ThreadPoolExecutor, as_completed
                 results = []
-                for worker_type in ensemble_workers:
-                    logger.info(f"ENSEMBLE: Executing {worker_type.upper()} worker")
-                    worker_obj = self._get_worker(worker_type)
+                
+                with ThreadPoolExecutor(max_workers=len(ensemble_workers)) as executor:
+                    future_to_worker = {}
+                    for worker_type in ensemble_workers:
+                        logger.info(f"ENSEMBLE: Submitting {worker_type.upper()} worker")
+                        worker_obj = self._get_worker(worker_type)
+                        
+                        future = executor.submit(
+                            worker_obj.solve,
+                            query,
+                            None,
+                            False,
+                            max_depth,
+                            num_sims,
+                            self.parallel,
+                            self.max_workers
+                        )
+                        future_to_worker[future] = worker_type
                     
-                    worker_result = worker_obj.solve(
+                    for future in as_completed(future_to_worker):
+                        worker_type = future_to_worker[future]
+                        try:
+                            worker_result = future.result()
+                            results.append((worker_type, worker_result))
+                            logger.info(f"ENSEMBLE: {worker_type.upper()} completed (confidence={worker_result.confidence:.3f})")
+                        except Exception as e:
+                            logger.error(f"ENSEMBLE: {worker_type.upper()} failed: {e}")
+                
+                if not results:
+                    logger.error("ENSEMBLE: All workers failed, falling back to primary worker")
+                    worker_result = worker.solve(
                         query,
                         context=None,
                         use_cache=False,
@@ -253,7 +282,7 @@ class KaelumOrchestrator:
                         parallel=self.parallel,
                         max_workers=self.max_workers
                     )
-                    results.append((worker_type, worker_result))
+                    results = [(worker_specialty, worker_result)]
                 
                 results.sort(key=lambda x: x[1].confidence, reverse=True)
                 

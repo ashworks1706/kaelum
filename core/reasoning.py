@@ -17,6 +17,23 @@ class LLMClient:
         self.config = config
         self.base_url = config.base_url
         self.headers = self._get_headers()
+        self._client = None
+        self._client_timeout = 60.0
+    
+    def _get_client(self):
+        if self._client is None:
+            self._client = httpx.Client(
+                timeout=self._client_timeout,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        return self._client
+    
+    def __del__(self):
+        if self._client is not None:
+            try:
+                self._client.close()
+            except:
+                pass
 
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -90,29 +107,27 @@ class LLMClient:
                         user_preview = user_msg.content[:200].replace('\n', ' ')
                         logger.info(f"  User: {user_preview}...")
                 
-                with httpx.Client(timeout=60.0) as client:
-                    response = client.post(url, json=payload, headers=self.headers)
-                    response.raise_for_status()
-                    data = response.json()
-                    
-                    elapsed = time.time() - start_time
-                    
-                    if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
-                        raise RuntimeError("LLM returned empty response")
-                    
-                    content = data["choices"][0]["message"]["content"]
-                    
-                    # Log the response
-                    logger.info(f"\nLLM RESPONSE ({elapsed:.2f}s):")
-                    logger.info(f"  Length: {len(content)} chars")
-                    # Show first 500 chars of response
-                    preview = content[:500].replace('\n', '\n  ')
-                    logger.info(f"  Content:\n  {preview}")
-                    if len(content) > 500:
-                        logger.info(f"  ... ({len(content) - 500} more chars)")
-                    logger.info(f"{'─' * 80}\n")
-                    
-                    return content
+                client = self._get_client()
+                response = client.post(url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                data = response.json()
+                
+                elapsed = time.time() - start_time
+                
+                if not data.get("choices") or not data["choices"][0].get("message", {}).get("content"):
+                    raise RuntimeError("LLM returned empty response")
+                
+                content = data["choices"][0]["message"]["content"]
+                
+                logger.info(f"\nLLM RESPONSE ({elapsed:.2f}s):")
+                logger.info(f"  Length: {len(content)} chars")
+                preview = content[:500].replace('\n', '\n  ')
+                logger.info(f"  Content:\n  {preview}")
+                if len(content) > 500:
+                    logger.info(f"  ... ({len(content) - 500} more chars)")
+                logger.info(f"{'─' * 80}\n")
+                
+                return content
         
         except httpx.ConnectError as e:
             raise ConnectionError(
