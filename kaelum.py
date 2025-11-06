@@ -6,9 +6,10 @@ from runtime.orchestrator import KaelumOrchestrator
 from core.learning import CostTracker, TokenCounter, AnalyticsDashboard
 from core.search import Router, QueryType, ReasoningStrategy
 from core.learning import ActiveLearningEngine, QuerySelector
+from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
 
 _orchestrator: Optional[KaelumOrchestrator] = None
-_embedding_model: str = "all-MiniLM-L6-v2"  # Global embedding model
+_embedding_model: str = "all-MiniLM-L6-v2"
 
 
 def set_reasoning_model(
@@ -24,8 +25,8 @@ def set_reasoning_model(
     enable_routing: bool = True,
     enable_active_learning: bool = True,
     debug_verification: bool = False,
-    cache_dir: str = ".kaelum/cache",
-    router_data_dir: str = ".kaelum/routing",
+    cache_dir: str = DEFAULT_CACHE_DIR,
+    router_data_dir: str = DEFAULT_ROUTER_DIR,
     parallel: bool = False,
     max_workers: int = 4,
     max_tree_depth: Optional[int] = None,

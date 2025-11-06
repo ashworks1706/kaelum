@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 import time
+from core.paths import DEFAULT_ANALYTICS_DIR
 
 
 class TokenCounter:
@@ -29,7 +30,7 @@ class TokenCounter:
 
 class AnalyticsDashboard:
     
-    def __init__(self, storage_dir: str = ".kaelum/analytics"):
+    def __init__(self, storage_dir: str = DEFAULT_ANALYTICS_DIR):
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.metrics_file = self.storage_dir / "metrics.jsonl"

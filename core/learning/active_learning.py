@@ -6,6 +6,7 @@ import random
 import torch
 from sentence_transformers import SentenceTransformer, util
 from core.shared_encoder import get_shared_encoder
+from core.paths import DEFAULT_ACTIVE_LEARNING_DIR
 import numpy as np
 
 
@@ -19,7 +20,7 @@ class QuerySelector:
     4. Complexity sampling - Select queries with high reasoning complexity
     """
     
-    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', storage_dir: str = ".kaelum/active_learning"):
+    def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', storage_dir: str = DEFAULT_ACTIVE_LEARNING_DIR):
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         
@@ -224,7 +225,7 @@ class ActiveLearningEngine:
     
     def __init__(self, embedding_model: str = "all-MiniLM-L6-v2", query_selector: Optional[QuerySelector] = None):
         self.query_selector = query_selector or QuerySelector(embedding_model=embedding_model)
-        self.storage_dir = Path(".kaelum/active_learning")
+        self.storage_dir = Path(DEFAULT_ACTIVE_LEARNING_DIR)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.training_data_file = self.storage_dir / "training_data.jsonl"
     

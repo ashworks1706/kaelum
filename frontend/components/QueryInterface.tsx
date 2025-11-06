@@ -40,6 +40,13 @@ interface QueryResult {
 }
 
 export function QueryInterface() {
+  // Determine backend base URL:
+  // - Use NEXT_PUBLIC_API_BASE when provided (build-time env)
+  // - In the browser, prefer localhost:5000 for local dev, otherwise use same-origin
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' ? `${window.location.protocol}//localhost:5000` : window.location.origin)
+    : 'http://localhost:5000')
+
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<QueryResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -48,11 +55,71 @@ export function QueryInterface() {
   const [streamingSteps, setStreamingSteps] = useState<string[]>([])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
+  const logOffsetRef = useRef<number>(0)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const addLog = (level: 'info' | 'error' | 'success', message: string) => {
     const timestamp = new Date().toLocaleTimeString()
     setLogs(prev => [...prev, { timestamp, level, message }])
   }
+
+  // Poll logs from file only while loading (processing query)
+  useEffect(() => {
+    // Only poll if loading
+    if (!loading) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+      return
+    }
+
+    const pollLogs = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/logs?offset=${logOffsetRef.current}&limit=100`)
+        
+        if (!response.ok) {
+          console.error('Failed to fetch logs')
+          return
+        }
+
+        const data = await response.json()
+        
+        if (data.logs && data.logs.length > 0) {
+          // Update offset for next poll
+          logOffsetRef.current += data.logs.length
+
+          // Process new log entries
+          for (const logData of data.logs) {
+            if (logData.message) {
+              const logLevel = logData.level?.toLowerCase()
+              const level = logLevel === 'error' ? 'error' : 
+                           logLevel === 'warning' ? 'error' : 
+                           logLevel === 'success' ? 'success' : 'info'
+              
+              const loggerName = logData.logger ? `[${logData.logger}] ` : ''
+              const timestamp = logData.timestamp ? new Date(logData.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()
+              setLogs(prev => [...prev, { timestamp, level, message: `${loggerName}${logData.message}` }])
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Log polling error:', error)
+      }
+    }
+
+    // Start polling every 200ms
+    pollIntervalRef.current = setInterval(pollLogs, 200)
+    pollLogs() // Initial poll
+
+    // Cleanup on unmount or when loading changes
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [API_BASE, loading])
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -76,13 +143,14 @@ export function QueryInterface() {
     setStreamingStatus('')
     setStreamingSteps([])
     setLogs([]) // Clear previous logs
+    logOffsetRef.current = 0 // Reset log offset for new query
 
     addLog('info', `Starting query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`)
 
     try {
-      addLog('info', 'Connecting to backend at http://localhost:5000/api/query')
-      
-      const response = await fetch('http://localhost:5000/api/query', {
+      addLog('info', `Connecting to backend at ${API_BASE}/api/query`)
+
+      const response = await fetch(`${API_BASE}/api/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, stream: true })
@@ -133,16 +201,6 @@ export function QueryInterface() {
               const eventData: StreamEvent = JSON.parse(line.slice(6))
 
               switch (eventData.type) {
-                case 'log':
-                  // Handle real-time logs from backend
-                  if (eventData.message) {
-                    const logLevel = eventData.level?.toLowerCase()
-                    const level = logLevel === 'info' ? 'info' : logLevel === 'error' ? 'error' : 'success'
-                    const loggerName = eventData.logger ? `[${eventData.logger}]` : ''
-                    addLog(level, `${loggerName} ${eventData.message}`)
-                  }
-                  break
-
                 case 'status':
                   setStreamingStatus(eventData.message || '')
                   addLog('info', `Status: ${eventData.message}`)

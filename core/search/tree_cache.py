@@ -10,6 +10,7 @@ from sentence_transformers import SentenceTransformer
 from .lats import LATS, LATSNode
 from core.cache_validator import CacheValidator
 from core.shared_encoder import get_shared_encoder
+from core.paths import DEFAULT_TREE_CACHE_DIR
 
 try:
     import faiss
@@ -61,7 +62,7 @@ class CachedTree:
 
 
 class TreeCache:
-    def __init__(self, cache_dir: str = ".kaelum/tree_cache", similarity_threshold: float = 0.85, 
+    def __init__(self, cache_dir: str = DEFAULT_TREE_CACHE_DIR, similarity_threshold: float = 0.85, 
                  embedding_model: str = "all-MiniLM-L6-v2", llm_client=None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -71,6 +72,11 @@ class TreeCache:
         
         self.metadata_path = self.cache_dir / "metadata.json"
         self.similarity_threshold = similarity_threshold
+        
+        # Cache size and FAISS settings
+        self.max_cache_size = 1000  # Maximum number of cached trees
+        self.use_faiss = False  # Will be enabled automatically when cache grows
+        self.faiss_index = None
         
         # Use shared encoder to avoid loading model multiple times
         self.encoder = get_shared_encoder(embedding_model, device='cpu')
@@ -176,7 +182,7 @@ class TreeCache:
         for tree in self.cached_trees:
             quality_score = tree.confidence if tree.success else tree.confidence * 0.3
             
-            recency_score = self.access_times.get(tree.tree_id, tree.timestamp)
+            recency_score = self.access_times.get(tree.tree_id, tree.created_at)
             age = time.time() - recency_score
             recency_score = 1.0 / (1.0 + age / 86400.0)
             

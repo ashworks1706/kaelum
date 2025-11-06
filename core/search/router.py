@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 from sentence_transformers import SentenceTransformer
 from core.shared_encoder import get_shared_encoder
+from core.paths import DEFAULT_ROUTER_DIR
 
 from ..detectors import DomainClassifier
 
@@ -157,7 +158,7 @@ class PolicyNetwork(nn.Module):
 
 
 class Router:
-    def __init__(self, learning_enabled: bool = True, data_dir: str = ".kaelum/routing",
+    def __init__(self, learning_enabled: bool = True, data_dir: str = DEFAULT_ROUTER_DIR,
                  model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2",
                  buffer_size: int = 32, learning_rate: float = 0.001, exploration_rate: float = 0.1):
         self.learning_enabled = learning_enabled

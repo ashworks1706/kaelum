@@ -37,11 +37,8 @@ class LLMClient:
 
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
-        
-        # Add API key if provided (required for vLLM and other OpenAI-compatible servers)
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
-        
         return headers
 
     def generate(self, messages: List[Message], stream: bool = False):
@@ -67,13 +64,12 @@ class LLMClient:
         
         try:
             if stream:
-                # Return generator for streaming
                 def stream_generator():
                     with httpx.stream("POST", url, json=payload, headers=self.headers, timeout=60.0) as response:
                         response.raise_for_status()
                         for line in response.iter_lines():
                             if line.startswith("data: "):
-                                data_str = line[6:]  # Remove "data: " prefix
+                                data_str = line[6:]
                                 if data_str.strip() == "[DONE]":
                                     break
                                 try:
@@ -87,21 +83,17 @@ class LLMClient:
                                     continue
                 return stream_generator()
             else:
-                # Return complete response
                 import time
                 start_time = time.time()
                 
-                # Log the request
                 logger.info(f"\n{'─' * 80}")
                 logger.info(f"LLM REQUEST:")
                 logger.info(f"  Model: {self.config.model}")
                 logger.info(f"  Messages: {len(messages)} message(s)")
                 if len(messages) > 0:
-                    # Log system prompt if present
                     if messages[0].role == "system":
                         system_preview = messages[0].content[:100].replace('\n', ' ')
                         logger.info(f"  System: {system_preview}...")
-                    # Log user message
                     user_msg = next((m for m in messages if m.role == "user"), None)
                     if user_msg:
                         user_preview = user_msg.content[:200].replace('\n', ' ')
@@ -161,20 +153,11 @@ class ReasoningGenerator:
 
     def __init__(self, llm_client: LLMClient, system_prompt=None, user_template=None):
         self.llm = llm_client
-        self.system_prompt = system_prompt or """You are a reasoning assistant. Break down problems into clear, logical steps.
-Present your reasoning as a numbered list."""
+        self.system_prompt = system_prompt or "You are a reasoning assistant. Break down problems into clear, logical steps. Present your reasoning as a numbered list."
         self.user_template = user_template or "{query}"
 
     def generate_reasoning(self, query: str, stream: bool = False):
-        """Generate a reasoning trace for a query.
-        
-        Args:
-            query: User query
-            stream: If True, yields chunks as they're generated
-        """
-        # Format the user message using template
         user_message = self.user_template.format(query=query)
-
         messages = [
             Message(role="system", content=self.system_prompt),
             Message(role="user", content=user_message),
@@ -183,7 +166,6 @@ Present your reasoning as a numbered list."""
         response = self.llm.generate(messages, stream=stream)
 
         if stream:
-            # Stream chunks directly
             return response
         else:
             trace = self._parse_structured_list(response)
@@ -191,18 +173,10 @@ Present your reasoning as a numbered list."""
 
     def generate_answer(self, query: str, reasoning_trace: List[str], stream: bool = False):
         trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(reasoning_trace))
-
         messages = [
-            Message(
-                role="system",
-                content="You are a reasoning assistant. Provide a clear, concise final answer.",
-            ),
-            Message(
-                role="user",
-                content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nFinal answer:",
-            ),
+            Message(role="system", content="You are a reasoning assistant. Provide a clear, concise final answer."),
+            Message(role="user", content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nFinal answer:"),
         ]
-
         return self.llm.generate(messages, stream=stream)
     
     def _parse_structured_list(self, text: str) -> List[str]:

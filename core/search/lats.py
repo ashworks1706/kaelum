@@ -20,7 +20,7 @@ class LATSNode:
     pruned: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        """Iterative serialization to avoid stack overflow on deep trees."""
+        """Iterative serialization to avoid stack overflow."""
         result = {
             'id': self.id,
             'state': self.state,
@@ -30,7 +30,6 @@ class LATSNode:
             'children': []
         }
         
-        # Use stack to traverse tree iteratively
         stack = [(self, result['children'])]
         
         while stack:
@@ -47,7 +46,6 @@ class LATSNode:
                 }
                 parent_children_list.append(child_dict)
                 
-                # Add child to stack for processing its children
                 if child.children:
                     stack.append((child, child_dict['children']))
         
@@ -55,7 +53,7 @@ class LATSNode:
 
     @staticmethod
     def from_dict(d: Dict[str, Any], parent: Optional['LATSNode'] = None) -> 'LATSNode':
-        """Iterative deserialization to avoid stack overflow on deep trees."""
+        """Iterative deserialization to avoid stack overflow."""
         root = LATSNode(
             id=d['id'],
             state=d.get('state', {}),
@@ -65,7 +63,6 @@ class LATSNode:
             pruned=d.get('pruned', False)
         )
         
-        # Use queue for breadth-first reconstruction
         queue = [(root, d)]
         
         while queue:
@@ -143,10 +140,7 @@ class LATS:
     def simulate(self, node: LATSNode, simulator: Optional[callable] = None) -> float:
         sim = simulator or self.simulator
         if sim is None:
-            raise NotImplementedError(
-                "LATS.simulate requires a simulator callable. "
-                "Provide it as LATS(simulator=...) or pass it to simulate(node, simulator=...)."
-            )
+            raise NotImplementedError("LATS.simulate requires a simulator callable.")
         
         is_terminal = len(node.children) == 0 and node.state.get("answer")
         
@@ -192,8 +186,7 @@ class LATS:
             node = self.root
         if not node.children:
             return None
-        best = max(node.children, key=lambda c: (c.value / max(1, c.visits)))
-        return best
+        return max(node.children, key=lambda c: (c.value / max(1, c.visits)))
     
     def get_avg_reward(self) -> float:
         if not self.nodes:

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 import logging
+from core.paths import DEFAULT_CALIBRATION_DIR
 
 logger = logging.getLogger("kaelum.threshold_calibrator")
 
@@ -19,7 +20,7 @@ class ThresholdDecision:
 
 
 class ThresholdCalibrator:
-    def __init__(self, data_dir: str = ".kaelum/calibration"):
+    def __init__(self, data_dir: str = DEFAULT_CALIBRATION_DIR):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.decisions_file = self.data_dir / "decisions.jsonl"

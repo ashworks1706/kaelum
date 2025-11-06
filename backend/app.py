@@ -1,17 +1,12 @@
-"""
-Flask API for Kaelum AI Reasoning System
+"""Flask API for Kaelum AI Reasoning System."""
 
-This API exposes endpoints for:
-- Interactive reasoning queries
-- Real-time metrics and analytics
-- System configuration
-- Research data exports
-"""
+print(">>> app.py starting - before imports", flush=True)
 
-# Force CPU-only mode to avoid GPU memory conflicts with vLLM
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable CUDA for this process
-os.environ['OMP_NUM_THREADS'] = '4'  # Limit CPU threads for efficiency
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['OMP_NUM_THREADS'] = '4'
+
+print(">>> environment vars set", flush=True)
 
 from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
@@ -19,236 +14,97 @@ import sys
 import json
 import time
 import logging
-import io
-from typing import Dict, Any
+from pathlib import Path
 
-# Add parent directory to path to import kaelum
+print(">>> base imports done", flush=True)
+
+print(">>> base imports done", flush=True)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Force PyTorch to CPU if imported
+print(">>> path setup done", flush=True)
+
 try:
     import torch
+    print(">>> torch imported", flush=True)
     torch.set_default_device('cpu')
     if torch.cuda.is_available():
-        torch.cuda.is_available = lambda: False  # Override CUDA detection
+        torch.cuda.is_available = lambda: False
+    print(">>> torch configured", flush=True)
 except ImportError:
-    pass  # PyTorch not installed, skip
+    print(">>> torch not available", flush=True)
+    pass
 
+print(">>> importing kaelum", flush=True)
 import kaelum
-from core.config import KaelumConfig
+print(">>> kaelum imported", flush=True)
+from backend.config import DEFAULT_CONFIG, WORKER_INFO
+print(">>> backend.config imported", flush=True)
+from backend.logging_config import setup_backend_logging, LOG_FILE
+print(">>> logging_config imported", flush=True)
+from backend.metrics_utils import compute_worker_metrics, compute_verification_metrics, compute_reflection_metrics
 
-
-# Custom logging handler to capture logs for streaming to frontend
-class LogCaptureHandler(logging.Handler):
-    """Custom handler to capture log messages for streaming."""
-    def __init__(self):
-        super().__init__()
-        self.logs = []
-        self.max_logs = 1000  # Keep last 1000 logs
-    
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            self.logs.append({
-                'timestamp': record.created,
-                'level': record.levelname,
-                'logger': record.name,
-                'message': msg
-            })
-            # Trim to max size
-            if len(self.logs) > self.max_logs:
-                self.logs = self.logs[-self.max_logs:]
-        except Exception:
-            self.handleError(record)
-    
-    def get_logs(self, since=None):
-        """Get logs since a given timestamp."""
-        if since is None:
-            return self.logs
-        return [log for log in self.logs if log['timestamp'] > since]
-    
-    def clear_logs(self):
-        """Clear all captured logs."""
-        self.logs = []
-
-
-# Global log capture handler
-log_capture = LogCaptureHandler()
-
-
-def setup_backend_logging():
-    """Configure logging for backend API with log capture."""
-    # Configure root logger
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(message)s',
-        force=True
-    )
-    
-    # Silence noisy third-party libraries
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
-    logging.getLogger("transformers").setLevel(logging.WARNING)
-    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
-    logging.getLogger("filelock").setLevel(logging.WARNING)
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)  # Flask logs
-    
-    # Set levels for Kaelum loggers - show important events
-    logging.getLogger("kaelum.orchestrator").setLevel(logging.INFO)
-    logging.getLogger("kaelum.router").setLevel(logging.INFO)
-    logging.getLogger("kaelum.lats").setLevel(logging.INFO)
-    logging.getLogger("kaelum.llm").setLevel(logging.INFO)
-    logging.getLogger("kaelum.worker").setLevel(logging.INFO)
-    logging.getLogger("kaelum.verification").setLevel(logging.INFO)
-    logging.getLogger("kaelum.reflection").setLevel(logging.INFO)
-    logging.getLogger("kaelum.cache").setLevel(logging.INFO)
-    logging.getLogger("kaelum.cache_validator").setLevel(logging.INFO)
-    logging.getLogger("kaelum.reward").setLevel(logging.WARNING)
-    
-    # Add our custom handler to capture logs
-    log_capture.setFormatter(logging.Formatter('%(message)s'))
-    logging.getLogger().addHandler(log_capture)
-    
-    # Also add console handler for backend console output
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    console.setFormatter(logging.Formatter('[%(levelname)s] %(name)s: %(message)s'))
-    logging.getLogger().addHandler(console)
-
-
-# Setup logging on import
+print(">>> all imports done", flush=True)
 setup_backend_logging()
+print(">>> logging setup complete", flush=True)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for Next.js frontend
+print(">>> Flask app created", flush=True)
+CORS(app)
+print(">>> CORS configured", flush=True)
 
-# Store configuration state
-current_config = {
-    "base_url": "http://localhost:8000/v1",
-    "model": "Qwen/Qwen2.5-1.5B-Instruct",
-    "api_key": "EMPTY",
-    "temperature": 0.7,
-    "max_tokens": 512,  # Reduced from 2048 to 512 to fit within 2048 total context
-    "embedding_model": "all-MiniLM-L6-v2",
-    "use_symbolic_verification": True,
-    "use_factual_verification": False,
-    "max_reflection_iterations": 2,
-    "enable_routing": True,
-    "parallel": False,
-    "max_workers": 4,
-    "router_learning_rate": 0.001,
-    "router_buffer_size": 32,
-    "router_exploration_rate": 0.1,
-    "cache_dir": ".kaelum/cache",
-    "router_data_dir": ".kaelum/routing",
-    "enable_active_learning": True,  # Enable analytics collection
-}
+current_config = DEFAULT_CONFIG.copy()
 
 
-# Initialize kaelum with proper configuration on startup
 def initialize_kaelum():
     """Initialize Kaelum system with full configuration."""
-    print("=" * 80)
-    print("Initializing Kaelum AI Backend")
-    print("=" * 80)
-    print(f"LLM: {current_config['model']} @ {current_config['base_url']}")
-    print(f"Cache Dir: {current_config['cache_dir']}")
-    print(f"Router Dir: {current_config['router_data_dir']}")
-    print(f"Active Learning: {current_config['enable_active_learning']}")
-    print("=" * 80)
+    logger = logging.getLogger(__name__)
+    logger.info("========================================")
+    logger.info("Initializing Kaelum AI Backend")
+    logger.info(f"LLM: {current_config['model']} @ {current_config['base_url']}")
+    logger.info(f"Cache Dir: {current_config['cache_dir']}")
+    logger.info(f"Router Dir: {current_config['router_data_dir']}")
+    logger.info(f"Active Learning: {current_config['enable_active_learning']}")
+    logger.info("========================================")
+    logger.info("Loading embedding model (this may take 10-30 seconds on first run)...")
+
+    kaelum.set_reasoning_model(**current_config)
     
-    kaelum.set_reasoning_model(
-        base_url=current_config["base_url"],
-        model=current_config["model"],
-        api_key=current_config.get("api_key"),
-        temperature=current_config["temperature"],
-        max_tokens=current_config["max_tokens"],
-        embedding_model=current_config["embedding_model"],
-        use_symbolic_verification=current_config["use_symbolic_verification"],
-        use_factual_verification=current_config["use_factual_verification"],
-        max_reflection_iterations=current_config["max_reflection_iterations"],
-        enable_routing=current_config["enable_routing"],
-        parallel=current_config["parallel"],
-        max_workers=current_config["max_workers"],
-        router_learning_rate=current_config.get("router_learning_rate", 0.001),
-        router_buffer_size=current_config.get("router_buffer_size", 32),
-        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
-        cache_dir=current_config.get("cache_dir", ".kaelum/cache"),
-        router_data_dir=current_config.get("router_data_dir", ".kaelum/routing"),
-        enable_active_learning=current_config.get("enable_active_learning", True),
-    )
+    logger.info("✓ Kaelum system initialized successfully")
 
 
-# Initialize on module load
-initialize_kaelum()
+# Lazy initialization - only initialize on first query, not on import
+_initialized = False
+
+def ensure_initialized():
+    """Ensure Kaelum is initialized before processing requests."""
+    global _initialized
+    if not _initialized:
+        initialize_kaelum()
+        _initialized = True
 
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint."""
-    return jsonify({
-        "status": "healthy",
-        "version": kaelum.__version__,
-        "timestamp": time.time()
-    })
+    return jsonify({"status": "healthy", "version": kaelum.__version__, "timestamp": time.time()})
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def config():
-    """Get or update system configuration."""
     global current_config
     
     if request.method == 'GET':
         return jsonify(current_config)
     
-    # POST: Update configuration
-    data = request.json
-    current_config.update(data)
-    
-    # Reinitialize orchestrator with new config
-    kaelum.set_reasoning_model(
-        base_url=current_config["base_url"],
-        model=current_config["model"],
-        api_key=current_config.get("api_key"),
-        temperature=current_config["temperature"],
-        max_tokens=current_config["max_tokens"],
-        embedding_model=current_config["embedding_model"],
-        use_symbolic_verification=current_config["use_symbolic_verification"],
-        use_factual_verification=current_config["use_factual_verification"],
-        max_reflection_iterations=current_config["max_reflection_iterations"],
-        enable_routing=current_config["enable_routing"],
-        parallel=current_config["parallel"],
-        max_workers=current_config["max_workers"],
-        router_learning_rate=current_config.get("router_learning_rate", 0.001),
-        router_buffer_size=current_config.get("router_buffer_size", 32),
-        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
-    )
-    
-    return jsonify({
-        "status": "updated",
-        "config": current_config
-    })
+    current_config.update(request.json)
+    ensure_initialized()  # Initialize if needed before applying config
+    kaelum.set_reasoning_model(**current_config)
+    return jsonify({"status": "updated", "config": current_config})
 
 
 @app.route('/api/query', methods=['POST'])
 def query():
-    """Process a reasoning query.
-    
-    Request body:
-    {
-        "query": "What is the derivative of x²?",
-        "stream": true
-    }
-    
-    Streaming Response (SSE):
-    data: {"type": "status", "message": "Starting analysis..."}
-    data: {"type": "router", "worker": "math", "confidence": 0.95}
-    data: {"type": "progress", "message": "LATS search: 3/10 simulations"}
-    data: {"type": "answer", "content": "The derivative is 2x"}
-    data: {"type": "done", "metadata": {...}}
-    """
+    ensure_initialized()  # Lazy initialization on first query
     data = request.json
     query_text = data.get('query', '')
     use_stream = data.get('stream', False)
@@ -256,90 +112,31 @@ def query():
     if not query_text:
         return jsonify({"error": "Query text is required"}), 400
     
+    # Clear log file at start of query
+    if LOG_FILE.exists():
+        with open(LOG_FILE, 'w') as f:
+            f.write('')
+    
     if use_stream:
         def generate():
-            import json
-            import traceback
-            
             try:
-                print(f"[STREAM] Starting query: {query_text[:50]}...")
-                
-                # Clear previous logs and capture timestamp
-                log_capture.clear_logs()
-                log_start_time = time.time()
-                last_log_index = 0
-                
-                # Send initial status
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Processing query...'})}\n\n"
                 
-                # Helper to send new logs
-                def send_new_logs():
-                    nonlocal last_log_index
-                    logs = log_capture.get_logs(since=log_start_time)
-                    if len(logs) > last_log_index:
-                        for log in logs[last_log_index:]:
-                            log_event = {
-                                'type': 'log',
-                                'level': log['level'],
-                                'logger': log['logger'].replace('kaelum.', ''),  # Shorten logger names
-                                'message': log['message'],
-                                'timestamp': log['timestamp']
-                            }
-                            yield f"data: {json.dumps(log_event)}\n\n"
-                        last_log_index = len(logs)
-                
-                # Send logs before processing
-                for event in send_new_logs():
-                    yield event
-                
-                print("[STREAM] Calling kaelum.kaelum_enhance_reasoning...")
                 start_time = time.time()
-                
-                # Call kaelum (this generates logs synchronously)
                 result = kaelum.kaelum_enhance_reasoning(query_text)
                 execution_time = time.time() - start_time
                 
-                # Send all logs that were generated during processing
-                for event in send_new_logs():
-                    yield event
-                
-                print(f"[STREAM] Got result in {execution_time:.2f}s: worker={result.get('worker_used')}")
-                
-                # Send router decision
                 yield f"data: {json.dumps({'type': 'router', 'worker': result.get('worker_used', 'unknown'), 'confidence': result.get('confidence', 0.0)})}\n\n"
                 
-                # Send reasoning steps
-                reasoning_steps = result.get("reasoning_steps", [])
-                print(f"[STREAM] Sending {len(reasoning_steps)} reasoning steps")
-                for i, step in enumerate(reasoning_steps):
+                for i, step in enumerate(result.get("reasoning_steps", [])):
                     yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
                 
-                # Send answer
-                answer = result.get('suggested_approach', '')
-                print(f"[STREAM] Sending answer: {answer[:50]}...")
-                yield f"data: {json.dumps({'type': 'answer', 'content': answer})}\n\n"
-                
-                # Send verification status
-                verification_passed = result.get('verification_passed', False)
-                print(f"[STREAM] Verification: {verification_passed}")
-                yield f"data: {json.dumps({'type': 'verification', 'passed': verification_passed})}\n\n"
-                
-                # Send completion metadata
-                print("[STREAM] Sending completion metadata")
-                yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': result.get('cache_hit', False), 'iterations': result.get('iterations', 1), 'metadata': {'reasoning_count': result.get('reasoning_count', 0), 'domain': result.get('domain', 'general')}})}\n\n"
-                
-                # Send any final logs
-                for event in send_new_logs():
-                    yield event
-                
-                print("[STREAM] Stream completed successfully")
+                yield f"data: {json.dumps({'type': 'answer', 'content': result.get('suggested_approach', '')})}\n\n"
+                yield f"data: {json.dumps({'type': 'verification', 'passed': result.get('verification_passed', False)})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': result.get('cache_hit', False), 'iterations': result.get('iterations', 1)})}\n\n"
             
             except Exception as e:
-                error_msg = str(e)
-                error_trace = traceback.format_exc()
-                print(f"[STREAM ERROR] {error_msg}")
-                print(f"[STREAM ERROR TRACE]\n{error_trace}")
-                yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         
         response = Response(stream_with_context(generate()), mimetype='text/event-stream')
         response.headers['Cache-Control'] = 'no-cache'
@@ -359,95 +156,67 @@ def query():
             "verification_passed": result.get("verification_passed", False),
             "iterations": result.get("iterations", 1),
             "cache_hit": result.get("cache_hit", False),
-            "execution_time": execution_time,
-            "metadata": {
-                "reasoning_count": result.get("reasoning_count", 0),
-                "domain": result.get("domain", "general")
-            }
+            "execution_time": execution_time
         })
     
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+        return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
-    """Get captured logs from backend.
-    
-    Query params:
-    - since: Unix timestamp to get logs since (optional)
-    - limit: Max number of logs to return (default: 100)
-    """
-    since = request.args.get('since', type=float)
+    """Get logs from file with optional offset for polling."""
     limit = request.args.get('limit', type=int, default=100)
+    offset = request.args.get('offset', type=int, default=0)
+    logs = []
+    total_lines = 0
     
-    logs = log_capture.get_logs(since=since)
-    
-    # Apply limit
-    if len(logs) > limit:
-        logs = logs[-limit:]
+    if LOG_FILE.exists():
+        with open(LOG_FILE, 'r') as f:
+            all_lines = f.readlines()
+            total_lines = len(all_lines)
+            # Apply offset and limit
+            selected_lines = all_lines[offset:offset + limit] if offset > 0 else all_lines[-limit:]
+            
+            for line in selected_lines:
+                line = line.strip()
+                if line:
+                    # Simple text logs, create a basic structure for frontend
+                    logs.append({
+                        'timestamp': '',
+                        'level': 'info',
+                        'logger': '',
+                        'message': line
+                    })
     
     return jsonify({
-        "logs": logs,
-        "count": len(logs),
+        "logs": logs, 
+        "count": len(logs), 
+        "total": total_lines,
         "timestamp": time.time()
     })
 
 
 @app.route('/api/metrics', methods=['GET'])
 def metrics():
-    """Get comprehensive system metrics.
-    
-    Returns:
-    {
-        "router": {
-            "total_queries": 42,
-            "training_samples": 32,
-            "model_trained": true,
-            "accuracy": 0.87
-        },
-        "cache": {
-            "total_trees": 15,
-            "hit_rate": 0.23,
-            "avg_similarity": 0.91
-        },
-        "verification": {
-            "pass_rate": 0.85,
-            "by_worker": {...}
-        },
-        "lats": {
-            "avg_depth": 5.2,
-            "avg_simulations": 10,
-            "pruning_rate": 0.34
-        }
-    }
-    """
+    ensure_initialized()  # Lazy initialization
     try:
         metrics_data = kaelum.get_metrics()
-        
-        # Parse analytics if available
         analytics = metrics_data.get('analytics', {})
         
-        # Build comprehensive metrics response
-        response = {
+        return jsonify({
             "total_queries": analytics.get('total_queries', 0),
             "total_successes": analytics.get('verified_queries', 0),
             "total_failures": analytics.get('total_queries', 0) - analytics.get('verified_queries', 0),
             "avg_execution_time": analytics.get('avg_time_ms', 0) / 1000.0,
             "avg_nodes_explored": analytics.get('avg_simulations', 0),
-            "avg_iterations": 1.0,  # Default, can be computed from data
+            "avg_iterations": 1.0,
             "cache_hit_rate": analytics.get('cache_hit_rate', 0.0),
-            "worker_metrics": _compute_worker_metrics(analytics),
-            "verification_metrics": _compute_verification_metrics(analytics),
-            "reflection_metrics": _compute_reflection_metrics(analytics)
-        }
-        
-        return jsonify(response)
-    except Exception as e:
-        # Return empty metrics if orchestrator not ready
+            "worker_metrics": compute_worker_metrics(analytics),
+            "verification_metrics": compute_verification_metrics(analytics),
+            "reflection_metrics": compute_reflection_metrics(analytics)
+        })
+    except Exception:
         return jsonify({
             "total_queries": 0,
             "total_successes": 0,
@@ -457,73 +226,24 @@ def metrics():
             "avg_iterations": 0.0,
             "cache_hit_rate": 0.0,
             "worker_metrics": {},
-            "verification_metrics": {
-                "total_verified": 0,
-                "passed": 0,
-                "failed": 0,
-                "pass_rate": 0.0
-            },
-            "reflection_metrics": {
-                "total_reflections": 0,
-                "avg_iterations": 0.0,
-                "improvement_rate": 0.0
-            }
+            "verification_metrics": {"total_verified": 0, "passed": 0, "failed": 0, "pass_rate": 0.0},
+            "reflection_metrics": {"total_reflections": 0, "avg_iterations": 0.0, "improvement_rate": 0.0}
         })
-
-
-def _compute_worker_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute per-worker metrics from analytics."""
-    worker_metrics = {}
-    by_worker = analytics.get('by_worker', {})
-    
-    for worker, count in by_worker.items():
-        worker_metrics[worker] = {
-            "queries": count,
-            "success_rate": 0.85,  # Estimate
-            "avg_reward": 0.75,  # Estimate
-            "avg_time": analytics.get('avg_time_ms', 0) / 1000.0
-        }
-    
-    return worker_metrics
-
-
-def _compute_verification_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute verification metrics."""
-    total_queries = analytics.get('total_queries', 0)
-    verified = analytics.get('verified_queries', 0)
-    
-    return {
-        "total_verified": total_queries,
-        "passed": verified,
-        "failed": total_queries - verified,
-        "pass_rate": verified / total_queries if total_queries > 0 else 0.0
-    }
-
-
-def _compute_reflection_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute reflection/self-correction metrics."""
-    return {
-        "total_reflections": 0,  # Would need to track this
-        "avg_iterations": 1.2,  # Estimate
-        "improvement_rate": 0.4  # Estimate: ~40% improvement
-    }
 
 
 @app.route('/api/stats/router', methods=['GET'])
 def router_stats():
-    """Get neural router statistics and training data."""
     try:
-        # Read router training data
-        router_file = ".kaelum/routing/training_data.json"
-        if os.path.exists(router_file):
+        # Use absolute path to root .kaelum folder
+        project_root = Path(__file__).parent.parent
+        router_file = project_root / ".kaelum" / "routing" / "training_data.json"
+        training_data = []
+        if router_file.exists():
             with open(router_file, 'r') as f:
                 training_data = json.load(f)
-        else:
-            training_data = []
         
-        # Check if model exists and read metadata
-        model_file = ".kaelum/routing/model.pt"
-        model_trained = os.path.exists(model_file)
+        model_file = project_root / ".kaelum" / "routing" / "model.pt"
+        model_trained = model_file.exists()
         training_steps = 0
         exploration_rate = current_config.get("router_exploration_rate", 0.1)
         
@@ -536,19 +256,15 @@ def router_stats():
             except:
                 pass
         
-        # Compute stats
         total_queries = len(training_data)
         workers_used = {}
-        success_rate = 0.0
         
-        if training_data:
-            for entry in training_data:
-                worker = entry.get('worker', 'unknown')
-                workers_used[worker] = workers_used.get(worker, 0) + 1
-            
-            success_count = sum(1 for e in training_data if e.get('success', False))
-            success_rate = success_count / total_queries if total_queries > 0 else 0.0
+        for entry in training_data:
+            worker = entry.get('worker', 'unknown')
+            workers_used[worker] = workers_used.get(worker, 0) + 1
         
+        success_count = sum(1 for e in training_data if e.get('success', False))
+        success_rate = success_count / total_queries if total_queries > 0 else 0.0
         buffer_size = current_config.get("router_buffer_size", 32)
         
         return jsonify({
@@ -556,10 +272,9 @@ def router_stats():
             "model_trained": model_trained,
             "training_steps": training_steps,
             "training_buffer_size": total_queries % buffer_size,
-            "next_training_at": buffer_size - (total_queries % buffer_size) if not model_trained else "continuous",
             "success_rate": success_rate,
             "workers_distribution": workers_used,
-            "recent_queries": training_data[-5:] if training_data else [],
+            "recent_queries": training_data[-5:],
             "online_learning": {
                 "enabled": True,
                 "learning_rate": current_config.get("router_learning_rate", 0.001),
@@ -568,29 +283,25 @@ def router_stats():
                 "training_steps": training_steps
             }
         })
-    
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/stats/cache', methods=['GET'])
 def cache_stats():
-    """Get cache statistics and validation data."""
     try:
-        # Read cache metadata
-        cache_file = ".kaelum/cache/metadata.json"
-        validation_log = ".kaelum/cache_validation/validation_log.jsonl"
+        # Use absolute path to root .kaelum folder
+        project_root = Path(__file__).parent.parent
+        cache_file = project_root / ".kaelum" / "cache" / "metadata.json"
+        validation_log = project_root / ".kaelum" / "cache_validation" / "validation_log.jsonl"
         
         cache_data = []
-        if os.path.exists(cache_file):
+        if cache_file.exists():
             with open(cache_file, 'r') as f:
                 cache_data = json.load(f)
         
         validation_entries = []
-        if os.path.exists(validation_log):
+        if validation_log.exists():
             with open(validation_log, 'r') as f:
                 for line in f:
                     try:
@@ -598,66 +309,47 @@ def cache_stats():
                     except:
                         pass
         
-        # Compute stats
-        total_cached = len(cache_data)
         by_worker = {}
         for entry in cache_data:
             worker = entry.get('worker_specialty', 'unknown')
             by_worker[worker] = by_worker.get(worker, 0) + 1
         
-        # Validation stats
         total_validations = len(validation_entries)
         accepted = sum(1 for v in validation_entries if v.get('validation_result', {}).get('valid', False))
-        rejected = total_validations - accepted
         
-        # Cache files info
-        cache_files = []
-        for entry in cache_data[:20]:  # Latest 20
-            cache_files.append({
-                'query': entry.get('query', '')[:100],
-                'worker': entry.get('worker_specialty', 'unknown'),
-                'nodes': entry.get('num_nodes', 0),
-                'cache_id': entry.get('cache_id', '')
-            })
+        cache_files = [{'query': e.get('query', '')[:100], 'worker': e.get('worker_specialty', 'unknown'), 
+                       'nodes': e.get('num_nodes', 0), 'cache_id': e.get('cache_id', '')} 
+                       for e in cache_data[:20]]
         
         return jsonify({
-            "total_cached": total_cached,
+            "total_cached": len(cache_data),
             "by_worker": by_worker,
-            "validation": {
-                "total": total_validations,
-                "accepted": accepted,
-                "rejected": rejected,
-                "rejection_rate": rejected / total_validations if total_validations > 0 else 0.0
-            },
             "acceptance_rate": accepted / total_validations if total_validations > 0 else 0.0,
             "validations_accepted": accepted,
-            "validations_rejected": rejected,
+            "validations_rejected": total_validations - accepted,
             "total_validations": total_validations,
             "recent_validations": validation_entries[-5:],
             "cache_files": cache_files
         })
-    
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/stats/calibration', methods=['GET'])
 def calibration_stats():
-    """Get threshold calibration statistics."""
     try:
-        calibration_file = ".kaelum/calibration/optimal_thresholds.json"
-        decisions_file = ".kaelum/calibration/decisions.jsonl"
+        # Use absolute path to root .kaelum folder
+        project_root = Path(__file__).parent.parent
+        calibration_file = project_root / ".kaelum" / "calibration" / "optimal_thresholds.json"
+        decisions_file = project_root / ".kaelum" / "calibration" / "decisions.jsonl"
         
         optimal_thresholds = {}
-        if os.path.exists(calibration_file):
+        if calibration_file.exists():
             with open(calibration_file, 'r') as f:
                 optimal_thresholds = json.load(f)
         
         decision_count = 0
-        if os.path.exists(decisions_file):
+        if decisions_file.exists():
             with open(decisions_file, 'r') as f:
                 decision_count = sum(1 for _ in f)
         
@@ -666,103 +358,39 @@ def calibration_stats():
             "total_decisions": decision_count,
             "calibrated_tasks": list(optimal_thresholds.keys())
         })
-    
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/export/training-data', methods=['GET'])
 def export_training():
-    """Export training data for fine-tuning."""
+    ensure_initialized()  # Lazy initialization
     try:
         output_path = f"/tmp/kaelum_training_{int(time.time())}.jsonl"
         count = kaelum.export_training_data(output_path)
-        
-        return jsonify({
-            "status": "exported",
-            "count": count,
-            "path": output_path
-        })
-    
+        return jsonify({"status": "exported", "count": count, "path": output_path})
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "type": type(e).__name__
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/workers', methods=['GET'])
 def list_workers():
-    """List available expert workers and their specialties."""
-    return jsonify({
-        "workers": [
-            {
-                "name": "math",
-                "description": "Mathematical reasoning with SymPy verification",
-                "capabilities": ["calculus", "algebra", "equations", "symbolic math"],
-                "verification": "symbolic"
-            },
-            {
-                "name": "code",
-                "description": "Code generation with AST validation",
-                "capabilities": ["python", "javascript", "typescript", "syntax checking"],
-                "verification": "ast_parsing"
-            },
-            {
-                "name": "logic",
-                "description": "Logical reasoning and argumentation",
-                "capabilities": ["deduction", "premises", "conclusions", "coherence"],
-                "verification": "semantic"
-            },
-            {
-                "name": "factual",
-                "description": "Fact-based questions with completeness checks",
-                "capabilities": ["information retrieval", "specificity", "citations"],
-                "verification": "semantic"
-            },
-            {
-                "name": "creative",
-                "description": "Creative writing and generation",
-                "capabilities": ["stories", "ideas", "brainstorming", "diversity"],
-                "verification": "coherence_diversity"
-            },
-            {
-                "name": "analysis",
-                "description": "Comprehensive analysis and evaluation",
-                "capabilities": ["multi-perspective", "depth", "structured thinking"],
-                "verification": "completeness"
-            }
-        ]
-    })
+    return jsonify({"workers": WORKER_INFO})
 
 
 if __name__ == '__main__':
-    # Initialize with default config on startup
-    kaelum.set_reasoning_model(
-        base_url=current_config["base_url"],
-        model=current_config["model"],
-        api_key=current_config.get("api_key"),
-        temperature=current_config["temperature"],
-        max_tokens=current_config["max_tokens"],
-        embedding_model=current_config["embedding_model"],
-        use_symbolic_verification=current_config["use_symbolic_verification"],
-        use_factual_verification=current_config["use_factual_verification"],
-        max_reflection_iterations=current_config["max_reflection_iterations"],
-        enable_routing=current_config["enable_routing"],
-        parallel=current_config["parallel"],
-        max_workers=current_config["max_workers"],
-        router_learning_rate=current_config.get("router_learning_rate", 0.001),
-        router_buffer_size=current_config.get("router_buffer_size", 32),
-        router_exploration_rate=current_config.get("router_exploration_rate", 0.1),
-    )
-    
-    print("🚀 Kaelum API Server Starting...")
-    print("💻 CPU-ONLY MODE: All operations forced to CPU (GPU reserved for vLLM)")
-    print(f"📍 API: http://localhost:5000")
-    print(f"🔗 Health: http://localhost:5000/api/health")
+    print("\n" + "="*70)
+    print("🚀 KAELUM API SERVER STARTING...")
+    print("="*70)
+    print(f"⚙️  CPU-ONLY MODE: GPU reserved for vLLM")
+    print(f"🌐 API: http://localhost:5000")
+    print(f"💚 Health: http://localhost:5000/api/health")
     print(f"📊 Metrics: http://localhost:5000/api/metrics")
+    print("="*70)
+    print("📝 NOTE: First query will take 10-30s to load embedding model")
+    print("="*70 + "\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    logger = logging.getLogger(__name__)
+    
+    app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False, threaded=True)
+    

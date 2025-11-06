@@ -1,14 +1,13 @@
 """Core orchestration logic for Kaelum reasoning system.
 
-Kaelum Architecture:
-1. Router: Intelligently routes query to expert worker (math/logic/code/factual/creative/analysis)
-2. Worker: Uses LATS (tree search) + caching for multi-step reasoning
-3. Verification: Checks correctness (symbolic math, logic, etc.)
-4. Reflection: If verification fails, improves reasoning and retries
-5. Loop until verification passes or max iterations reached
+Architecture:
+1. Router → Select expert worker based on query type
+2. Worker → Use LATS tree search + caching for reasoning
+3. Verification → Check if reasoning is correct
+4. Reflection → If verification fails, improve and retry
+5. Loop until verification passes or max iterations
 
-Complete Flow:
-Query → Router → Expert Worker (LATS + Cache) → Verification → Reflection (if failed) → Retry → Result
+Flow: Query → Router → Worker (LATS + Cache) → Verification → Reflection (if failed) → Retry → Result
 """
 
 import time
@@ -26,26 +25,19 @@ from core.verification import ReflectionEngine
 from core.learning import AdaptivePenalty
 from core.learning import ActiveLearningEngine
 from core.shared_encoder import get_shared_encoder
+from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
 
 logger = logging.getLogger("kaelum.orchestrator")
 
 
 class KaelumOrchestrator:
-    """Orchestrates complete reasoning pipeline with verification and reflection.
-    
-    Flow:
-    1. Router selects expert worker
-    2. Worker reasons using LATS + caching
-    3. Verification checks correctness
-    4. Reflection improves if verification fails
-    5. Repeat until pass or max iterations
-    """
+    """Orchestrates complete reasoning pipeline with verification and reflection."""
 
     def __init__(self, config: KaelumConfig, reasoning_system_prompt=None, 
                  reasoning_user_template=None, enable_routing: bool = True,
                  enable_active_learning: bool = True,
-                 cache_dir: str = ".kaelum/cache",
-                 router_data_dir: str = ".kaelum/routing",
+                 cache_dir: str = DEFAULT_CACHE_DIR,
+                 router_data_dir: str = DEFAULT_ROUTER_DIR,
                  parallel: bool = False,
                  max_workers: int = 4,
                  max_tree_depth: Optional[int] = None,
@@ -94,11 +86,10 @@ class KaelumOrchestrator:
         self._workers = {}
         self._encoder = None
         
-        # Store runtime parameters from command line
         self.parallel = parallel
         self.max_workers = max_workers
-        self.override_max_tree_depth = max_tree_depth  # User override from CLI
-        self.override_num_simulations = num_simulations  # User override from CLI
+        self.override_max_tree_depth = max_tree_depth
+        self.override_num_simulations = num_simulations
         
         logger.info("=" * 70)
         logger.info("Kaelum Orchestrator Initialized")
@@ -125,22 +116,7 @@ class KaelumOrchestrator:
         return self._workers[specialty]
     
     def infer(self, query: str, stream: bool = False):
-        """Run complete reasoning pipeline with verification and reflection.
-        
-        Architecture:
-        1. Router → Select expert worker based on query type
-        2. Worker → Use LATS tree search + caching for reasoning
-        3. Verification → Check if reasoning is correct
-        4. Reflection → If verification fails, improve and retry
-        5. Loop until verification passes or max iterations
-        
-        Args:
-            query: User's question
-            stream: Streaming not yet supported
-            
-        Returns:
-            Dictionary with answer, reasoning steps, verification status, etc.
-        """
+        """Run complete reasoning pipeline with verification and reflection."""
         if stream:
             logger.warning("Streaming not yet supported, using sync mode")
             stream = False

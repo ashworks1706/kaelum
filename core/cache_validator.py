@@ -2,6 +2,7 @@ import json
 import time
 from pathlib import Path
 from typing import Dict, Optional
+from core.paths import DEFAULT_CACHE_VALIDATION_DIR
 
 
 class CacheValidator:
@@ -11,7 +12,7 @@ class CacheValidator:
     satisfy a new query. Collects validation data for fine-tuning.
     """
     
-    def __init__(self, llm_client=None, validation_dir: str = ".kaelum/cache_validation"):
+    def __init__(self, llm_client=None, validation_dir: str = DEFAULT_CACHE_VALIDATION_DIR):
         self.llm_client = llm_client
         self.validation_dir = Path(validation_dir)
         self.validation_dir.mkdir(parents=True, exist_ok=True)
