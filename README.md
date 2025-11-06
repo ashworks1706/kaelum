@@ -415,6 +415,253 @@ tree = ast.parse(code)
 
 ---
 
+
+## Complete Workflow: From Query to Answer
+
+This section walks through exactly what happens when you ask Kaelum a question, explaining both the **what** (steps) and **why** (concepts behind each step).
+
+### Example Query: "What is the derivative of x² + 3x with respect to x?"
+
+#### **Step 1: Query Embedding & Initial Cache Lookup**
+
+```
+Input: "What is the derivative of x² + 3x with respect to x?"
+```
+
+**What happens:**
+
+- The system converts your question into a **384-dimensional embedding vector** using a sentence transformer model
+- **Immediate cache check**: Compares query embedding with all cached successful solutions using cosine similarity
+- If similarity ≥ 0.85 threshold AND quality="high", returns cached result instantly (0.001s)
+
+**Why this matters:**
+**Cache-first design** provides ~23% speedup by avoiding unnecessary routing and detector overhead. Only high-quality verified solutions are served from cache, preventing incorrect cached answers from being returned.
+
+**Example:** If you previously asked "derivative of x²", the current query has ~0.91 similarity
+
+- **Cache hit** → Return answer immediately (skip Steps 2-7)
+- **Cache miss** → Continue to feature extraction and routing
+
+#### **Step 2: Feature Extraction & Neural Router Selection**
+
+**What happens (only if cache miss):**
+
+- Router extracts **structural features**: query length, presence of math symbols (∂, ∫, √), code keywords, etc.
+- These features are concatenated with the embedding into a **398-dimensional feature vector**
+- The 398-dim feature vector goes through a **neural network** (2 hidden layers: 398→256→128)
+- Network outputs:
+  - **Worker probabilities**: [math: 0.92, logic: 0.04, code: 0.02, ...]
+  - **Tree depth**: 5 (how deep to search)
+  - **Simulations**: 10 (how many paths to explore)
+- Selects "math" worker with 92% confidence
+
+**Why this matters:**
+The router is a **learned model** that improves over time using enhanced feedback (average tree rewards, actual depth, simulation counts). It trains on every query outcome using gradient descent. If it routes a calculus question to the "logic" worker and verification fails, it updates its weights to prefer "math" worker for similar queries. This is **continual learning** - the system gets smarter with use.
+
+#### **Step 3: LATS - Monte Carlo Tree Search with Pruning**
+
+```
+Root: "derivative of x² + 3x"
+ ├─ Node 1: "Apply power rule to x²" [Q=0.85, N=3]
+ ├─ Node 2: "Use first principles" [Q=0.62, N=2] [PRUNED - low reward]
+ └─ Node 3: "Apply sum rule first" [Q=0.91, N=5] ← Best path
+```
+
+**What happens (10 simulations):**
+
+**Simulation 1-3: Initial Exploration**
+
+- Start at root node
+- LLM generates 3 possible first steps: "power rule", "first principles", "sum rule"
+- Create child nodes for each option
+- **Selection**: All untried, so explore each once
+
+**Simulation 4-6: Exploitation with Early Pruning**
+
+- For each node, calculate **UCT score**:
+  ```
+  UCT = (Total Reward / Visits) + 1.414 × √(ln(Parent Visits) / Node Visits)
+         \_________________/       \___________________________________/
+          Exploitation term          Exploration term
+  ```
+- **Pruning check**: If node has visits ≥ 3 AND average reward < 0.3, mark as pruned
+- **"First principles" node**: Q=0.62, N=2 → continues exploring
+- **"Sum rule" node** has Q=0.91, N=5 → UCT = 0.182 + 0.42 = 0.602
+- **"Power rule" node** has Q=0.85, N=3 → UCT = 0.283 + 0.56 = 0.843 ← **Selected**
+- LLM expands from "power rule" node: "d/dx(x²) = 2x, d/dx(3x) = 3"
+
+**Simulation 7-10: Deep Exploitation**
+
+- **"Sum rule" → individual derivatives → combine** path accumulates highest reward (0.91)
+- This path gets selected more often (N=5 visits)
+- **"First principles"** node accumulates 3 visits but avg_reward drops to 0.28 → **PRUNED** (no further exploration)
+- Final reasoning: "Split into x² and 3x → derivatives are 2x and 3 → sum is 2x + 3"
+
+**Scoring (Domain-Specific Reward Model):**
+Each path is scored by the **MathWorker's reward function**:
+
+- Contains mathematical notation: +0.30
+- Shows step-by-step work: +0.25
+- Valid symbolic form: +0.20 (checked with SymPy)
+- Reaches conclusion: +0.16
+- **Total reward**: 0.91
+
+**Why this matters:**
+MCTS balances **exploration** (trying new approaches) vs **exploitation** (following good paths). The UCT formula automatically handles this with **early pruning** to eliminate unpromising branches:
+
+- High Q/N (exploitation): "This path worked well before"
+- High exploration term: "We haven't tried this much yet"
+- **Pruning**: "This path has been tried enough (≥3 visits) and performs poorly (<0.3 reward) - stop wasting simulations"
+
+This is why AlphaGo beat world champions - MCTS finds non-obvious strategies by systematically exploring possibilities. For reasoning, it means considering multiple solution approaches before committing to one, while efficiently eliminating bad paths early.
+
+#### **Step 4: Extract Best Path**
+
+```
+LATS tree → Traverse from root to leaf → Extract reasoning steps
+Result: ["Apply sum rule", "d/dx(x²) = 2x", "d/dx(3x) = 3", "Combine: 2x + 3"]
+```
+
+**What happens:**
+
+- After 10 simulations, select path with highest cumulative reward
+- Extract the **sequence of reasoning steps** from root to leaf
+- This becomes the candidate solution
+
+#### **Step 5: Verification**
+
+```
+Candidate: "2x + 3"
+SymPy verification: derivative(x**2 + 3*x, x) == 2*x + 3 →  TRUE
+```
+
+**What happens:**
+The **MathWorker** uses **SymPy** (symbolic math engine) for verification:
+
+```python
+import sympy as sp
+x = sp.Symbol('x')
+expected = sp.diff(x**2 + 3*x, x)  # SymPy calculates: 2x + 3
+candidate = sp.sympify("2*x + 3")   # Parse candidate
+assert sp.simplify(expected - candidate) == 0  # Algebraically equivalent
+```
+
+**For other domains:**
+
+- **Code**: AST parsing (check syntax validity)
+- **Logic**: Semantic similarity + conclusion detection
+- **Factual**: Information completeness + specificity scoring
+- **Creative**: Vocabulary diversity + coherence metrics
+
+**Why this matters:**
+This isn't just checking if the answer "looks right" - it's **formal verification**. SymPy uses computer algebra to prove algebraic equivalence. "2x + 3" and "3 + 2x" and "2(x + 1.5)" all verify as correct because they're symbolically equivalent. This catches subtle errors that string matching would miss.
+
+#### **Step 6: Success Path - Quality-Aware Cache Storage & Enhanced Router Feedback**
+
+```
+Verification passed
+→ Store tree in cache with embedding + quality="high" metadata
+→ Update router training data with enhanced feedback:
+   {
+     "query": "...",
+     "worker": "math",
+     "success": true,
+     "avg_reward": 0.91,
+     "actual_depth": 5,
+     "actual_simulations": 10
+   }
+→ Return result
+```
+
+**What happens:**
+
+- Successful tree stored in **semantic cache** with query embedding AND quality metadata
+- Cache only serves results with quality="high" on future lookups (prevents serving low-confidence answers)
+- Router records enhanced feedback: worker type, success/failure, average tree reward, actual search depth used, and simulation count
+- Threshold calibrators record: "Worker selection confidence 0.92 was correct"
+- Return answer: "The derivative is **2x + 3**"
+
+**Enhanced router learning:**
+After 32 successful outcomes, router runs gradient descent with richer feedback:
+
+```python
+loss = CrossEntropyLoss(predicted_worker, actual_best_worker)
+# Router also learns from avg_reward to prefer workers that generate high-quality trees
+reward_loss = MSELoss(predicted_quality, actual_avg_reward)
+total_loss = loss + 0.5 * reward_loss
+optimizer.backward(total_loss)
+optimizer.step()  # Update neural network weights
+```
+
+#### **Alternative: Verification Failure → Reflection**
+
+```
+ Verification failed
+→ Store in cache with quality="low" (not served on future lookups)
+→ Reflection Engine analyzes error
+→ Generate improved reasoning
+→ Retry (up to max_iterations)
+```
+
+**What happens if verification fails:**
+
+**Example:** Candidate answer was "2x + x" (wrong)
+
+1. **Error Analysis:**
+
+   ```
+   Error: Algebraic simplification incorrect
+   Issue: Added x instead of constant 3
+   ```
+2. **Reflection Prompt:**
+
+   ```
+   The previous attempt had an error in algebraic simplification.
+   Key mistake: confused the derivative of 3x with additional x term.
+   Correct approach: d/dx(3x) = 3 (constant factor rule)
+
+   Please provide corrected reasoning...
+   ```
+3. **Retry:**
+
+   - LLM generates improved reasoning with reflection context
+   - New LATS search with reflection guidance
+   - Verify again
+   - If still fails, repeat (up to `max_reflection_iterations`, default 2)
+
+**Why this matters:**
+This is **self-correction** through reflection. The system doesn't just fail - it analyzes **why** it failed and tries again with that knowledge. Research shows LLMs significantly improve when given feedback about their mistakes (Reflexion, Self-Refine papers). Kaelum automates this process.
+
+### Key Concepts Summary
+
+ Concept                          What It Does                                       Why It Matters                                                     
+ -------------------------------  -------------------------------------------------  ------------------------------------------------------------------ 
+ **Embeddings**             Convert text to vectors that capture meaning       Enables semantic similarity, not just keyword matching             
+ **Neural Router**          Learned model that selects expert worker           Improves over time via gradient descent on outcomes                
+ **MCTS (UCT)**             Explores multiple solution paths before deciding   Finds non-obvious solutions by balancing exploration/exploitation  
+ **Domain Scoring**         Rewards reasoning quality (not just final answer)  Prefers paths with clear logic, even if answer is partial          
+ **Symbolic Verification**  Formal proof of correctness (e.g., SymPy)          Catches subtle errors that string matching misses                  
+ **Semantic Cache**         Stores solutions with meaning-based lookup         1000x speedup on similar queries with natural language flexibility 
+ **Reflection**             Self-correction by analyzing failures              Learns from mistakes like humans do                                
+ **Continual Learning**     Router + thresholds improve with each query        System gets smarter over time without manual retraining            
+
+### Performance Profile
+
+```
+Cache Hit:     0.001s  (semantic lookup)
+New Query:     2-5s    (LATS + verification)
+With Retry:    4-12s   (reflection + re-search)
+```
+
+The workflow is designed for **quality over speed** on first attempt, but **speed over recomputation** on similar queries. This makes Kaelum ideal for:
+
+- Interactive problem-solving (tutoring, coding assistants)
+- Repeated similar queries (documentation Q&A, support bots)
+- Tasks requiring verified correctness (math, code generation)
+
+---
+
+
 ## Quick Start
 
 Kaelum can be used in two ways:
@@ -812,10 +1059,6 @@ Kaelum/
     └── calibration/     # Threshold calibration
 ```
 
----
-
-
----
 
 ## Configuration Options
 
@@ -873,251 +1116,6 @@ python run.py \
     --max-workers 8 \
     --cache-dir /data/kaelum/cache
 ```
-
----
-
-## Complete Workflow: From Query to Answer
-
-This section walks through exactly what happens when you ask Kaelum a question, explaining both the **what** (steps) and **why** (concepts behind each step).
-
-### Example Query: "What is the derivative of x² + 3x with respect to x?"
-
-#### **Step 1: Query Embedding & Initial Cache Lookup**
-
-```
-Input: "What is the derivative of x² + 3x with respect to x?"
-```
-
-**What happens:**
-
-- The system converts your question into a **384-dimensional embedding vector** using a sentence transformer model
-- **Immediate cache check**: Compares query embedding with all cached successful solutions using cosine similarity
-- If similarity ≥ 0.85 threshold AND quality="high", returns cached result instantly (0.001s)
-
-**Why this matters:**
-**Cache-first design** provides ~23% speedup by avoiding unnecessary routing and detector overhead. Only high-quality verified solutions are served from cache, preventing incorrect cached answers from being returned.
-
-**Example:** If you previously asked "derivative of x²", the current query has ~0.91 similarity
-
-- **Cache hit** → Return answer immediately (skip Steps 2-7)
-- **Cache miss** → Continue to feature extraction and routing
-
-#### **Step 2: Feature Extraction & Neural Router Selection**
-
-**What happens (only if cache miss):**
-
-- Router extracts **structural features**: query length, presence of math symbols (∂, ∫, √), code keywords, etc.
-- These features are concatenated with the embedding into a **398-dimensional feature vector**
-- The 398-dim feature vector goes through a **neural network** (2 hidden layers: 398→256→128)
-- Network outputs:
-  - **Worker probabilities**: [math: 0.92, logic: 0.04, code: 0.02, ...]
-  - **Tree depth**: 5 (how deep to search)
-  - **Simulations**: 10 (how many paths to explore)
-- Selects "math" worker with 92% confidence
-
-**Why this matters:**
-The router is a **learned model** that improves over time using enhanced feedback (average tree rewards, actual depth, simulation counts). It trains on every query outcome using gradient descent. If it routes a calculus question to the "logic" worker and verification fails, it updates its weights to prefer "math" worker for similar queries. This is **continual learning** - the system gets smarter with use.
-
-#### **Step 3: LATS - Monte Carlo Tree Search with Pruning**
-
-```
-Root: "derivative of x² + 3x"
- ├─ Node 1: "Apply power rule to x²" [Q=0.85, N=3]
- ├─ Node 2: "Use first principles" [Q=0.62, N=2] [PRUNED - low reward]
- └─ Node 3: "Apply sum rule first" [Q=0.91, N=5] ← Best path
-```
-
-**What happens (10 simulations):**
-
-**Simulation 1-3: Initial Exploration**
-
-- Start at root node
-- LLM generates 3 possible first steps: "power rule", "first principles", "sum rule"
-- Create child nodes for each option
-- **Selection**: All untried, so explore each once
-
-**Simulation 4-6: Exploitation with Early Pruning**
-
-- For each node, calculate **UCT score**:
-  ```
-  UCT = (Total Reward / Visits) + 1.414 × √(ln(Parent Visits) / Node Visits)
-         \_________________/       \___________________________________/
-          Exploitation term          Exploration term
-  ```
-- **Pruning check**: If node has visits ≥ 3 AND average reward < 0.3, mark as pruned
-- **"First principles" node**: Q=0.62, N=2 → continues exploring
-- **"Sum rule" node** has Q=0.91, N=5 → UCT = 0.182 + 0.42 = 0.602
-- **"Power rule" node** has Q=0.85, N=3 → UCT = 0.283 + 0.56 = 0.843 ← **Selected**
-- LLM expands from "power rule" node: "d/dx(x²) = 2x, d/dx(3x) = 3"
-
-**Simulation 7-10: Deep Exploitation**
-
-- **"Sum rule" → individual derivatives → combine** path accumulates highest reward (0.91)
-- This path gets selected more often (N=5 visits)
-- **"First principles"** node accumulates 3 visits but avg_reward drops to 0.28 → **PRUNED** (no further exploration)
-- Final reasoning: "Split into x² and 3x → derivatives are 2x and 3 → sum is 2x + 3"
-
-**Scoring (Domain-Specific Reward Model):**
-Each path is scored by the **MathWorker's reward function**:
-
-- Contains mathematical notation: +0.30
-- Shows step-by-step work: +0.25
-- Valid symbolic form: +0.20 (checked with SymPy)
-- Reaches conclusion: +0.16
-- **Total reward**: 0.91
-
-**Why this matters:**
-MCTS balances **exploration** (trying new approaches) vs **exploitation** (following good paths). The UCT formula automatically handles this with **early pruning** to eliminate unpromising branches:
-
-- High Q/N (exploitation): "This path worked well before"
-- High exploration term: "We haven't tried this much yet"
-- **Pruning**: "This path has been tried enough (≥3 visits) and performs poorly (<0.3 reward) - stop wasting simulations"
-
-This is why AlphaGo beat world champions - MCTS finds non-obvious strategies by systematically exploring possibilities. For reasoning, it means considering multiple solution approaches before committing to one, while efficiently eliminating bad paths early.
-
-#### **Step 4: Extract Best Path**
-
-```
-LATS tree → Traverse from root to leaf → Extract reasoning steps
-Result: ["Apply sum rule", "d/dx(x²) = 2x", "d/dx(3x) = 3", "Combine: 2x + 3"]
-```
-
-**What happens:**
-
-- After 10 simulations, select path with highest cumulative reward
-- Extract the **sequence of reasoning steps** from root to leaf
-- This becomes the candidate solution
-
-#### **Step 5: Verification**
-
-```
-Candidate: "2x + 3"
-SymPy verification: derivative(x**2 + 3*x, x) == 2*x + 3 →  TRUE
-```
-
-**What happens:**
-The **MathWorker** uses **SymPy** (symbolic math engine) for verification:
-
-```python
-import sympy as sp
-x = sp.Symbol('x')
-expected = sp.diff(x**2 + 3*x, x)  # SymPy calculates: 2x + 3
-candidate = sp.sympify("2*x + 3")   # Parse candidate
-assert sp.simplify(expected - candidate) == 0  # Algebraically equivalent
-```
-
-**For other domains:**
-
-- **Code**: AST parsing (check syntax validity)
-- **Logic**: Semantic similarity + conclusion detection
-- **Factual**: Information completeness + specificity scoring
-- **Creative**: Vocabulary diversity + coherence metrics
-
-**Why this matters:**
-This isn't just checking if the answer "looks right" - it's **formal verification**. SymPy uses computer algebra to prove algebraic equivalence. "2x + 3" and "3 + 2x" and "2(x + 1.5)" all verify as correct because they're symbolically equivalent. This catches subtle errors that string matching would miss.
-
-#### **Step 6: Success Path - Quality-Aware Cache Storage & Enhanced Router Feedback**
-
-```
-Verification passed
-→ Store tree in cache with embedding + quality="high" metadata
-→ Update router training data with enhanced feedback:
-   {
-     "query": "...",
-     "worker": "math",
-     "success": true,
-     "avg_reward": 0.91,
-     "actual_depth": 5,
-     "actual_simulations": 10
-   }
-→ Return result
-```
-
-**What happens:**
-
-- Successful tree stored in **semantic cache** with query embedding AND quality metadata
-- Cache only serves results with quality="high" on future lookups (prevents serving low-confidence answers)
-- Router records enhanced feedback: worker type, success/failure, average tree reward, actual search depth used, and simulation count
-- Threshold calibrators record: "Worker selection confidence 0.92 was correct"
-- Return answer: "The derivative is **2x + 3**"
-
-**Enhanced router learning:**
-After 32 successful outcomes, router runs gradient descent with richer feedback:
-
-```python
-loss = CrossEntropyLoss(predicted_worker, actual_best_worker)
-# Router also learns from avg_reward to prefer workers that generate high-quality trees
-reward_loss = MSELoss(predicted_quality, actual_avg_reward)
-total_loss = loss + 0.5 * reward_loss
-optimizer.backward(total_loss)
-optimizer.step()  # Update neural network weights
-```
-
-#### **Alternative: Verification Failure → Reflection**
-
-```
- Verification failed
-→ Store in cache with quality="low" (not served on future lookups)
-→ Reflection Engine analyzes error
-→ Generate improved reasoning
-→ Retry (up to max_iterations)
-```
-
-**What happens if verification fails:**
-
-**Example:** Candidate answer was "2x + x" (wrong)
-
-1. **Error Analysis:**
-
-   ```
-   Error: Algebraic simplification incorrect
-   Issue: Added x instead of constant 3
-   ```
-2. **Reflection Prompt:**
-
-   ```
-   The previous attempt had an error in algebraic simplification.
-   Key mistake: confused the derivative of 3x with additional x term.
-   Correct approach: d/dx(3x) = 3 (constant factor rule)
-
-   Please provide corrected reasoning...
-   ```
-3. **Retry:**
-
-   - LLM generates improved reasoning with reflection context
-   - New LATS search with reflection guidance
-   - Verify again
-   - If still fails, repeat (up to `max_reflection_iterations`, default 2)
-
-**Why this matters:**
-This is **self-correction** through reflection. The system doesn't just fail - it analyzes **why** it failed and tries again with that knowledge. Research shows LLMs significantly improve when given feedback about their mistakes (Reflexion, Self-Refine papers). Kaelum automates this process.
-
-### Key Concepts Summary
-
- Concept                          What It Does                                       Why It Matters                                                     
- -------------------------------  -------------------------------------------------  ------------------------------------------------------------------ 
- **Embeddings**             Convert text to vectors that capture meaning       Enables semantic similarity, not just keyword matching             
- **Neural Router**          Learned model that selects expert worker           Improves over time via gradient descent on outcomes                
- **MCTS (UCT)**             Explores multiple solution paths before deciding   Finds non-obvious solutions by balancing exploration/exploitation  
- **Domain Scoring**         Rewards reasoning quality (not just final answer)  Prefers paths with clear logic, even if answer is partial          
- **Symbolic Verification**  Formal proof of correctness (e.g., SymPy)          Catches subtle errors that string matching misses                  
- **Semantic Cache**         Stores solutions with meaning-based lookup         1000x speedup on similar queries with natural language flexibility 
- **Reflection**             Self-correction by analyzing failures              Learns from mistakes like humans do                                
- **Continual Learning**     Router + thresholds improve with each query        System gets smarter over time without manual retraining            
-
-### Performance Profile
-
-```
-Cache Hit:     0.001s  (semantic lookup)
-New Query:     2-5s    (LATS + verification)
-With Retry:    4-12s   (reflection + re-search)
-```
-
-The workflow is designed for **quality over speed** on first attempt, but **speed over recomputation** on similar queries. This makes Kaelum ideal for:
-
-- Interactive problem-solving (tutoring, coding assistants)
-- Repeated similar queries (documentation Q&A, support bots)
-- Tasks requiring verified correctness (math, code generation)
 
 ---
 
