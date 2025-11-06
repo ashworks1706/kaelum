@@ -2,9 +2,18 @@
 
 A production-ready reasoning framework combining neural routing, Monte Carlo Tree Search, domain-specific verification, and self-reflection for robust multi-step problem solving.
 
+
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
 <img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
 <img width="1983" height="844" alt="image" src="https://github.com/user-attachments/assets/6b000d29-d8bc-4219-8157-de5bf966f229" />
+
+<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/6124c476-19d6-4b8d-b902-b4174f36201d" />
+<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/4725ce30-33be-4d5a-a5ef-58eb6d1f6bf6" />
+<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-01" src="https://github.com/user-attachments/assets/c58a413a-9c81-4022-988b-d28809ce790f" />
+<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-10" src="https://github.com/user-attachments/assets/e8b2693d-3b80-499d-9e52-0b4eb7b20a6e" />
+<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-15" src="https://github.com/user-attachments/assets/b7b59351-a64d-4a03-96e6-97c145034e87" />
+
+
 
 **What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It's like having multiple expert assistants (math, code, logic, etc.) working together, where each assistant explores different solution paths and the system verifies answers before returning them.
 
@@ -15,28 +24,6 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 - **MCTS** (Monte Carlo Tree Search): Explores multiple solution paths by building a tree of possibilities, with early pruning of low-performing branches
 - **Quality-aware semantic cache**: Stores previously solved high-quality problems using AI embeddings for instant retrieval, checked BEFORE routing for maximum efficiency
 - Continuous learning: router trains on enhanced feedback (avg rewards, depth, simulations); thresholds are F1-optimized
-
-## Table of Contents
-
-- [Features](#features)
-- [Quick Start](#quick-start)
-  - [CLI Usage](#cli-usage)
-  - [Full-Stack Demo](#full-stack-demo-webui)
-- [Supported LLMs](#supported-llms)
-  - [Recommended Models](#-recommended-models)
-  - [vLLM Setup (Recommended)](#-vllm-setup-recommended)
-  - [Cloud APIs](#️-cloud-apis-alternative)
-  - [Other Deployment Options](#-other-deployment-options)
-  - [Model Recommendations by Use Case](#-model-recommendations-by-use-case)
-- [Detailed Setup Guide](#detailed-setup-guide)
-  - [vLLM + Kaelum](#step-by-step-vllm--kaelum)
-  - [Multi-GPU Setup](#multi-gpu-setup-with-vllm)
-  - [Quick Testing with Ollama](#alternative-quick-testing-with-ollama)
-- [Configuration Options](#configuration-options)
-- [Complete Workflow](#complete-workflow-from-query-to-answer)
-- [Python API Examples](#example-python-api)
-- [Troubleshooting](#troubleshooting-)
-- [Research &amp; References](#research--references)
 
 ---
 
