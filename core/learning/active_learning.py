@@ -5,6 +5,7 @@ import json
 import random
 import torch
 from sentence_transformers import SentenceTransformer, util
+from core.shared_encoder import get_shared_encoder
 import numpy as np
 
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 
 interface LogEntry {
   timestamp: string
@@ -12,59 +12,7 @@ interface LogEntry {
 export function LogViewer() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [filter, setFilter] = useState<'ALL' | 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG'>('ALL')
-  const [autoScroll, setAutoScroll] = useState(true)
-  const [isPaused, setIsPaused] = useState(false)
   const logsEndRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // Simulate log streaming (in real implementation, this would be WebSocket or SSE)
-    if (!isPaused) {
-      const interval = setInterval(() => {
-        const mockLogs: LogEntry[] = [
-          {
-            timestamp: new Date().toISOString(),
-            level: 'INFO',
-            component: 'Orchestrator',
-            message: 'Query received: What is the derivative of x²?'
-          },
-          {
-            timestamp: new Date().toISOString(),
-            level: 'INFO',
-            component: 'Router',
-            message: 'Selected MATH worker (confidence: 0.95)'
-          },
-          {
-            timestamp: new Date().toISOString(),
-            level: 'DEBUG',
-            component: 'LATS',
-            message: 'Starting tree search with depth=5, sims=10'
-          },
-          {
-            timestamp: new Date().toISOString(),
-            level: 'INFO',
-            component: 'MathWorker',
-            message: 'Executed LATS search in 2.3s'
-          },
-          {
-            timestamp: new Date().toISOString(),
-            level: 'INFO',
-            component: 'Verification',
-            message: 'SymPy verification PASSED'
-          }
-        ]
-
-        setLogs(prev => [...prev, mockLogs[Math.floor(Math.random() * mockLogs.length)]].slice(-100))
-      }, 3000)
-
-      return () => clearInterval(interval)
-    }
-  }, [isPaused])
-
-  useEffect(() => {
-    if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [logs, autoScroll])
 
   const filteredLogs = filter === 'ALL' 
     ? logs 
@@ -132,28 +80,6 @@ export function LogViewer() {
           {/* Action Buttons */}
           <div className="flex gap-2">
             <button
-              onClick={() => setAutoScroll(!autoScroll)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                autoScroll
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {autoScroll ? '🔽 Auto-scroll ON' : '⏸️ Auto-scroll OFF'}
-            </button>
-
-            <button
-              onClick={() => setIsPaused(!isPaused)}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                isPaused
-                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {isPaused ? '▶️ Resume' : '⏸️ Pause'}
-            </button>
-
-            <button
               onClick={clearLogs}
               className="px-4 py-2 rounded-lg font-medium text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
             >
@@ -166,15 +92,19 @@ export function LogViewer() {
         <div className="mt-4 flex gap-6 text-sm text-slate-600 dark:text-slate-400">
           <span>Total Logs: <strong className="text-slate-900 dark:text-white">{logs.length}</strong></span>
           <span>Filtered: <strong className="text-slate-900 dark:text-white">{filteredLogs.length}</strong></span>
-          <span>Status: <strong className={isPaused ? 'text-yellow-600' : 'text-green-600'}>{isPaused ? 'Paused' : 'Live'}</strong></span>
         </div>
       </div>
 
       {/* Log Display */}
       <div className="bg-slate-900 rounded-2xl shadow-lg p-6 h-[600px] overflow-y-auto font-mono text-sm">
         {filteredLogs.length === 0 ? (
-          <div className="text-center py-12 text-slate-500">
-            No logs to display. Try running a query or changing the filter.
+          <div className="text-center py-12 text-slate-400">
+            <div className="text-6xl mb-4">📝</div>
+            <p className="text-lg mb-2">No logs available</p>
+            <p className="text-sm">Logs will appear here when you run queries through the system.</p>
+            <p className="text-xs mt-4 text-slate-500">
+              The backend logs all activity to console - this viewer is for future WebSocket/SSE integration.
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -211,32 +141,28 @@ export function LogViewer() {
 
       {/* Info */}
       <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-6">
-        <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mb-3">📝 Log Components</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm text-emerald-800 dark:text-emerald-200">
-          <div>
-            <strong>Orchestrator:</strong> Main pipeline coordination
+        <h3 className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mb-3">📝 Live Logging (Coming Soon)</h3>
+        <div className="text-sm text-emerald-800 dark:text-emerald-200 space-y-3">
+          <p>
+            <strong>Current Status:</strong> All system logs are currently written to the backend console. 
+            View them by running <code className="bg-emerald-900/20 px-2 py-0.5 rounded">python backend/app.py</code>
+          </p>
+          <p>
+            <strong>Planned Features:</strong> Real-time log streaming via WebSockets will show:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+            <div>• Orchestrator pipeline coordination</div>
+            <div>• Router worker selection</div>
+            <div>• LATS tree search progress</div>
+            <div>• Worker execution details</div>
+            <div>• Verification results</div>
+            <div>• Cache lookups & validation</div>
+            <div>• Reflection self-correction</div>
+            <div>• Metrics & performance data</div>
           </div>
-          <div>
-            <strong>Router:</strong> Neural worker selection decisions
-          </div>
-          <div>
-            <strong>LATS:</strong> Tree search progress and pruning
-          </div>
-          <div>
-            <strong>Workers:</strong> Expert execution (Math, Code, Logic, etc.)
-          </div>
-          <div>
-            <strong>Verification:</strong> SymPy, AST, and semantic checks
-          </div>
-          <div>
-            <strong>Cache:</strong> Similarity lookups and LLM validation
-          </div>
-          <div>
-            <strong>Reflection:</strong> Self-correction analysis
-          </div>
-          <div>
-            <strong>Metrics:</strong> Performance tracking
-          </div>
+          <p className="pt-3 border-t border-emerald-200 dark:border-emerald-700">
+            <strong>For now:</strong> Check the backend terminal for detailed logging output while running queries.
+          </p>
         </div>
       </div>
     </div>

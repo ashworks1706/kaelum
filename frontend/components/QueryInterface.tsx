@@ -2,11 +2,27 @@
 
 import { useState } from 'react'
 
+interface StreamEvent {
+  type: 'status' | 'router' | 'reasoning_step' | 'answer' | 'verification' | 'done' | 'error'
+  message?: string
+  worker?: string
+  confidence?: number
+  index?: number
+  content?: string
+  passed?: boolean
+  execution_time?: number
+  cache_hit?: boolean
+  iterations?: number
+  metadata?: any
+}
+
 export function QueryInterface() {
   const [query, setQuery] = useState('')
   const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [streamingStatus, setStreamingStatus] = useState<string>('')
+  const [streamingSteps, setStreamingSteps] = useState<string[]>([])
 
   const exampleQueries = [
     "What is the derivative of x² + 3x?",
@@ -23,20 +39,95 @@ export function QueryInterface() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setStreamingStatus('')
+    setStreamingSteps([])
 
     try {
       const response = await fetch('http://localhost:5000/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, stream: false })
+        body: JSON.stringify({ query, stream: true })
       })
 
       if (!response.ok) {
         throw new Error('API request failed')
       }
 
-      const data = await response.json()
-      setResult(data)
+      // Handle Server-Sent Events
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) throw new Error('No response body')
+
+      let partialResult: any = {
+        reasoning_steps: [],
+        worker: 'unknown',
+        confidence: 0,
+        verification_passed: false,
+        cache_hit: false,
+        iterations: 1,
+        execution_time: 0,
+        metadata: {}
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData: StreamEvent = JSON.parse(line.slice(6))
+
+              switch (eventData.type) {
+                case 'status':
+                  setStreamingStatus(eventData.message || '')
+                  break
+
+                case 'router':
+                  partialResult.worker = eventData.worker || 'unknown'
+                  partialResult.confidence = eventData.confidence || 0
+                  setStreamingStatus(`Routing to ${eventData.worker} worker...`)
+                  break
+
+                case 'reasoning_step':
+                  if (eventData.content) {
+                    setStreamingSteps(prev => [...prev, eventData.content!])
+                    partialResult.reasoning_steps.push(eventData.content)
+                  }
+                  break
+
+                case 'answer':
+                  partialResult.answer = eventData.content || ''
+                  setStreamingStatus('Generating answer...')
+                  break
+
+                case 'verification':
+                  partialResult.verification_passed = eventData.passed || false
+                  setStreamingStatus('Verifying answer...')
+                  break
+
+                case 'done':
+                  partialResult.execution_time = eventData.execution_time || 0
+                  partialResult.cache_hit = eventData.cache_hit || false
+                  partialResult.iterations = eventData.iterations || 1
+                  partialResult.metadata = eventData.metadata || {}
+                  setResult(partialResult)
+                  setStreamingStatus('Complete!')
+                  break
+
+                case 'error':
+                  throw new Error(eventData.message || 'Unknown error')
+              }
+            } catch (parseError) {
+              console.error('Failed to parse SSE event:', parseError)
+            }
+          }
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to process query')
     } finally {
@@ -83,7 +174,7 @@ export function QueryInterface() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Processing...
+                  {streamingStatus || 'Processing...'}
                 </span>
               ) : (
                 'Ask Kaelum'
@@ -127,6 +218,25 @@ export function QueryInterface() {
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
           <p className="text-red-800 dark:text-red-200 font-medium">Error: {error}</p>
+        </div>
+      )}
+
+      {/* Streaming Progress */}
+      {loading && streamingSteps.length > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-4">
+            🔄 {streamingStatus}
+          </h3>
+          <div className="space-y-2">
+            {streamingSteps.map((step, i) => (
+              <div key={i} className="flex items-start animate-fadeIn">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-semibold mr-3">
+                  {i + 1}
+                </div>
+                <p className="text-blue-800 dark:text-blue-200 text-sm pt-0.5">{step}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

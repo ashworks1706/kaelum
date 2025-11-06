@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sentence_transformers import SentenceTransformer
+from core.shared_encoder import get_shared_encoder
 
 from ..detectors import DomainClassifier
 
@@ -173,7 +174,8 @@ class Router:
         self.exploration_rate = exploration_rate
         self.training_step_count = 0
         
-        self.encoder = SentenceTransformer(embedding_model)
+        # Use shared encoder to avoid loading model multiple times
+        self.encoder = get_shared_encoder(embedding_model, device='cpu')
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
         self.training_buffer = []

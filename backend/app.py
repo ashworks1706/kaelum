@@ -99,21 +99,15 @@ def query():
     Request body:
     {
         "query": "What is the derivative of x²?",
-        "stream": false
+        "stream": true
     }
     
-    Response:
-    {
-        "answer": "...",
-        "reasoning_steps": [...],
-        "worker": "math",
-        "confidence": 0.95,
-        "verification_passed": true,
-        "iterations": 1,
-        "cache_hit": false,
-        "execution_time": 2.5,
-        "metadata": {...}
-    }
+    Streaming Response (SSE):
+    data: {"type": "status", "message": "Starting analysis..."}
+    data: {"type": "router", "worker": "math", "confidence": 0.95}
+    data: {"type": "progress", "message": "LATS search: 3/10 simulations"}
+    data: {"type": "answer", "content": "The derivative is 2x"}
+    data: {"type": "done", "metadata": {...}}
     """
     data = request.json
     query_text = data.get('query', '')
@@ -122,15 +116,43 @@ def query():
     if not query_text:
         return jsonify({"error": "Query text is required"}), 400
     
+    if use_stream:
+        def generate():
+            import json
+            
+            try:
+                # Send initial status
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Processing query...'})}\n\n"
+                
+                start_time = time.time()
+                result = kaelum.kaelum_enhance_reasoning(query_text)
+                execution_time = time.time() - start_time
+                
+                # Send router decision
+                yield f"data: {json.dumps({'type': 'router', 'worker': result.get('worker_used', 'unknown'), 'confidence': result.get('confidence', 0.0)})}\n\n"
+                
+                # Send reasoning steps
+                for i, step in enumerate(result.get("reasoning_steps", [])):
+                    yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
+                    time.sleep(0.05)  # Small delay for visual effect
+                
+                # Send answer
+                yield f"data: {json.dumps({'type': 'answer', 'content': result.get('suggested_approach', '')})}\n\n"
+                
+                # Send verification status
+                yield f"data: {json.dumps({'type': 'verification', 'passed': result.get('verification_passed', False)})}\n\n"
+                
+                # Send completion metadata
+                yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': result.get('cache_hit', False), 'iterations': result.get('iterations', 1), 'metadata': {'reasoning_count': result.get('reasoning_count', 0), 'domain': result.get('domain', 'general')}})}\n\n"
+            
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        
+        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+    
     try:
         start_time = time.time()
-        
-        if use_stream:
-            # Streaming not yet implemented in orchestrator
-            result = kaelum.kaelum_enhance_reasoning(query_text)
-        else:
-            result = kaelum.kaelum_enhance_reasoning(query_text)
-        
+        result = kaelum.kaelum_enhance_reasoning(query_text)
         execution_time = time.time() - start_time
         
         return jsonify({

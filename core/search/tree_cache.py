@@ -9,6 +9,7 @@ import hashlib
 from sentence_transformers import SentenceTransformer
 from .lats import LATS, LATSNode
 from core.cache_validator import CacheValidator
+from core.shared_encoder import get_shared_encoder
 
 try:
     import faiss
@@ -68,10 +69,11 @@ class TreeCache:
         self.trees_dir = self.cache_dir / "trees"
         self.trees_dir.mkdir(exist_ok=True)
         
-        self.metadata_file = self.cache_dir / "metadata.json"
+        self.metadata_path = self.cache_dir / "metadata.json"
         self.similarity_threshold = similarity_threshold
         
-        self.encoder = SentenceTransformer(embedding_model)
+        # Use shared encoder to avoid loading model multiple times
+        self.encoder = get_shared_encoder(embedding_model, device='cpu')
         self.validator = CacheValidator(llm_client=llm_client)
         self.cached_trees: List[CachedTree] = self._load_metadata()
         

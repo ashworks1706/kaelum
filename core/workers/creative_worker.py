@@ -10,7 +10,6 @@ from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
 from ..learning import AdaptivePenalty
-from ..detectors import CreativeTaskClassifier
 from ..verification import ConfidenceCalibrator
 from ..detectors import CoherenceDetector
 
@@ -20,7 +19,6 @@ class CreativeWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
-        self.task_classifier = CreativeTaskClassifier(embedding_model=self.config.embedding_model)
         self.confidence_calibrator = ConfidenceCalibrator()
         self.coherence_detector = CoherenceDetector(embedding_model=self.config.embedding_model)
         base_temp = self.config.reasoning_llm.temperature
@@ -42,9 +40,9 @@ class CreativeWorker(WorkerAgent):
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
-        
-        task_type = self._classify_creative_task(query)
-        
+
+        task_type = "creative"
+
         root_state = {
             "query": query,
             "step": f"Initiating {task_type} creation",
@@ -154,9 +152,6 @@ class CreativeWorker(WorkerAgent):
             }
         )
     
-    def _classify_creative_task(self, query: str) -> str:
-        task, confidence, is_ambiguous, alternatives = self.task_classifier.classify_task(query)
-        return task
     
     def _build_creative_prompt(self, query: str, task_type: str) -> str:
         prompt_parts = []

@@ -25,6 +25,7 @@ from core.verification import VerificationEngine
 from core.verification import ReflectionEngine
 from core.learning import AdaptivePenalty
 from core.learning import ActiveLearningEngine
+from core.shared_encoder import get_shared_encoder
 
 logger = logging.getLogger("kaelum.orchestrator")
 
@@ -148,9 +149,9 @@ class KaelumOrchestrator:
         logger.info(f"QUERY: {query}")
         logger.info("=" * 70)
         
+        # Use shared encoder to avoid loading model multiple times
         if self._encoder is None:
-            from sentence_transformers import SentenceTransformer
-            self._encoder = SentenceTransformer(self.config.embedding_model)
+            self._encoder = get_shared_encoder(self.config.embedding_model, device='cpu')
         
         query_embedding = self._encoder.encode(query)
         

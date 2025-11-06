@@ -146,7 +146,7 @@ export function SystemArchitecture() {
           <div>
             <h4 className="font-semibold mb-2">🌲 LATS with Early Pruning</h4>
             <p className="text-sm text-emerald-100">
-              Eliminates unpromising branches (visits≥3, reward<0.3) to focus compute on high-quality paths. 
+              Eliminates unpromising branches (visits{`>`}=3, reward&lt;0.3) to focus compute on high-quality paths. 
               2-3x better solution quality at same compute budget.
             </p>
           </div>

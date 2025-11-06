@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 import sympy
 from .sympy_engine import SympyEngine
 from sentence_transformers import SentenceTransformer, util
+from core.shared_encoder import get_shared_encoder
 
 
 class SymbolicVerifier:
@@ -152,7 +153,9 @@ class VerificationEngine:
         self.use_factual = use_factual
         self.factual_verifier = None  # TODO: Implement factual verifier if needed
         self.debug = debug
-        self.semantic_encoder = SentenceTransformer(embedding_model)
+        
+        # Use shared encoder to avoid loading model multiple times
+        self.semantic_encoder = get_shared_encoder(embedding_model, device='cpu')
         self.syntax_validator = SyntaxValidator()
         self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
         self.worker_classifier = WorkerTypeClassifier(embedding_model=embedding_model)
