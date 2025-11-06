@@ -45,11 +45,13 @@ class LATSNode:
 class LATS:
     def __init__(self, root_state: Dict[str, Any], root_id: str = "root", *,
                  simulator: Optional[callable] = None,
-                 expand_fn: Optional[callable] = None):
+                 expand_fn: Optional[callable] = None,
+                 coherence_checker: Optional[callable] = None):
         self.root = LATSNode(id=root_id, state=root_state)
         self.nodes: Dict[str, LATSNode] = {self.root.id: self.root}
         self.simulator = simulator
         self.expand_fn = expand_fn
+        self.coherence_checker = coherence_checker
 
     def uct_score(self, parent: LATSNode, child: LATSNode, c: float = 1.414) -> float:
         if child.visits == 0:
@@ -101,6 +103,17 @@ class LATS:
                 "LATS.simulate requires a simulator callable. "
                 "Provide it as LATS(simulator=...) or pass it to simulate(node, simulator=...)."
             )
+        
+        is_terminal = len(node.children) == 0 and node.state.get("answer")
+        
+        if not is_terminal and self.coherence_checker:
+            coherent = self.coherence_checker(node)
+            if not coherent:
+                import logging
+                logger = logging.getLogger("kaelum.lats")
+                logger.debug(f"LATS-VERIFY: Node {node.id} failed coherence check, applying penalty")
+                return -0.5
+        
         reward = sim(node)
         try:
             return float(reward)

@@ -147,23 +147,56 @@ class ReflectionEngine:
         return items
     
     def _improve_trace(self, query: str, trace: List[str], issues: List[str]) -> List[str]:
-        trace_text = "\n".join(f"{i+1}. {step}" for i, step in enumerate(trace))
-        issues_text = "\n".join(f"- {issue}" for issue in issues)
+        if not issues:
+            return trace
         
-        messages = [
-            Message(role="system", content="Fix errors in reasoning."),
-            Message(role="user", content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nIssues:\n{issues_text}\n\nImproved reasoning:"),
-        ]
+        import logging
+        logger = logging.getLogger("kaelum.reflection")
         
-        response = self.llm.generate(messages)
+        problematic_indices = []
+        for issue in issues:
+            for match in re.finditer(r'\b(?:step|line)\s*(\d+)', issue.lower()):
+                idx = int(match.group(1)) - 1
+                if 0 <= idx < len(trace):
+                    problematic_indices.append(idx)
         
-        # Parse improved trace
-        improved = []
-        for line in response.strip().split("\n"):
-            line = line.strip()
-            if line and (line[0].isdigit() or line.startswith("-")):
-                step = line.lstrip("0123456789.-•) ").strip()
-                if step:
-                    improved.append(step)
+        problematic_indices = sorted(set(problematic_indices))
         
-        return improved if improved else trace
+        if not problematic_indices:
+            max_issues_to_show = 2
+            problematic_indices = list(range(max(0, len(trace) - max_issues_to_show), len(trace)))
+        
+        if not problematic_indices:
+            return trace
+        
+        logger.info(f"REFLECTION: Fixing {len(problematic_indices)} problematic steps: {[i+1 for i in problematic_indices]}")
+        
+        improved_trace = trace.copy()
+        
+        for idx in problematic_indices:
+            context_start = max(0, idx - 2)
+            context_end = min(len(trace), idx + 2)
+            context = trace[context_start:context_end]
+            
+            context_text = "\n".join(f"{context_start + i + 1}. {step}" 
+                                    for i, step in enumerate(context))
+            relevant_issues = [issue for issue in issues 
+                             if str(idx + 1) in issue or "step" not in issue.lower()]
+            issues_text = "\n".join(f"- {issue}" for issue in relevant_issues[:2])
+            
+            messages = [
+                Message(role="system", content="Fix the problematic step. Return only the fixed step, no numbering."),
+                Message(role="user", content=f"Query: {query}\n\nContext:\n{context_text}\n\nIssues with step {idx+1}:\n{issues_text}\n\nFixed step {idx+1}:"),
+            ]
+            
+            response = self.llm.generate(messages).strip()
+            
+            cleaned = re.sub(r'^\d+[\.\)]\s*', '', response)
+            cleaned = re.sub(r'^[-•*]\s*', '', cleaned)
+            cleaned = cleaned.strip()
+            
+            if cleaned and len(cleaned) > 10:
+                improved_trace[idx] = cleaned
+                logger.debug(f"REFLECTION: Fixed step {idx+1}")
+        
+        return improved_trace

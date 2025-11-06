@@ -27,6 +27,10 @@ class CompletenessDetector:
     def is_complete(self, query: str, response: str, context: List[str] = None) -> Dict:
         context = context or []
         
+        fast_result = self._fast_completeness_check(query, response)
+        if fast_result is not None:
+            return fast_result
+        
         nli_score = self._check_entailment(query, response)
         semantic_coverage = self._semantic_coverage(query, response)
         aspect_coverage = self._aspect_based_coverage(query, response)
@@ -61,6 +65,62 @@ class CompletenessDetector:
             'coherence_score': coherence_score,
             'missing_aspects': missing_aspects
         }
+    
+    def _fast_completeness_check(self, query: str, response: str) -> Dict:
+        response_lower = response.lower()
+        
+        incomplete_patterns = [
+            "i don't know", "i'm not sure", "unclear", "cannot determine",
+            "need more information", "insufficient", "incomplete",
+            "partial answer", "to be continued", "see above", "refer to"
+        ]
+        
+        for pattern in incomplete_patterns:
+            if pattern in response_lower:
+                return {
+                    'is_complete': False,
+                    'confidence': 0.2,
+                    'nli_score': 0.0,
+                    'semantic_coverage': 0.3,
+                    'aspect_coverage': 0.2,
+                    'has_dangling_references': True,
+                    'coherence_score': 0.5,
+                    'missing_aspects': ['Answer incomplete or uncertain']
+                }
+        
+        if len(response) < 20:
+            return {
+                'is_complete': False,
+                'confidence': 0.3,
+                'nli_score': 0.0,
+                'semantic_coverage': 0.4,
+                'aspect_coverage': 0.3,
+                'has_dangling_references': False,
+                'coherence_score': 0.6,
+                'missing_aspects': ['Response too short']
+            }
+        
+        query_words = set(query.lower().split())
+        response_words = set(response.lower().split())
+        
+        question_keywords = query_words - {'the', 'a', 'an', 'is', 'are', 'what', 'why', 'how', 'when', 'where', 'who'}
+        
+        if len(question_keywords) > 0:
+            coverage = len(question_keywords & response_words) / len(question_keywords)
+            
+            if coverage > 0.7 and len(response) > 50:
+                return {
+                    'is_complete': True,
+                    'confidence': 0.85,
+                    'nli_score': 0.8,
+                    'semantic_coverage': coverage,
+                    'aspect_coverage': 0.8,
+                    'has_dangling_references': False,
+                    'coherence_score': 0.8,
+                    'missing_aspects': []
+                }
+        
+        return None
     
     def _check_entailment(self, query: str, response: str) -> float:
         try:

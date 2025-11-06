@@ -314,10 +314,14 @@ class Router:
         reward = 1.0 if result.get("verification_passed", False) else 0.0
         reward *= result.get("confidence", 0.5)
         
+        avg_reward = result.get("avg_reward", reward)
+        quality = max(reward, avg_reward)
+        
         self.training_buffer.append({
             "features": features,
             "worker_idx": worker_idx,
             "reward": reward,
+            "quality": quality,
             "depth": decision.max_tree_depth,
             "sims": decision.num_simulations,
             "use_cache": decision.use_tree_cache
@@ -343,26 +347,36 @@ class Router:
         if len(self.training_buffer) < 8:
             return
         
+        high_quality_samples = [item for item in self.training_buffer if item.get("quality", 0.0) > 0.8]
+        
+        if len(high_quality_samples) < 4:
+            logger.info(f"ROUTER TRAINING: Skipped - only {len(high_quality_samples)} high-quality samples (need ≥4)")
+            return
+        
+        logger.info(f"ROUTER TRAINING: Using {len(high_quality_samples)}/{len(self.training_buffer)} high-quality samples (quality > 0.8)")
+        
+        training_samples = high_quality_samples
+        
         self.policy_network.train()
         
-        features_list = [item["features"].to_tensor() for item in self.training_buffer]
+        features_list = [item["features"].to_tensor() for item in training_samples]
         features_batch = torch.stack(features_list).to(self.device)
         
-        worker_targets = torch.tensor([item["worker_idx"] for item in self.training_buffer], dtype=torch.long).to(self.device)
-        rewards = torch.tensor([item["reward"] for item in self.training_buffer], dtype=torch.float32).to(self.device)
+        worker_targets = torch.tensor([item["worker_idx"] for item in training_samples], dtype=torch.long).to(self.device)
+        rewards = torch.tensor([item["reward"] for item in training_samples], dtype=torch.float32).to(self.device)
         
         outputs = self.policy_network(features_batch)
         
         worker_loss = nn.CrossEntropyLoss()(outputs['worker_logits'], worker_targets)
         worker_loss = worker_loss * rewards.mean()
         
-        depth_targets = torch.tensor([item["depth"] for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        depth_targets = torch.tensor([item["depth"] for item in training_samples], dtype=torch.float32).unsqueeze(1).to(self.device)
         depth_loss = nn.MSELoss()(outputs['depth_logits'], depth_targets)
         
-        sims_targets = torch.tensor([item["sims"] for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        sims_targets = torch.tensor([item["sims"] for item in training_samples], dtype=torch.float32).unsqueeze(1).to(self.device)
         sims_loss = nn.MSELoss()(outputs['sims_logits'], sims_targets)
         
-        cache_targets = torch.tensor([float(item["use_cache"]) for item in self.training_buffer], dtype=torch.float32).unsqueeze(1).to(self.device)
+        cache_targets = torch.tensor([float(item["use_cache"]) for item in training_samples], dtype=torch.float32).unsqueeze(1).to(self.device)
         cache_loss = nn.BCEWithLogitsLoss()(outputs['cache_logits'], cache_targets)
         
         total_loss = worker_loss + 0.1 * depth_loss + 0.1 * sims_loss + 0.05 * cache_loss

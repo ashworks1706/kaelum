@@ -259,11 +259,44 @@ class TaskClassifier:
         if len(self._performance_history[key]) > 100:
             self._performance_history[key] = self._performance_history[key][-100:]
     
+    def _calculate_creativity_level(self, query: str) -> float:
+        creative_keywords = {
+            'high': ['creative', 'imagine', 'invent', 'design', 'brainstorm', 'innovative', 
+                    'original', 'unique', 'story', 'write', 'compose', 'craft', 'artistic'],
+            'medium': ['develop', 'create', 'build', 'generate', 'make', 'produce', 'suggest'],
+            'low': ['calculate', 'solve', 'find', 'compute', 'determine', 'derive', 'prove']
+        }
+        
+        query_lower = query.lower()
+        high_count = sum(1 for kw in creative_keywords['high'] if kw in query_lower)
+        medium_count = sum(1 for kw in creative_keywords['medium'] if kw in query_lower)
+        low_count = sum(1 for kw in creative_keywords['low'] if kw in query_lower)
+        
+        if high_count > 0:
+            base_score = 0.8
+        elif medium_count > 0:
+            base_score = 0.5
+        elif low_count > 0:
+            base_score = 0.2
+        else:
+            base_score = 0.4
+        
+        has_question_mark = '?' in query
+        if has_question_mark and high_count == 0:
+            base_score *= 0.7
+        
+        return min(1.0, max(0.0, base_score))
+    
     def classify_single(self, query: str, domain: str) -> Dict[str, any]:
         results = self.classify(query, domain)
         
         if not results:
-            return {'task': 'general', 'confidence': 0.5, 'alternatives': []}
+            return {
+                'task': 'general',
+                'confidence': 0.5,
+                'alternatives': [],
+                'creativity_level': self._calculate_creativity_level(query)
+            }
         
         primary_task, primary_score = results[0]
         
@@ -271,9 +304,12 @@ class TaskClassifier:
         
         alternatives = results[1:3] if len(results) > 1 else []
         
+        creativity_level = self._calculate_creativity_level(query)
+        
         return {
             'task': primary_task,
             'confidence': primary_score,
             'ambiguous': is_ambiguous,
-            'alternatives': alternatives
+            'alternatives': alternatives,
+            'creativity_level': creativity_level
         }

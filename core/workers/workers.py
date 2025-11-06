@@ -55,6 +55,42 @@ class WorkerAgent(ABC):
         self.config = config or KaelumConfig()
         self.llm_client = LLMClient(self.config.reasoning_llm)
         self.tree_cache = tree_cache
+    
+    def _lightweight_coherence_check(self, node: LATSNode) -> bool:
+        state = node.state
+        step_text = state.get("step", "")
+        
+        if not step_text or len(step_text) < 10:
+            return False
+        
+        step_lower = step_text.lower()
+        
+        incoherent_patterns = [
+            "i don't know", "i'm not sure", "unclear", "doesn't make sense",
+            "error", "failed", "cannot determine", "impossible to",
+            "contradicts", "inconsistent with"
+        ]
+        
+        for pattern in incoherent_patterns:
+            if pattern in step_lower:
+                return False
+        
+        if parent := node.parent:
+            parent_step = parent.state.get("step", "")
+            if parent_step and step_text == parent_step:
+                return False
+        
+        sentences = [s.strip() for s in step_text.split('.') if s.strip()]
+        if len(sentences) > 1:
+            first_words = set()
+            for sent in sentences:
+                words = sent.lower().split()
+                if words and words[0] in first_words:
+                    return False
+                if words:
+                    first_words.add(words[0])
+        
+        return True
         
     @abstractmethod
     def get_specialty(self) -> WorkerSpecialty:
@@ -227,7 +263,8 @@ class MathWorker(WorkerAgent):
                     "depth": depth + 1
                 }
         
-        tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step)
+        tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step,
+                    coherence_checker=self._lightweight_coherence_check)
         
         tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
@@ -364,7 +401,8 @@ class LogicWorker(WorkerAgent):
                     "premises": parent_state.get("premises", [])
                 }
         
-        tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step)
+        tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step,
+                    coherence_checker=self._lightweight_coherence_check)
         
         tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
         

@@ -170,14 +170,21 @@ class KaelumOrchestrator:
             use_cache = False
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
+            router_confidence = routing_decision.confidence
             logger.info(f"ROUTING: ✓ Selected {worker_specialty.upper()} worker")
             logger.info(f"ROUTING: Confidence = {routing_decision.confidence:.3f}")
             logger.info(f"ROUTING: Complexity = {routing_decision.complexity_score:.3f}")
+            
+            use_ensemble = router_confidence < 0.6
+            if use_ensemble:
+                logger.info(f"ROUTING: ⚠ Low confidence ({router_confidence:.3f} < 0.6) - using ensemble voting")
         else:
             worker_specialty = "logic"
             use_cache = False
             max_depth = 5
             num_sims = 10
+            router_confidence = 1.0
+            use_ensemble = False
             logger.info(f"ROUTING: Default to {worker_specialty.upper()} worker (router disabled)")
         
         # Apply CLI overrides if provided
@@ -190,6 +197,21 @@ class KaelumOrchestrator:
             num_sims = self.override_num_simulations
         
         worker = self._get_worker(worker_specialty)
+        
+        if use_ensemble:
+            ensemble_workers = []
+            if worker_specialty == "math":
+                ensemble_workers = ["math", "logic", "analysis"]
+            elif worker_specialty == "code":
+                ensemble_workers = ["code", "logic", "analysis"]
+            elif worker_specialty == "creative":
+                ensemble_workers = ["creative", "analysis"]
+            else:
+                ensemble_workers = [worker_specialty, "logic", "analysis"]
+            
+            logger.info(f"ENSEMBLE: Using {len(ensemble_workers)} workers for voting: {ensemble_workers}")
+        else:
+            ensemble_workers = None
         
         # Router already provides optimal params via neural network
         # No need for separate adaptive config
@@ -213,27 +235,57 @@ class KaelumOrchestrator:
             logger.info("\n" + "=" * 70)
             logger.info(f"STEP 3: WORKER EXECUTION ({worker_specialty.upper()})")
             logger.info("=" * 70)
-            logger.info(f"WORKER: Executing {worker_specialty.upper()} worker with LATS tree search")
-            logger.info(f"  - Max tree depth: {max_depth}")
-            logger.info(f"  - Num simulations: {num_sims}")
-            logger.info(f"  - Parallel: {self.parallel}")
-            if self.parallel:
-                logger.info(f"  - Max workers: {self.max_workers}")
-            logger.info(f"  - Use cache: {use_cache}")
             
-            worker_start_time = time.time()
-            result = worker.solve(
-                query,
-                context=None,
-                use_cache=False,
-                max_tree_depth=max_depth,
-                num_simulations=num_sims,
-                parallel=self.parallel,
-                max_workers=self.max_workers
-            )
-            worker_time = time.time() - worker_start_time
-            
-            logger.info(f"WORKER: ✓ Execution complete in {worker_time:.2f}s")
+            if ensemble_workers:
+                logger.info(f"ENSEMBLE: Running {len(ensemble_workers)} workers in parallel")
+                
+                results = []
+                for worker_type in ensemble_workers:
+                    logger.info(f"ENSEMBLE: Executing {worker_type.upper()} worker")
+                    worker_obj = self._get_worker(worker_type)
+                    
+                    worker_result = worker_obj.solve(
+                        query,
+                        context=None,
+                        use_cache=False,
+                        max_tree_depth=max_depth,
+                        num_simulations=num_sims,
+                        parallel=self.parallel,
+                        max_workers=self.max_workers
+                    )
+                    results.append((worker_type, worker_result))
+                
+                results.sort(key=lambda x: x[1].confidence, reverse=True)
+                
+                logger.info(f"ENSEMBLE: Voting results:")
+                for worker_type, res in results:
+                    logger.info(f"  - {worker_type.upper()}: confidence={res.confidence:.3f}")
+                
+                best_worker, result = results[0]
+                logger.info(f"ENSEMBLE: ✓ Selected {best_worker.upper()} result (highest confidence)")
+                worker_specialty = best_worker
+            else:
+                logger.info(f"WORKER: Executing {worker_specialty.upper()} worker with LATS tree search")
+                logger.info(f"  - Max tree depth: {max_depth}")
+                logger.info(f"  - Num simulations: {num_sims}")
+                logger.info(f"  - Parallel: {self.parallel}")
+                if self.parallel:
+                    logger.info(f"  - Max workers: {self.max_workers}")
+                logger.info(f"  - Use cache: {use_cache}")
+                
+                worker_start_time = time.time()
+                result = worker.solve(
+                    query,
+                    context=None,
+                    use_cache=False,
+                    max_tree_depth=max_depth,
+                    num_simulations=num_sims,
+                    parallel=self.parallel,
+                    max_workers=self.max_workers
+                )
+                worker_time = time.time() - worker_start_time
+                
+                logger.info(f"WORKER: ✓ Execution complete in {worker_time:.2f}s")
             logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
             logger.info(f"WORKER: Confidence = {result.confidence:.3f}")
             logger.info(f"WORKER: Answer preview: {result.answer[:100]}...")

@@ -108,29 +108,123 @@ class TreeCache:
         return hashlib.sha256(content.encode()).hexdigest()[:16]
     
     def store(self, query_embedding: np.ndarray, cached_data: Dict[str, Any]) -> str:
-        tree_id = hashlib.sha256(str(time.time()).encode()).hexdigest()[:16]
+        import logging
+        logger = logging.getLogger("kaelum.cache")
+        
+        tree_id = f"tree_{int(time.time() * 1000000)}"
         tree_path = str(self.trees_dir / f"{tree_id}.json")
         
-        query = cached_data.get("result", {}).get("query", "")
-        
         with open(tree_path, 'w') as f:
-            json.dump(cached_data, f, indent=2, default=str)
+            json.dump(cached_data, f, indent=2)
+        
+        result = cached_data.get("result", {})
+        worker = result.get("worker", "unknown")
+        confidence = result.get("confidence", 0.0)
+        success = result.get("verification_passed", False)
         
         cached_tree = CachedTree(
-            query=query,
-            query_embedding=query_embedding,
             tree_id=tree_id,
-            worker_specialty=cached_data.get("worker", ""),
-            created_at=time.time(),
-            success=cached_data.get("quality") == "high",
-            confidence=cached_data.get("confidence", 0.0),
-            tree_path=tree_path
+            tree_path=tree_path,
+            query=result.get("query", ""),
+            query_embedding=query_embedding,
+            worker_specialty=worker,
+            confidence=confidence,
+            success=success,
+            timestamp=time.time()
         )
         
         self.cached_trees.append(cached_tree)
+        self.access_times[tree_id] = time.time()
+        
+        if len(self.cached_trees) > self.max_cache_size:
+            self._evict_entries()
+        
         self._save_metadata()
         
+        logger.info(f"CACHE: Stored tree {tree_id} (worker={worker}, confidence={confidence:.3f}, success={success})")
+        
         return tree_id
+    
+    def _evict_entries(self):
+        import logging
+        logger = logging.getLogger("kaelum.cache")
+        
+        target_size = int(self.max_cache_size * 0.8)
+        num_to_evict = len(self.cached_trees) - target_size
+        
+        if num_to_evict <= 0:
+            return
+        
+        scored_trees = []
+        for tree in self.cached_trees:
+            quality_score = tree.confidence if tree.success else tree.confidence * 0.3
+            
+            recency_score = self.access_times.get(tree.tree_id, tree.timestamp)
+            age = time.time() - recency_score
+            recency_score = 1.0 / (1.0 + age / 86400.0)
+            
+            combined_score = quality_score * 0.7 + recency_score * 0.3
+            
+            scored_trees.append((tree, combined_score))
+        
+        scored_trees.sort(key=lambda x: x[1])
+        
+        to_evict = scored_trees[:num_to_evict]
+        
+        for tree, score in to_evict:
+            tree_path = Path(tree.tree_path)
+            if tree_path.exists():
+                tree_path.unlink()
+            
+            if tree.tree_id in self.access_times:
+                del self.access_times[tree.tree_id]
+        
+        evicted_ids = {tree.tree_id for tree, _ in to_evict}
+        self.cached_trees = [t for t in self.cached_trees if t.tree_id not in evicted_ids]
+        
+        logger.info(f"CACHE EVICTION: Removed {num_to_evict} low-quality/old entries ({len(self.cached_trees)}/{self.max_cache_size} remain)")
+    
+    def _check_symbolic_equivalence(self, query1: str, query2: str, worker: str) -> bool:
+        if worker != "math":
+            return False
+        
+        try:
+            from sympy import sympify, simplify
+            from sympy.parsing.sympy_parser import parse_expr
+            import re
+            
+            def extract_expression(text):
+                expr_patterns = [
+                    r'derivative\s+of\s+([^?\.]+)',
+                    r'solve\s+([^?\.]+)',
+                    r'integrate\s+([^?\.]+)',
+                    r'simplify\s+([^?\.]+)',
+                    r'([x\+\-\*\/\^\d\(\)]+)\s*[=\?]?'
+                ]
+                
+                for pattern in expr_patterns:
+                    match = re.search(pattern, text.lower())
+                    if match:
+                        return match.group(1).strip()
+                return None
+            
+            expr1 = extract_expression(query1)
+            expr2 = extract_expression(query2)
+            
+            if not expr1 or not expr2:
+                return False
+            
+            try:
+                sym_expr1 = sympify(expr1)
+                sym_expr2 = sympify(expr2)
+                
+                diff = simplify(sym_expr1 - sym_expr2)
+                return diff == 0
+            except:
+                return False
+                
+        except Exception:
+            return False
     
     def get(self, query: str, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
         import logging
@@ -159,15 +253,31 @@ class TreeCache:
             logger.debug(f"CACHE: No similarity match found (threshold={similarity_threshold})")
             return None
         
+        self.access_times[best_match.tree_id] = time.time()
+        
         logger.info(f"\nCACHE: Similarity match found!")
         logger.info(f"  Similarity: {best_similarity:.3f}")
         logger.info(f"  Cached query: {best_match.query[:100]}...")
         logger.info(f"  Worker: {best_match.worker_specialty}")
         
+        if best_similarity > 0.95:
+            logger.info(f"CACHE: ✓ HIT (very high similarity, skip validation)")
+            with open(best_match.tree_path, 'r') as f:
+                return json.load(f)
+        
+        if best_similarity < 0.90:
+            symbolic_equivalent = self._check_symbolic_equivalence(
+                query, best_match.query, best_match.worker_specialty
+            )
+            
+            if symbolic_equivalent:
+                logger.info(f"CACHE: ✓ HIT (symbolically equivalent)")
+                with open(best_match.tree_path, 'r') as f:
+                    return json.load(f)
+        
         with open(best_match.tree_path, 'r') as f:
             cached_data = json.load(f)
         
-        # LLM validation layer
         cached_answer = cached_data.get('result', {}).get('answer', '')
         validation = self.validator.validate_cache_match(
             query, 
