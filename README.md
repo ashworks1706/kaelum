@@ -9,6 +9,7 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 **What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It's like having multiple expert assistants (math, code, logic, etc.) working together, where each assistant explores different solution paths and the system verifies answers before returning them.
 
 **Core Pipeline:**
+
 - Query → **Cache Lookup (quality-filtered)** → Neural Router → Expert Worker (LATS with pruning) → Verification → Enhanced Router Feedback → Result
 - Six specialized workers: Math, Logic, Code, Factual, Creative, Analysis
 - **MCTS** (Monte Carlo Tree Search): Explores multiple solution paths by building a tree of possibilities, with early pruning of low-performing branches
@@ -21,20 +22,20 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 - [Quick Start](#quick-start)
   - [CLI Usage](#cli-usage)
   - [Full-Stack Demo](#full-stack-demo-webui)
-- [Supported LLMs](#supported-llms) 
+- [Supported LLMs](#supported-llms)
   - [Recommended Models](#-recommended-models)
   - [vLLM Setup (Recommended)](#-vllm-setup-recommended)
   - [Cloud APIs](#️-cloud-apis-alternative)
   - [Other Deployment Options](#-other-deployment-options)
   - [Model Recommendations by Use Case](#-model-recommendations-by-use-case)
-- [Detailed Setup Guide](#detailed-setup-guide) 
+- [Detailed Setup Guide](#detailed-setup-guide)
   - [vLLM + Kaelum](#step-by-step-vllm--kaelum)
   - [Multi-GPU Setup](#multi-gpu-setup-with-vllm)
   - [Quick Testing with Ollama](#alternative-quick-testing-with-ollama)
 - [Configuration Options](#configuration-options)
 - [Complete Workflow](#complete-workflow-from-query-to-answer)
 - [Python API Examples](#example-python-api)
-- [Troubleshooting](#troubleshooting-) 
+- [Troubleshooting](#troubleshooting-)
 - [Research &amp; References](#research--references)
 
 ---
@@ -43,7 +44,7 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 
 This section explains how Kaelum processes queries from start to finish, integrating all features and components into one comprehensive workflow.
 
-###  The Complete Pipeline
+### The Complete Pipeline
 
 When you submit a query to Kaelum, it goes through an optimized pipeline designed for both speed and accuracy:
 
@@ -101,6 +102,7 @@ Query Input
 ```
 
 **Key Design Decisions:**
+
 - **Cache-first**: 23% speedup by checking cache before routing/detectors
 - **Quality filtering**: Only serve verified high-confidence cached results
 - **LLM validation**: Prevents false positives from embeddings alone
@@ -118,11 +120,12 @@ Query Input
 **Two-Stage Validation** (Fast pre-filter + Intelligent validation):
 
 1. **Semantic Similarity Check** (~0.001s):
+
    - Converts query to 384-dimensional embedding using sentence-transformers
    - Computes cosine similarity with all cached queries
    - Pre-filter: Only considers matches with similarity ≥ 0.85
-   
 2. **LLM Validation Layer** (~0.1-0.3s):
+
    - For similarity matches, asks reasoning LLM: "Would the cached answer FULLY and CORRECTLY satisfy the new query?"
    - Prompt includes: cached query, cached answer, new query
    - LLM responds: `{"valid": true/false, "confidence": 0.0-1.0, "reason": "..."}`
@@ -130,11 +133,13 @@ Query Input
    - LLM understands nuances that embeddings miss (definite vs indefinite integrals, boundary conditions, etc.)
 
 **Quality Filtering:**
+
 - Only stores trees with quality="high" (successful verification + confidence ≥ 0.8)
 - Cache hits only return high-quality results (prevents serving incorrect cached answers)
 - Low-quality trees logged but never served
 
 **Self-Improvement:**
+
 - Every validation decision logged to `.kaelum/cache_validation/validation_log.jsonl`
 - Export tool: `./export_cache_validation_data.py --output training.jsonl`
 - **Learning loop**: Collect validation data → Fine-tune validator → Deploy better model → Repeat
@@ -150,6 +155,7 @@ Query Input
 **What it does:** Learns which expert worker should handle each query type.
 
 **Architecture:**
+
 ```
 Input: Query (text)
     ↓
@@ -175,19 +181,21 @@ Output Heads:
 ```
 
 **Learning Process:**
+
 1. **Data Collection**: Every query outcome stored with enhanced feedback:
+
    - Query features, worker used, success/failure
    - **Average tree reward** (quality of reasoning paths)
    - **Actual depth used** (complexity of search)
    - **Actual simulations** (computational effort)
-
 2. **Training** (after 32 outcomes):
+
    - Worker classification loss: CrossEntropyLoss
    - Quality regression loss: MSE on average rewards
    - Depth/simulations loss: MSE on actual parameters used
    - Combined loss with gradient descent
-
 3. **Effect**: Router learns patterns like:
+
    - "Calculus queries → Math worker with depth=6, sims=15"
    - "Algorithm questions → Code worker with depth=8, sims=20"
    - Gets smarter with every query processed
@@ -200,32 +208,38 @@ Output Heads:
 
 Each worker has domain-optimized prompting, scoring, and verification:
 
-**Math Worker**: 
+**Math Worker**:
+
 - SymPy symbolic verification (derivatives, integrals, equations)
 - Rewards: +0.30 notation, +0.25 steps, +0.20 symbolic validity, +0.16 conclusion
 - Best for: Calculus, algebra, equations, proofs
 
 **Logic Worker**:
+
 - Semantic coherence checks, premise-conclusion validation
 - Rewards: +0.30 structure, +0.25 coherence, +0.20 premises, +0.16 conclusion
 - Best for: Logical reasoning, arguments, deduction
 
 **Code Worker**:
+
 - AST parsing (Python/JS/TS), syntax validation, execution sandboxing
 - Rewards: +0.30 syntax, +0.25 documentation, +0.20 modularity, +0.16 correctness
 - Best for: Programming, algorithms, debugging
 
 **Factual Worker**:
+
 - Information completeness scoring, joint embedding validation
 - Rewards specific cited evidence, comprehensive coverage
 - Best for: Knowledge queries, explanations, definitions
 
 **Creative Worker**:
+
 - Vocabulary diversity metrics, coherence detection
 - Rewards originality + structure balance
 - Best for: Writing, brainstorming, creative tasks
 
 **Analysis Worker**:
+
 - Depth scoring, keyword presence, multi-perspective evaluation
 - Rewards comprehensive multi-angle analysis
 - Best for: Complex reasoning, trade-offs, evaluations
@@ -246,10 +260,10 @@ class LATSNode:
     visits: int = 0      # Times visited (N)
     total_reward: float = 0.0  # Cumulative reward (Q)
     is_pruned: bool = False    # Pruning flag
-    
+  
     def avg_reward(self) -> float:
         return self.total_reward / self.visits if self.visits > 0 else 0.0
-    
+  
     def uct_score(self, c: float = 1.414) -> float:
         if self.is_pruned:
             return -inf
@@ -261,23 +275,23 @@ class LATSNode:
 **Simulation Process:**
 
 1. **Selection**: Walk down tree using UCT (Upper Confidence Bound for Trees)
+
    - Balance exploitation (Q/N) vs exploration (c×√(ln N_parent / N_node))
    - Skip pruned nodes
-
 2. **Expansion**: LLM generates next reasoning steps from current node
-
 3. **Simulation**: Score the reasoning path using domain-specific reward functions
+
    - Math: Mathematical notation, step-by-step work, symbolic validity
    - Code: Syntax, documentation, modularity
    - Logic: Structure, coherence, logical flow
-
 4. **Backpropagation**: Update all ancestor nodes with rewards
+
    - **Early Pruning**: Mark nodes with visits ≥3 AND avg_reward <0.3 as pruned
    - No further exploration of pruned branches
-
 5. **Best Path Extraction**: After N simulations, select highest-reward path
 
 **Why it works:**
+
 - MCTS finds non-obvious solutions by systematically exploring possibilities (like AlphaGo)
 - Early pruning eliminates bad paths at visits=3 to save compute
 - 2-3x better solution quality at same compute budget
@@ -291,6 +305,7 @@ class LATSNode:
 **What it does:** Validates reasoning correctness using domain-specific methods.
 
 **Symbolic Math Verification** (SymPy engine):
+
 ```python
 # Converts candidate to symbolic expression
 candidate = sp.sympify("2*x + 3")
@@ -301,10 +316,12 @@ expected = sp.diff(x**2 + 3*x, x)  # → 2*x + 3
 # Checks algebraic equivalence (not string matching!)
 assert sp.simplify(expected - candidate) == 0
 ```
+
 - **Catches subtle errors**: "2x+3", "3+2x", "2(x+1.5)" all verify as equivalent
 - **Formal proof**: Actual mathematical equivalence checking
 
 **Code Verification** (AST + Execution):
+
 ```python
 # Parse to Abstract Syntax Tree
 tree = ast.parse(code)
@@ -316,6 +333,7 @@ tree = ast.parse(code)
 ```
 
 **Semantic Verification** (Embedding-based):
+
 - Logic/Factual: Encode with sentence-transformers, measure coherence
 - Check conclusion presence, information completeness, specificity
 - Creative: Vocabulary diversity (unique words / total), sentence coherence
@@ -331,21 +349,22 @@ tree = ast.parse(code)
 **Process:**
 
 1. **Error Analysis**:
+
    - Math: "Algebraic simplification error in step 3"
    - Code: "Syntax error on line 12: missing closing parenthesis"
    - Logic: "Conclusion doesn't follow from premises"
-
 2. **Reflection Prompt**:
+
    ```
    Previous attempt failed verification.
    Error: [specific issue identified]
    Key mistake: [detailed explanation]
    Correct approach: [guidance for improvement]
-   
+
    Please provide corrected reasoning...
    ```
-
 3. **Retry**: New LATS search with reflection context
+
    - Default: 2 iterations (configurable)
    - Each iteration learns from previous mistakes
    - Stops early if verification passes
@@ -383,6 +402,7 @@ tree = ast.parse(code)
 **What it does:** Intelligently selects valuable training examples from real usage.
 
 **Selection Strategies:**
+
 - **Uncertainty**: Queries where model had low confidence → improve weak areas
 - **Diversity**: Max-min distance in embedding space → broad coverage
 - **Error**: Failed verifications with reflections → learn from mistakes
@@ -390,6 +410,7 @@ tree = ast.parse(code)
 - **Mixed** (recommended): Balanced combination
 
 **Data Collection:**
+
 - Automatic capture of (query, reasoning_steps, answer, metadata)
 - Format: `{instruction, input, output}` for instruction-tuning
 - Export: `runtime/orchestrator.py`
@@ -400,7 +421,7 @@ tree = ast.parse(code)
 
 ---
 
-###  Metrics & Analytics
+### Metrics & Analytics
 
 - **Cache**: Hit rate, similarity, quality distribution, validation stats
 - **Router**: Worker selection accuracy, prediction errors, learning curves
@@ -414,7 +435,6 @@ tree = ast.parse(code)
 **Implementation:** `core/learning/metrics.py`
 
 ---
-
 
 ## Complete Workflow: From Query to Answer
 
@@ -634,16 +654,18 @@ This is **self-correction** through reflection. The system doesn't just fail - i
 
 ### Key Concepts Summary
 
- Concept                          What It Does                                       Why It Matters                                                     
- -------------------------------  -------------------------------------------------  ------------------------------------------------------------------ 
- **Embeddings**             Convert text to vectors that capture meaning       Enables semantic similarity, not just keyword matching             
- **Neural Router**          Learned model that selects expert worker           Improves over time via gradient descent on outcomes                
- **MCTS (UCT)**             Explores multiple solution paths before deciding   Finds non-obvious solutions by balancing exploration/exploitation  
- **Domain Scoring**         Rewards reasoning quality (not just final answer)  Prefers paths with clear logic, even if answer is partial          
- **Symbolic Verification**  Formal proof of correctness (e.g., SymPy)          Catches subtle errors that string matching misses                  
- **Semantic Cache**         Stores solutions with meaning-based lookup         1000x speedup on similar queries with natural language flexibility 
- **Reflection**             Self-correction by analyzing failures              Learns from mistakes like humans do                                
- **Continual Learning**     Router + thresholds improve with each query        System gets smarter over time without manual retraining            
+ Concept                          What It Does                                       Why It Matters
+
+---
+
+ **Embeddings**             Convert text to vectors that capture meaning       Enables semantic similarity, not just keyword matching
+ **Neural Router**          Learned model that selects expert worker           Improves over time via gradient descent on outcomes
+ **MCTS (UCT)**             Explores multiple solution paths before deciding   Finds non-obvious solutions by balancing exploration/exploitation
+ **Domain Scoring**         Rewards reasoning quality (not just final answer)  Prefers paths with clear logic, even if answer is partial
+ **Symbolic Verification**  Formal proof of correctness (e.g., SymPy)          Catches subtle errors that string matching misses
+ **Semantic Cache**         Stores solutions with meaning-based lookup         1000x speedup on similar queries with natural language flexibility
+ **Reflection**             Self-correction by analyzing failures              Learns from mistakes like humans do
+ **Continual Learning**     Router + thresholds improve with each query        System gets smarter over time without manual retraining
 
 ### Performance Profile
 
@@ -661,10 +683,10 @@ The workflow is designed for **quality over speed** on first attempt, but **spee
 
 ---
 
-
 ## Quick Start
 
 Kaelum can be used in two ways:
+
 1. **CLI Mode** - Command-line interface for direct queries
 2. **Full-Stack Demo** - Web UI with Flask backend + Next.js frontend
 
@@ -724,6 +746,7 @@ python run.py --help
 Experience Kaelum through a beautiful web interface with real-time metrics, visualizations, and system analytics.
 
 **Features:**
+
 - Interactive query interface with live results
 - Neural router analytics and training visualization
 - Cache validation statistics and performance metrics
@@ -733,11 +756,13 @@ Experience Kaelum through a beautiful web interface with real-time metrics, visu
 #### Quick Start
 
 **Option 1: Automatic (recommended)**
+
 ```bash
 ./start_demo.sh
 ```
 
 **Option 2: Manual**
+
 ```bash
 # Terminal 1 - Install frontend dependencies (first time only)
 cd frontend
@@ -757,12 +782,13 @@ Then open http://localhost:3000 in your browser.
 #### Demo Architecture
 
 - **Backend (Flask)**: REST API on port 5000
+
   - `/api/query` - Process reasoning queries
   - `/api/metrics` - System-wide metrics
   - `/api/stats/*` - Router, cache, and calibration statistics
   - `/api/config` - Configuration management
-  
 - **Frontend (Next.js)**: Web UI on port 3000
+
   - Query interface with results visualization
   - System architecture showcase
   - Router training and worker distribution charts
@@ -772,26 +798,31 @@ Then open http://localhost:3000 in your browser.
 #### Example Queries to Try
 
 **Math**:
+
 ```
 Solve the quadratic equation: 2x² + 5x - 3 = 0
 ```
 
 **Code**:
+
 ```
 Write a Python function to find all prime numbers up to n using the Sieve of Eratosthenes
 ```
 
 **Logic**:
+
 ```
 If all roses are flowers and some flowers fade quickly, can we conclude that some roses fade quickly?
 ```
 
 **Factual**:
+
 ```
 What are the main differences between mitosis and meiosis?
 ```
 
 **Creative**:
+
 ```
 Write a haiku about artificial intelligence and consciousness
 ```
@@ -802,29 +833,27 @@ Write a haiku about artificial intelligence and consciousness
 
 Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are tested configurations optimized for reasoning tasks.
 
-###  Recommended Models
+### Recommended Models
+| Model Family     | Size  | VRAM | Speed | Reasoning | Math / Code | Use Case                         | HuggingFace Model ID |
+|------------------|-------:|-----:|:-----:|:---------:|:-----------:|----------------------------------|----------------------|
+| SmolLM2          | 1.7B  | 3 GB | ⭐⭐⭐⭐  | ⭐⭐⭐      | Edge / Mobile, Fast inference    | `HuggingFaceTB/SmolLM2-1.7B-Instruct` |
+| Qwen 2.5         | 3B    | 4 GB | ⭐⭐⭐⭐  | ⭐⭐⭐⭐     | Development, Testing             | `Qwen/Qwen2.5-3B-Instruct` |
+| Phi-3-mini       | 3.8B  | 5 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Strong reasoning, Low VRAM       | `microsoft/Phi-3-mini-4k-instruct` |
+| Llama 3.2        | 3B    | 4 GB | ⭐⭐⭐   | ⭐⭐⭐      | General purpose                  | `meta-llama/Llama-3.2-3B-Instruct` |
+| Qwen 2.5         | 7B    | 8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Best balance                     | `Qwen/Qwen2.5-7B-Instruct` |
+| Llama 3.1        | 8B    | 8 GB | ⭐⭐⭐⭐  | ⭐⭐⭐⭐     | General reasoning                | `meta-llama/Llama-3.1-8B-Instruct` |
+| DeepSeek-R1      | 7B    | 8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Math / Logic specialist          | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` |
+| Phi-4            | 14B   | 16 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Complex reasoning, SOTA          | `microsoft/phi-4` |
+| Qwen 2.5         | 14B   | 16 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Production quality               | `Qwen/Qwen2.5-14B-Instruct` |
+| Mixtral (MoE)    | 8×7B  | 24 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐     | High quality, MoE                | `mistralai/Mixtral-8x7B-Instruct-v0.1` |
 
- Model Family           Size   VRAM   Speed   Reasoning  Math/Code  Use Case                     HuggingFace Model ID                              
- ---------------------  -----  -----  ------  ---------  ---------  ---------------------------  ------------------------------------------------- 
- **SmolLM2**      1.7B   3GB      ⭐⭐⭐⭐   ⭐⭐⭐     Edge/Mobile, Fast inference  `HuggingFaceTB/SmolLM2-1.7B-Instruct`           
- **Qwen 2.5**     3B     4GB      ⭐⭐⭐⭐   ⭐⭐⭐⭐   Development, Testing         `Qwen/Qwen2.5-3B-Instruct`                      
- **Phi-3-mini**   3.8B   5GB      ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐⭐  Strong reasoning, Low VRAM   `microsoft/Phi-3-mini-4k-instruct`              
- **Llama 3.2**    3B     4GB      ⭐⭐⭐     ⭐⭐⭐     General purpose              `meta-llama/Llama-3.2-3B-Instruct`              
- **Qwen 2.5**     7B     8GB        ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐⭐  Best balance                 `Qwen/Qwen2.5-7B-Instruct`                      
- **Llama 3.1**    8B     8GB        ⭐⭐⭐⭐   ⭐⭐⭐⭐   General reasoning            `meta-llama/Llama-3.1-8B-Instruct`              
- **DeepSeek-R1**  7B     8GB        ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐⭐  Math/Logic specialist        `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`      
- **Phi-4**        14B    16GB         ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐⭐  Complex reasoning, SOTA      `microsoft/phi-4`                               
- **Qwen 2.5**     14B    16GB         ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐⭐  Production quality           `Qwen/Qwen2.5-14B-Instruct`                     
- **Mixtral**      8x7B   24GB         ⭐⭐⭐⭐⭐  ⭐⭐⭐⭐   High quality, MoE            `mistralai/Mixtral-8x7B-Instruct-v0.1`          
-
-**Key Highlights:**
 - **SmolLM2-1.7B**: Smallest efficient model, excellent for edge deployment, on-device inference, and resource-constrained environments. Trained on 11T tokens with strong instruction following.
 - **Phi-3-mini (3.8B)**: Microsoft's reasoning-optimized small model with exceptional math/logic performance (GSM8K: 85.7%, HumanEval: 57.3%). Best small model for reasoning.
 - **Phi-4 (14B)**: Latest Microsoft model with SOTA small-model performance (MMLU: 84.8%, MATH: 80.4%, HumanEval: 82.6%). Best for complex reasoning tasks.
 - **Qwen 2.5**: Strong all-around performance across sizes, excellent for code generation
 - **DeepSeek-R1**: Specialized for mathematical and logical reasoning with reinforcement learning
 
-###  vLLM Setup (Recommended)
+### vLLM Setup (Recommended)
 
 **Best for:** Production deployments, high throughput, GPU optimization, batch processing
 
@@ -878,19 +907,19 @@ python -m vllm.entrypoints.openai.api_server \
 ```
 
 **Supported Architectures:**
+
 - Any Hugging Face model with chat template
 - Qwen, Llama, Mistral, Yi, DeepSeek, Phi families
 - Custom fine-tuned models with transformer architecture
 
 ### ️ Cloud APIs (Alternative)
-
- Provider               Setup                                 Base URL                                   Example                                                     
- ---------------------  ------------------------------------  -----------------------------------------  ----------------------------------------------------------- 
- **OpenAI**       Get API key from platform.openai.com  `https://api.openai.com/v1`              `--model gpt-4 --base-url https://api.openai.com/v1`      
- **Anthropic**    Use with proxy/adapter                Via proxy                                  Use OpenAI-compatible proxy                                 
- **Together AI**  Get key from together.ai              `https://api.together.xyz/v1`            `--model meta-llama/Llama-3-70b-chat-hf`                  
- **Fireworks**    Get key from fireworks.ai             `https://api.fireworks.ai/inference/v1`  `--model accounts/fireworks/models/llama-v3-70b-instruct` 
- **Groq**         Get key from groq.com                 `https://api.groq.com/openai/v1`         `--model llama3-70b-8192`                                 
+| Provider     | Setup                                    | Base URL                                    | Example |
+|--------------|------------------------------------------|---------------------------------------------|---------|
+| OpenAI       | Get API key from https://platform.openai.com | `https://api.openai.com/v1`                 | `--model gpt-4 --base-url https://api.openai.com/v1` |
+| Anthropic    | Use via proxy/adapter (OpenAI-compatible) | `via proxy`                                  | `--model claude-2 --base-url https://your-proxy.example.com/v1` |
+| Together AI  | Get key from together.ai                  | `https://api.together.xyz/v1`               | `--model meta-llama/Llama-3-70b-chat-hf --base-url https://api.together.xyz/v1` |
+| Fireworks    | Get key from fireworks.ai                 | `https://api.fireworks.ai/inference/v1`     | `--model accounts/fireworks/models/llama-v3-70b-instruct --base-url https://api.fireworks.ai/inference/v1` |
+| Groq         | Get key from groq.com                     | `https://api.groq.com/openai/v1`            | `--model llama3-70b-8192 --base-url https://api.groq.com/openai/v1` |
 
 **Example with OpenAI:**
 
@@ -898,31 +927,28 @@ python -m vllm.entrypoints.openai.api_server \
 export OPENAI_API_KEY="sk-..."
 python run.py --model gpt-4 --base-url https://api.openai.com/v1
 ```
+### Other Deployment Options
 
-###  Other Deployment Options
+| Option | Best For | Setup Difficulty | OpenAI Compatible |
+|---|---|:---:|:---:|
+| vLLM (Recommended) | Production, GPU optimization | ⭐⭐ Moderate | Yes |
+| Ollama | Quick local testing, beginners | ⭐ Easy | Yes |
+| LM Studio | GUI-based, no-code deployment | ⭐ Easy | Yes |
+| llama.cpp | CPU inference, low VRAM | ⭐⭐ Moderate | Yes (w/server) |
+| text-generation-webui | Full UI + API | ⭐⭐ Moderate | Yes |
+| LocalAI | Docker-based multi-backend | ⭐⭐ Moderate | Yes |
 
- Option                           Best For                         Setup Difficulty  OpenAI Compatible 
- -------------------------------  -------------------------------  ----------------  ----------------- 
- **vLLM** (Recommended)     Production, GPU optimization     ⭐⭐ Moderate      Yes            
- **Ollama**                 Quick local testing, beginners   ⭐ Easy            Yes            
- **LM Studio**              GUI-based, no-code deployment    ⭐ Easy            Yes            
- **llama.cpp**              CPU inference, low VRAM          ⭐⭐ Moderate      Yes (w/server) 
- **text-generation-webui**  Full UI + API                    ⭐⭐ Moderate      Yes            
- **LocalAI**                Docker-based multi-backend       ⭐⭐ Moderate      Yes            
+### Model Recommendations by Use Case
 
-###  Model Recommendations by Use Case
-
- Use Case                       Recommended Model            Why                                                
- -----------------------------  ---------------------------  -------------------------------------------------- 
- **Edge/Mobile**          SmolLM2 1.7B                 Smallest efficient model, runs on-device           
- **Development/Testing**  Qwen 2.5 3B / Phi-3-mini     Fast inference, low VRAM, solid reasoning          
- **Math/Logic**           Phi-4 / DeepSeek-R1 7B       Specialized for reasoning (Phi-4: 80.4% on MATH)   
- **Code Generation**      Qwen 2.5 14B / Phi-4         Strong code capabilities, function calling support 
- **General Reasoning**    Qwen 2.5 7B                  Best balance of speed/quality/VRAM                 
- **Production**           Qwen 2.5 14B / Phi-4         High quality, reliable, SOTA performance           
- **Research**             Custom fine-tuned            Domain-specific optimization with PEFT/LoRA        
-
----
+| Use Case | Recommended Model | Why |
+|---|---|---|
+| Edge / Mobile | SmolLM2 1.7B | Smallest efficient model, runs on-device |
+| Development / Testing | Qwen 2.5 3B / Phi-3-mini | Fast inference, low VRAM, solid reasoning |
+| Math / Logic | Phi-4 / DeepSeek-R1 7B | Specialized for reasoning (Phi-4: strong MATH performance) |
+| Code Generation | Qwen 2.5 14B / Phi-4 | Strong code capabilities, function-calling support |
+| General Reasoning | Qwen 2.5 7B | Best balance of speed, quality, and VRAM |
+| Production | Qwen 2.5 14B / Phi-4 | High quality, reliable, SOTA performance |
+| Research | Custom fine-tuned | Domain-specific optimization with PEFT / LoRA |
 
 ## Detailed Setup Guide
 
@@ -1059,7 +1085,6 @@ Kaelum/
     └── calibration/     # Threshold calibration
 ```
 
-
 ## Configuration Options
 
 All configuration is now via **command-line arguments** (no `.env` file needed):
@@ -1069,24 +1094,23 @@ python run.py --help
 ```
 
 **Key Options:**
-
- Category                Argument                           Description               Default                   
- ----------------------  ---------------------------------  ------------------------  ------------------------- 
- **LLM**           `--model`                        Model name                (required)                
-                         `--base-url`                     API endpoint              `http://localhost:8000/v1` 
-                         `--temperature`                  Creativity (0.0-2.0)      `0.7`                   
-                         `--max-tokens`                   Max response length       `2048`                  
- **Embeddings**    `--embedding-model`              Sentence transformer      `all-MiniLM-L6-v2`      
- **Search**        `--max-tree-depth`               LATS depth                Router decides (3-10)     
-                         `--num-simulations`              LATS simulations          Router decides (5-25)     
-                         `--parallel`                     Enable parallel search    Disabled                  
- **Routing**       `--no-routing`                   Disable neural router     Enabled                   
-                         `--worker`                       Force specific worker     Auto                      
- **Cache**         `--no-cache`                     Disable caching           Enabled                   
- **Verification**  `--no-symbolic-verification`     Disable SymPy             Enabled                   
-                         `--enable-factual-verification`  Enable fact checks        Disabled                  
- **Reflection**    `--max-reflection-iterations`    Self-correction attempts  `2`                     
-                         `--no-active-learning`           Disable learning          Enabled                   
+| Category | Argument | Description | Default |
+|---|---|---|---|
+| LLM | `--model` | Model name (required) | (required) |
+|  | `--base-url` | API endpoint | `http://localhost:8000/v1` |
+|  | `--temperature` | Creativity (0.0–2.0) | `0.7` |
+|  | `--max-tokens` | Max response length | `2048` |
+| Embeddings | `--embedding-model` | Sentence transformer | `all-MiniLM-L6-v2` |
+| Search | `--max-tree-depth` | LATS depth | Router decides (3–10) |
+|  | `--num-simulations` | LATS simulations | Router decides (5–25) |
+|  | `--parallel` | Enable parallel search | Disabled |
+| Routing | `--no-routing` | Disable neural router | Enabled (routing ON) |
+|  | `--worker` | Force specific worker | Auto |
+| Cache | `--no-cache` | Disable caching | Enabled |
+| Verification | `--no-symbolic-verification` | Disable SymPy symbolic checks | Enabled |
+|  | `--enable-factual-verification` | Enable factual checks | Disabled |
+| Reflection | `--max-reflection-iterations` | Self-correction attempts | `2` |
+|  | `--no-active-learning` | Disable active learning | Enabled |
 
 **Examples:**
 
@@ -1146,7 +1170,7 @@ print(metrics["analytics"])
 
 ---
 
-## Troubleshooting 
+## Troubleshooting
 
 ### Common Issues
 

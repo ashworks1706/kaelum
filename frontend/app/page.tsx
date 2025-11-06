@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { QueryInterface } from './components/QueryInterface'
-import { MetricsDashboard } from './components/MetricsDashboard'
-import { SystemArchitecture } from './components/SystemArchitecture'
-import { RouterVisualization } from './components/RouterVisualization'
-import { CacheVisualization } from './components/CacheVisualization'
-import { ConfigPanel } from './components/ConfigPanel'
-import { LogViewer } from './components/LogViewer'
-import { FineTuningPanel } from './components/FineTuningPanel'
+import { QueryInterface } from '../components/QueryInterface'
+import { MetricsDashboard } from '../components/MetricsDashboard'
+import { SystemArchitecture } from '../components/SystemArchitecture'
+import { RouterVisualization } from '../components/RouterVisualization'
+import { CacheVisualization } from '../components/CacheVisualization'
+import { ConfigPanel } from '../components/ConfigPanel'
+import { LogViewer } from '../components/LogViewer'
+import { FineTuningPanel } from '../components/FineTuningPanel'
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('query')
