@@ -1,6 +1,20 @@
 import math
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from ..learning import AdaptivePenalty
+
+# Late import to avoid circular dependency
+_feedback_engine = None
+
+def get_feedback_engine():
+    """Lazy load feedback engine to avoid circular imports."""
+    global _feedback_engine
+    if _feedback_engine is None:
+        try:
+            from ..learning.human_feedback import HumanFeedbackEngine
+            _feedback_engine = HumanFeedbackEngine()
+        except:
+            _feedback_engine = None
+    return _feedback_engine
 
 
 class RewardModel:
@@ -64,22 +78,38 @@ class RewardModel:
         
         config = RewardModel.CONFIGS.get(worker_type, RewardModel.CONFIGS["math"])
         
+        # Get base reward from config
+        base_reward = 0.0
+        
         if has_answer:
             if worker_type == "code" and syntax_valid:
-                reward = config["syntax_valid"]
-                logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (syntax valid code at depth {depth})")
-                return reward
-            reward = config.get("has_answer", config.get("complete", 0.85))
-            logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (complete answer at depth {depth})")
-            return reward
+                base_reward = config["syntax_valid"]
+                logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (syntax valid code at depth {depth})")
+            else:
+                base_reward = config.get("has_answer", config.get("complete", 0.85))
+                logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (complete answer at depth {depth})")
         
-        if has_partial:
-            reward = config["partial"]
-            logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (partial solution at depth {depth})")
-            return reward
+        elif has_partial:
+            base_reward = config["partial"]
+            logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (partial solution at depth {depth})")
         
-        adaptive_penalty = AdaptivePenalty.get_penalty(worker_type, query_complexity)
-        reward = max(0.1, config["base"] - depth * adaptive_penalty)
-        logger.debug(f"REWARD [{worker_type}]: {reward:.3f} (base={config['base']:.2f}, depth_penalty={adaptive_penalty:.3f}, depth={depth})")
+        else:
+            adaptive_penalty = AdaptivePenalty.get_penalty(worker_type, query_complexity)
+            base_reward = max(0.1, config["base"] - depth * adaptive_penalty)
+            logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (base={config['base']:.2f}, depth_penalty={adaptive_penalty:.3f}, depth={depth})")
         
-        return reward
+        # Apply human feedback adjustments
+        feedback_engine = get_feedback_engine()
+        if feedback_engine:
+            adjusted_reward = feedback_engine.get_adjusted_reward(
+                worker_type=worker_type,
+                base_reward=base_reward,
+                is_partial=has_partial
+            )
+            
+            if abs(adjusted_reward - base_reward) > 0.001:
+                logger.debug(f"REWARD [{worker_type}]: Human feedback adjustment: {base_reward:.3f} → {adjusted_reward:.3f}")
+            
+            return adjusted_reward
+        
+        return base_reward

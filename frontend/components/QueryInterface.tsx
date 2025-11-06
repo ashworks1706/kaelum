@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { FeedbackPanel } from './FeedbackPanel'
 
 interface StreamEvent {
   type: 'status' | 'router' | 'reasoning_step' | 'answer' | 'verification' | 'done' | 'error' | 'log'
@@ -269,7 +270,7 @@ export function QueryInterface() {
 
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white">
-        <h2 className="text-3xl font-bold mb-2">Agentic Deep Reasoning Trees</h2>
+        <h2 className="text-3xl font-bold mb-2">Agentic Neural Deep Reasoning Trees</h2>
         <p className="text-blue-100">
           Ask anything! The system automatically routes to the right expert (Math, Code, Logic, etc.), 
           explores multiple solution paths with LATS, and verifies answers.
@@ -446,6 +447,22 @@ export function QueryInterface() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Human Feedback Panel - Show after result */}
+      {result && (
+        <FeedbackPanel
+          query={result.query}
+          answer={result.answer}
+          worker={result.worker}
+          confidence={result.confidence}
+          verificationPassed={result.verification_passed}
+          executionTime={result.execution_time}
+          reasoningSteps={result.reasoning_steps}
+          onFeedbackSubmit={() => {
+            addLog('success', 'Feedback submitted successfully!')
+          }}
+        />
       )}
 
       {/* Live Logs Panel */}

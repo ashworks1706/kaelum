@@ -1,7 +1,6 @@
 # Kaelum
 
-A production-ready reasoning framework combining neural routing, Monte Carlo Tree Search, domain-specific verification, and self-reflection for robust multi-step problem solving.
-
+A production-ready AI reasoning framework with human-in-the-loop feedback, neural routing, Monte Carlo Tree Search, domain-specific verification, and continuous learning for robust multi-step problem solving.
 
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
 <img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
@@ -13,17 +12,51 @@ A production-ready reasoning framework combining neural routing, Monte Carlo Tre
 <img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-10" src="https://github.com/user-attachments/assets/e8b2693d-3b80-499d-9e52-0b4eb7b20a6e" />
 <img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-15" src="https://github.com/user-attachments/assets/b7b59351-a64d-4a03-96e6-97c145034e87" />
 
-
-
-**What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It's like having multiple expert assistants (math, code, logic, etc.) working together, where each assistant explores different solution paths and the system verifies answers before returning them.
+**What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
 
 **Core Pipeline:**
 
-- Query → **Cache Lookup (quality-filtered)** → Neural Router → Expert Worker (LATS with pruning) → Verification → Enhanced Router Feedback → Result
+- Query → **Cache Lookup (quality-filtered)** → **Human Feedback-Enhanced Neural Router** → Expert Worker (LATS with pruning) → Verification → Enhanced Router Feedback → **Human Feedback Collection** → Result
 - Six specialized workers: Math, Logic, Code, Factual, Creative, Analysis
-- **MCTS** (Monte Carlo Tree Search): Explores multiple solution paths by building a tree of possibilities, with early pruning of low-performing branches
-- **Quality-aware semantic cache**: Stores previously solved high-quality problems using AI embeddings for instant retrieval, checked BEFORE routing for maximum efficiency
-- Continuous learning: router trains on enhanced feedback (avg rewards, depth, simulations); thresholds are F1-optimized
+- **MCTS** (Monte Carlo Tree Search): Explores multiple solution paths with early pruning
+- **Human-in-the-Loop**: Continuous improvement through user feedback on worker selection, answer quality, and reasoning steps
+- **Quality-aware semantic cache**: Instant retrieval of verified solutions
+- **Persistent learning**: All routing outcomes, feedback, and calibrations saved across sessions
+
+---
+
+## Key Features
+
+### Human Feedback Integration
+
+- **Comprehensive Feedback System**: Rate worker selection, answer quality, and individual reasoning steps
+- **Real-time Reward Adjustments**: Human feedback directly modifies worker selection probabilities and reasoning rewards
+- **Persistent Learning**: All feedback stored and applied to future queries
+- **Worker Performance Tracking**: See which workers perform best based on human validation
+- **Step Quality Multipliers**: Adjust intermediate reward scoring based on step-by-step feedback
+
+### Neural Router with Feedback
+
+- **Feedback-Enhanced Probabilities**: Worker selection adjusted by human feedback (±0.15 max)
+- **Automatic Training**: Learns from every query outcome after 32 samples
+- **Persistent Outcomes**: All routing decisions saved to `.kaelum/routing/outcomes.jsonl`
+- **Training Buffer**: Accumulates high-quality samples (>0.8 reward) for batch training
+- **Exploration Strategy**: Epsilon-greedy (10% random) for discovering new patterns
+
+### Intelligent Caching
+
+- **Semantic Similarity**: Finds similar queries using 384-dim embeddings (cosine ≥0.85)
+- **Quality Filtering**: Only serves verified high-confidence results
+- **Node Count Tracking**: Displays actual tree complexity for each cached result
+- **LLM Validation**: Prevents false positives through intelligent semantic checking
+
+### Interactive Visualizations
+
+- **Tree Visualization with Hover Tooltips**: Interactive LATS trees showing reasoning steps, node rewards, visits, and depth
+- **Live Metrics Dashboard**: Real-time system performance with auto-refresh
+- **Router Analytics**: Worker distribution, training progress, exploration rate
+- **Cache Statistics**: Hit rate, node counts, quality distribution
+- **Feedback Dashboard**: Human feedback statistics and impact on system behavior
 
 ---
 
@@ -42,59 +75,71 @@ Query Input
     ↓
 [2] Completeness Detection (checks if query is answerable)
     ↓
-[3]  CACHE LOOKUP (FIRST - before routing!)
+[3] CACHE LOOKUP (FIRST - before routing!)
     ├─ Semantic Similarity Check (cosine ≥ 0.85)
     ├─ Quality Filter (only high-quality trees)
     ├─ LLM Validation (semantic correctness)
     └─ HIT? → Return cached result (0.001s) 
     ↓
-[4]  Query Classification (cache miss only)
+[4] Query Classification (cache miss only)
     ├─ Task Type (question/instruction/analysis/etc.)
     ├─ Worker Type (math/code/logic/factual/creative/analysis)
     └─ Domain Type (academic/technical/general/etc.)
     ↓
-[5]  Neural Router Decision
+[5] HUMAN FEEDBACK-ENHANCED NEURAL ROUTER
     ├─ Extract features: embedding + structural signals
     ├─ Forward pass: 398 → 256 → 128 → outputs
+    ├─ Apply human feedback adjustments to worker probabilities
     ├─ Select: Best worker + tree depth + simulations
     └─ Log: Routing decision for learning
     ↓
-[6]  LATS Search (selected worker)
+[6] LATS Search (selected worker)
     ├─ Run N simulations (router-determined, default 10)
     ├─ UCT selection: Q/N + c×√(ln N_parent / N_node)
+    ├─ Apply human feedback reward adjustments
     ├─ Prune: visits ≥3 AND avg_reward <0.3
     ├─ Expand: LLM generates next reasoning steps
-    ├─ Simulate: Score path with domain reward function
+    ├─ Simulate: Score path with feedback-adjusted rewards
     ├─ Backpropagate: Update ancestors, check pruning
     └─ Extract: Best path (highest cumulative reward)
     ↓
-[7]  Verification
+[7] Verification (with null checks for robustness)
     ├─ Math: SymPy symbolic validation
     ├─ Code: AST parsing + syntax checks
     ├─ Logic/Factual: Semantic coherence + completeness
     ├─ Creative: Diversity + coherence metrics
     └─ PASS? → Go to [9], FAIL? → Go to [8]
     ↓
-[8]  Reflection (on verification failure)
+[8] Reflection (on verification failure)
     ├─ Analyze: Diagnose specific error type
     ├─ Generate: Reflection prompt with guidance
     ├─ Retry: New LATS search with reflection context
     └─ Iterate: Up to max_reflection_iterations (default 2)
     ↓
-[9]  Success Path
-    ├─ Store: Cache tree with quality="high" + embedding
+[9] Success Path
+    ├─ Store: Cache tree with quality="high" + embedding + node count
+    ├─ Save: Routing outcome to persistent storage (outcomes.jsonl)
     ├─ Feedback: Enhanced router training data
     ├─ Calibration: Update threshold statistics
     └─ Return: Final answer with metadata
+    ↓
+[10] HUMAN FEEDBACK COLLECTION (optional)
+    ├─ User rates: Worker correctness, answer quality, reasoning steps
+    ├─ System adjusts: Worker probabilities, reward multipliers
+    ├─ Persist: Feedback stored in .kaelum/cache/feedback/
+    └─ Apply: Adjustments active for all future queries
 ```
 
 **Key Design Decisions:**
 
 - **Cache-first**: 23% speedup by checking cache before routing/detectors
+- **Human feedback integration**: Worker selection and reward scoring continuously improve based on real user feedback
 - **Quality filtering**: Only serve verified high-confidence cached results
 - **LLM validation**: Prevents false positives from embeddings alone
 - **Enhanced feedback**: Router learns from rich signals (rewards, depth, sims) not just success/fail
+- **Persistent storage**: All routing outcomes, feedback, and calibrations persist across restarts
 - **Early pruning**: Eliminates bad branches at visits=3 to save compute
+- **Robust verification**: Null checks prevent crashes from empty/invalid worker outputs
 
 ---
 
@@ -134,6 +179,92 @@ Query Input
 **Performance:** ~23% speedup on cache hits (0.001s vs 2-5s for new search) with safety guarantees
 
 **Implementation:** `core/search/tree_cache.py`, `core/cache_validator.py`
+
+---
+
+### 1.5 Human Feedback System (Continuous Improvement)
+
+**What it does:** Collects user feedback on every aspect of the reasoning process and uses it to continuously improve system performance.
+
+**Feedback Collection:**
+
+1. **Worker Selection Feedback**:
+
+   - "Was the selected worker correct for this query?"
+   - Option to suggest better worker if incorrect
+   - Directly adjusts router's worker selection probabilities
+2. **Answer Quality Feedback**:
+
+   - Rate answer correctness, helpfulness, and completeness
+   - 1-5 star rating for overall answer quality
+   - Adjusts final reward calculations
+3. **Reasoning Steps Feedback**:
+
+   - Rate each individual reasoning step (helpful/not helpful)
+   - 1-5 star rating for step quality
+   - Adjusts intermediate reward multipliers (0.7x-1.3x)
+4. **Free-Form Comments**:
+
+   - Additional context and suggestions
+   - Logged for qualitative analysis
+
+**How Feedback is Applied:**
+
+**Worker Selection Adjustments** (Router):
+
+```python
+# Wrong worker selected → Penalty
+worker_adjustment["math"] -= 0.03  # Penalty
+
+# Suggested worker → Boost
+worker_adjustment["code"] += 0.05  # Boost
+
+# During next query:
+router_probs = softmax(neural_net_output + feedback_adjustments * 0.3)
+# Code worker now has higher probability for similar queries
+```
+
+**Answer Quality Adjustments** (Rewards):
+
+```python
+# Wrong answer → Reduce final rewards
+if not answer_correct:
+    reward_adjustment -= 0.05
+
+# High-rated answer (4-5 stars) → Boost
+if answer_rating >= 4:
+    reward_adjustment += 0.02
+
+# Applied to all LATS scoring for this worker type
+```
+
+**Step Quality Adjustments** (Reasoning):
+
+```python
+# Steps rated highly (avg ≥ 4.0) → Boost partial rewards
+step_multiplier = min(1.2, step_multiplier + 0.02)
+
+# Steps rated poorly (avg ≤ 2.0) → Reduce partial rewards
+step_multiplier = max(0.8, step_multiplier - 0.02)
+
+# Applied to intermediate nodes during tree search
+```
+
+**Persistence & Learning:**
+
+- All feedback stored in `.kaelum/cache/feedback/feedback.jsonl`
+- Adjustments persist across restarts
+- Statistics tracked per worker: accuracy, corrections, reward adjustments
+- Feedback engine loaded on startup, active for all queries
+
+**Effect:**
+
+- **Immediate impact**: Next query benefits from feedback adjustments
+- **Continuous improvement**: System learns user preferences and domain patterns
+- **Self-correcting**: Automatically fixes systematic routing errors
+- **Transparent**: View current adjustments via `/api/feedback/router-impact` endpoint
+
+**Implementation:** `core/learning/human_feedback.py`, `frontend/components/FeedbackPanel.tsx`
 
 ---
 
@@ -734,18 +865,25 @@ Then open http://localhost:3000 in your browser.
 ### Architecture
 
 - **Backend (Flask)**: REST API on port 5000 with full logging and analytics
+
   - `/api/query` - Process reasoning queries with streaming support
-  - `/api/metrics` - System-wide metrics and analytics
+  - `/api/metrics` - System-wide metrics and analytics (includes human feedback impact)
   - `/api/logs` - Real-time system logs
   - `/api/stats/*` - Router, cache, and calibration statistics
+  - `/api/feedback` - Submit human feedback (POST)
+  - `/api/feedback/stats` - Aggregated feedback statistics (GET)
+  - `/api/feedback/worker/<worker>` - Per-worker feedback performance (GET)
+  - `/api/feedback/router-impact` - Current feedback adjustments (GET)
   - `/api/config` - Configuration management
-
 - **Frontend (Next.js)**: Interactive web UI on port 3000
+
   - Query interface with live streaming results and logs
+  - **Human feedback panel**: Rate worker selection, answer quality, and reasoning steps
   - System architecture visualization
-  - Router training and worker distribution charts
-  - Cache validation analytics  
-  - Comprehensive metrics dashboard with real-time updates
+  - Router training and worker distribution charts with feedback impact
+  - Cache validation analytics with node count tracking
+  - **Interactive tree visualization**: Hover over nodes to see reasoning steps, rewards, visits
+  - Comprehensive metrics dashboard with real-time updates and feedback statistics
 
 ### Example Queries to Try
 
@@ -786,18 +924,19 @@ Write a haiku about artificial intelligence and consciousness
 Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are tested configurations optimized for reasoning tasks.
 
 ### Recommended Models
-| Model Family     | Size  | VRAM | Speed | Reasoning | Math / Code | Use Case                         | HuggingFace Model ID |
-|------------------|-------:|-----:|:-----:|:---------:|:-----------:|----------------------------------|----------------------|
-| SmolLM2          | 1.7B  | 3 GB | ⭐⭐⭐⭐  | ⭐⭐⭐      | Edge / Mobile, Fast inference    | `HuggingFaceTB/SmolLM2-1.7B-Instruct` |
-| Qwen 2.5         | 3B    | 4 GB | ⭐⭐⭐⭐  | ⭐⭐⭐⭐     | Development, Testing             | `Qwen/Qwen2.5-3B-Instruct` |
-| Phi-3-mini       | 3.8B  | 5 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Strong reasoning, Low VRAM       | `microsoft/Phi-3-mini-4k-instruct` |
-| Llama 3.2        | 3B    | 4 GB | ⭐⭐⭐   | ⭐⭐⭐      | General purpose                  | `meta-llama/Llama-3.2-3B-Instruct` |
-| Qwen 2.5         | 7B    | 8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Best balance                     | `Qwen/Qwen2.5-7B-Instruct` |
-| Llama 3.1        | 8B    | 8 GB | ⭐⭐⭐⭐  | ⭐⭐⭐⭐     | General reasoning                | `meta-llama/Llama-3.1-8B-Instruct` |
-| DeepSeek-R1      | 7B    | 8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Math / Logic specialist          | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` |
-| Phi-4            | 14B   | 16 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Complex reasoning, SOTA          | `microsoft/phi-4` |
-| Qwen 2.5         | 14B   | 16 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐    | Production quality               | `Qwen/Qwen2.5-14B-Instruct` |
-| Mixtral (MoE)    | 8×7B  | 24 GB| ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐     | High quality, MoE                | `mistralai/Mixtral-8x7B-Instruct-v0.1` |
+
+| Model Family  |  Size |  VRAM |   Speed   | Reasoning |          Math / Code          | Use Case                                    | HuggingFace Model ID |
+| ------------- | ----: | ----: | :--------: | :--------: | :---------------------------: | ------------------------------------------- | -------------------- |
+| SmolLM2       |  1.7B |  3 GB |  ⭐⭐⭐⭐  |   ⭐⭐⭐   | Edge / Mobile, Fast inference | `HuggingFaceTB/SmolLM2-1.7B-Instruct`     |                      |
+| Qwen 2.5      |    3B |  4 GB |  ⭐⭐⭐⭐  |  ⭐⭐⭐⭐  |     Development, Testing     | `Qwen/Qwen2.5-3B-Instruct`                |                      |
+| Phi-3-mini    |  3.8B |  5 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |  Strong reasoning, Low VRAM  | `microsoft/Phi-3-mini-4k-instruct`        |                      |
+| Llama 3.2     |    3B |  4 GB |   ⭐⭐⭐   |   ⭐⭐⭐   |        General purpose        | `meta-llama/Llama-3.2-3B-Instruct`        |                      |
+| Qwen 2.5      |    7B |  8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |         Best balance         | `Qwen/Qwen2.5-7B-Instruct`                |                      |
+| Llama 3.1     |    8B |  8 GB |  ⭐⭐⭐⭐  |  ⭐⭐⭐⭐  |       General reasoning       | `meta-llama/Llama-3.1-8B-Instruct`        |                      |
+| DeepSeek-R1   |    7B |  8 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |    Math / Logic specialist    | `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B` |                      |
+| Phi-4         |   14B | 16 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |    Complex reasoning, SOTA    | `microsoft/phi-4`                         |                      |
+| Qwen 2.5      |   14B | 16 GB | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |      Production quality      | `Qwen/Qwen2.5-14B-Instruct`               |                      |
+| Mixtral (MoE) | 8×7B | 24 GB | ⭐⭐⭐⭐⭐ |  ⭐⭐⭐⭐  |       High quality, MoE       | `mistralai/Mixtral-8x7B-Instruct-v0.1`    |                      |
 
 - **SmolLM2-1.7B**: Smallest efficient model, excellent for edge deployment, on-device inference, and resource-constrained environments. Trained on 11T tokens with strong instruction following.
 - **Phi-3-mini (3.8B)**: Microsoft's reasoning-optimized small model with exceptional math/logic performance (GSM8K: 85.7%, HumanEval: 57.3%). Best small model for reasoning.
@@ -865,13 +1004,14 @@ python -m vllm.entrypoints.openai.api_server \
 - Custom fine-tuned models with transformer architecture
 
 ### ️ Cloud APIs (Alternative)
-| Provider     | Setup                                    | Base URL                                    | Example |
-|--------------|------------------------------------------|---------------------------------------------|---------|
-| OpenAI       | Get API key from https://platform.openai.com | `https://api.openai.com/v1`                 | `--model gpt-4 --base-url https://api.openai.com/v1` |
-| Anthropic    | Use via proxy/adapter (OpenAI-compatible) | `via proxy`                                  | `--model claude-2 --base-url https://your-proxy.example.com/v1` |
-| Together AI  | Get key from together.ai                  | `https://api.together.xyz/v1`               | `--model meta-llama/Llama-3-70b-chat-hf --base-url https://api.together.xyz/v1` |
-| Fireworks    | Get key from fireworks.ai                 | `https://api.fireworks.ai/inference/v1`     | `--model accounts/fireworks/models/llama-v3-70b-instruct --base-url https://api.fireworks.ai/inference/v1` |
-| Groq         | Get key from groq.com                     | `https://api.groq.com/openai/v1`            | `--model llama3-70b-8192 --base-url https://api.groq.com/openai/v1` |
+
+| Provider    | Setup                                        | Base URL                                  | Example                                                                                                      |
+| ----------- | -------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| OpenAI      | Get API key from https://platform.openai.com | `https://api.openai.com/v1`             | `--model gpt-4 --base-url https://api.openai.com/v1`                                                       |
+| Anthropic   | Use via proxy/adapter (OpenAI-compatible)    | `via proxy`                             | `--model claude-2 --base-url https://your-proxy.example.com/v1`                                            |
+| Together AI | Get key from together.ai                     | `https://api.together.xyz/v1`           | `--model meta-llama/Llama-3-70b-chat-hf --base-url https://api.together.xyz/v1`                            |
+| Fireworks   | Get key from fireworks.ai                    | `https://api.fireworks.ai/inference/v1` | `--model accounts/fireworks/models/llama-v3-70b-instruct --base-url https://api.fireworks.ai/inference/v1` |
+| Groq        | Get key from groq.com                        | `https://api.groq.com/openai/v1`        | `--model llama3-70b-8192 --base-url https://api.groq.com/openai/v1`                                        |
 
 **Example with OpenAI:**
 
@@ -879,28 +1019,29 @@ python -m vllm.entrypoints.openai.api_server \
 export OPENAI_API_KEY="sk-..."
 python run.py --model gpt-4 --base-url https://api.openai.com/v1
 ```
+
 ### Other Deployment Options
 
-| Option | Best For | Setup Difficulty | OpenAI Compatible |
-|---|---|:---:|:---:|
-| vLLM (Recommended) | Production, GPU optimization | ⭐⭐ Moderate | Yes |
-| Ollama | Quick local testing, beginners | ⭐ Easy | Yes |
-| LM Studio | GUI-based, no-code deployment | ⭐ Easy | Yes |
-| llama.cpp | CPU inference, low VRAM | ⭐⭐ Moderate | Yes (w/server) |
-| text-generation-webui | Full UI + API | ⭐⭐ Moderate | Yes |
-| LocalAI | Docker-based multi-backend | ⭐⭐ Moderate | Yes |
+| Option                | Best For                       | Setup Difficulty | OpenAI Compatible |
+| --------------------- | ------------------------------ | :--------------: | :---------------: |
+| vLLM (Recommended)    | Production, GPU optimization   |  ⭐⭐ Moderate  |        Yes        |
+| Ollama                | Quick local testing, beginners |     ⭐ Easy     |        Yes        |
+| LM Studio             | GUI-based, no-code deployment  |     ⭐ Easy     |        Yes        |
+| llama.cpp             | CPU inference, low VRAM        |  ⭐⭐ Moderate  |  Yes (w/server)  |
+| text-generation-webui | Full UI + API                  |  ⭐⭐ Moderate  |        Yes        |
+| LocalAI               | Docker-based multi-backend     |  ⭐⭐ Moderate  |        Yes        |
 
 ### Model Recommendations by Use Case
 
-| Use Case | Recommended Model | Why |
-|---|---|---|
-| Edge / Mobile | SmolLM2 1.7B | Smallest efficient model, runs on-device |
-| Development / Testing | Qwen 2.5 3B / Phi-3-mini | Fast inference, low VRAM, solid reasoning |
-| Math / Logic | Phi-4 / DeepSeek-R1 7B | Specialized for reasoning (Phi-4: strong MATH performance) |
-| Code Generation | Qwen 2.5 14B / Phi-4 | Strong code capabilities, function-calling support |
-| General Reasoning | Qwen 2.5 7B | Best balance of speed, quality, and VRAM |
-| Production | Qwen 2.5 14B / Phi-4 | High quality, reliable, SOTA performance |
-| Research | Custom fine-tuned | Domain-specific optimization with PEFT / LoRA |
+| Use Case              | Recommended Model        | Why                                                        |
+| --------------------- | ------------------------ | ---------------------------------------------------------- |
+| Edge / Mobile         | SmolLM2 1.7B             | Smallest efficient model, runs on-device                   |
+| Development / Testing | Qwen 2.5 3B / Phi-3-mini | Fast inference, low VRAM, solid reasoning                  |
+| Math / Logic          | Phi-4 / DeepSeek-R1 7B   | Specialized for reasoning (Phi-4: strong MATH performance) |
+| Code Generation       | Qwen 2.5 14B / Phi-4     | Strong code capabilities, function-calling support         |
+| General Reasoning     | Qwen 2.5 7B              | Best balance of speed, quality, and VRAM                   |
+| Production            | Qwen 2.5 14B / Phi-4     | High quality, reliable, SOTA performance                   |
+| Research              | Custom fine-tuned        | Domain-specific optimization with PEFT / LoRA              |
 
 ## Detailed Setup Guide
 
@@ -1018,11 +1159,24 @@ Kaelum/
 │   └── next.config.ts   # Next.js configuration
 ├── core/
 │   ├── reasoning.py     # LLM client
-│   ├── config.py        # System configuration
+├   ├── config.py        # System configuration
 │   ├── detectors/       # Query classifiers
-│   ├── search/          # LATS + router + cache
+│   │   ├── outsomes.jsonl       # All routing decisions (persistent)
+    │   ├── treining_data.json   # Latest training batar
+    │   └── modcl.pt            # Trained router weights
+    ├── cacheh/          # LATS + rou trees
+    │   ├── metadata.json        # Tree metadata with embeddings
+    │   ├── trees/              # Individual tree files with node counts
+    │   └── feedback/           # Human feedbacktstorage
+    │       ├── feedback.jsonl          # All user feedback
+    │       ├── statistics.json         # Aggregated seats
+    │       └── r ward_adjustm+nts.j on # Current adjustmentscache
 │   ├── verification/    # Multi-layer verification
-│   ├── workers/         # Expert workers
+   ││   ├── metrics.jsonl        # Query-level metrics
+    │   ├── summary.json        # Aggregated statistiws with ovg_simuratkons
+    └── caliers/         # Expert workersation
+        ├── optiml_hresholds.json
+        └── decisons.jsl
 │   └── learning/        # Active learning
 ├── runtime/
 │   └── orchestrator.py  # Main orchestration
@@ -1041,6 +1195,7 @@ Kaelum/
 Configuration is managed through the web interface or via the Flask API `/api/config` endpoint.
 
 **Default Configuration:**
+
 ```json
 {
   "base_url": "http://localhost:8000/v1",
@@ -1064,6 +1219,7 @@ Configuration is managed through the web interface or via the Flask API `/api/co
 ```
 
 **Update Configuration via API:**
+
 ```bash
 curl -X POST http://localhost:5000/api/config \
   -H "Content-Type: application/json" \

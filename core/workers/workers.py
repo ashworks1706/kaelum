@@ -25,6 +25,7 @@ class WorkerSpecialty(Enum):
 
 
 @dataclass
+@dataclass
 class WorkerResult:
     answer: str
     confidence: float
@@ -34,9 +35,10 @@ class WorkerResult:
     execution_time: float
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    lats_tree: Optional[Any] = None  # Store the full LATS tree for visualization
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "answer": self.answer,
             "confidence": self.confidence,
             "reasoning_steps": self.reasoning_steps,
@@ -46,6 +48,15 @@ class WorkerResult:
             "error": self.error,
             "metadata": self.metadata or {}
         }
+        
+        # Include serialized LATS tree if available
+        if self.lats_tree is not None:
+            try:
+                result["lats_tree"] = self.lats_tree.root.to_dict()
+            except:
+                pass
+        
+        return result
 
 
 class WorkerAgent(ABC):

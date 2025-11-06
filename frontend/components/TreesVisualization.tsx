@@ -53,6 +53,9 @@ export function TreesVisualization() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const nodePositionsRef = useRef<Map<string, { x: number, y: number, radius: number, node: TreeNode }>>(new Map())
 
   // Fetch trees and cache stats
   useEffect(() => {
@@ -142,6 +145,9 @@ export function TreesVisualization() {
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // Clear node positions
+    nodePositionsRef.current.clear()
 
     // Calculate layout
     const nodeRadius = 20
@@ -149,6 +155,9 @@ export function TreesVisualization() {
     const horizontalSpacing = 60
 
     const drawNode = (node: TreeNode, x: number, y: number, parentX?: number, parentY?: number) => {
+      // Store node position for hover detection
+      nodePositionsRef.current.set(node.id, { x, y, radius: nodeRadius, node })
+      
       // Draw connection to parent
       if (parentX !== undefined && parentY !== undefined) {
         ctx.beginPath()
@@ -221,6 +230,34 @@ export function TreesVisualization() {
       drawTree(selectedTree)
     }
   }, [selectedTree, drawTree])
+
+  // Handle mouse move on canvas for hover detection
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    // Check if hovering over any node
+    let foundNode: TreeNode | null = null
+    for (const [, pos] of nodePositionsRef.current) {
+      const distance = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2))
+      if (distance <= pos.radius) {
+        foundNode = pos.node
+        setTooltipPos({ x: e.clientX, y: e.clientY })
+        break
+      }
+    }
+
+    setHoveredNode(foundNode)
+    canvas.style.cursor = foundNode ? 'pointer' : 'default'
+  }
+
+  const handleCanvasMouseLeave = () => {
+    setHoveredNode(null)
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -494,7 +531,105 @@ export function TreesVisualization() {
                   ref={canvasRef}
                   className="w-full h-full"
                   style={{ imageRendering: 'crisp-edges' }}
+                  onMouseMove={handleCanvasMouseMove}
+                  onMouseLeave={handleCanvasMouseLeave}
                 />
+                
+                {/* Hover Tooltip */}
+                <AnimatePresence>
+                  {hoveredNode && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.15 }}
+                      className="fixed pointer-events-none z-50"
+                      style={{
+                        left: tooltipPos.x + 15,
+                        top: tooltipPos.y + 15,
+                        maxWidth: '400px'
+                      }}
+                    >
+                      <div className="bg-slate-900 border-2 border-indigo-500 rounded-xl shadow-2xl shadow-indigo-500/30 p-4">
+                        {/* Node Header */}
+                        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-700">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: getNodeColor(hoveredNode, false) }}
+                            />
+                            <span className="text-white font-bold text-sm">
+                              Node {hoveredNode.id.slice(0, 8)}
+                            </span>
+                          </div>
+                          {hoveredNode.is_best_path && (
+                            <span className="text-yellow-400 text-lg">★</span>
+                          )}
+                          {hoveredNode.is_pruned && (
+                            <span className="text-red-400 text-lg">✗</span>
+                          )}
+                        </div>
+                        
+                        {/* Reasoning Step */}
+                        <div className="mb-3">
+                          <div className="text-indigo-400 text-xs font-semibold mb-1 uppercase tracking-wide">
+                            💭 Reasoning Step
+                          </div>
+                          <div className="text-white text-sm bg-slate-800/50 rounded-lg p-2 max-h-32 overflow-y-auto">
+                            {hoveredNode.query || 'No reasoning text available'}
+                          </div>
+                        </div>
+
+                        {/* Statistics */}
+                        <div className="grid grid-cols-2 gap-3 mb-2">
+                          <div className="bg-slate-800/50 rounded-lg p-2">
+                            <div className="text-slate-400 text-xs mb-1">Visits</div>
+                            <div className="text-white font-bold text-lg">{hoveredNode.visits}</div>
+                          </div>
+                          <div className="bg-slate-800/50 rounded-lg p-2">
+                            <div className="text-slate-400 text-xs mb-1">Depth</div>
+                            <div className="text-blue-400 font-bold text-lg">{hoveredNode.depth}</div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-slate-800/50 rounded-lg p-2">
+                            <div className="text-slate-400 text-xs mb-1">Avg Reward</div>
+                            <div className="text-green-400 font-bold text-lg">{hoveredNode.avg_reward.toFixed(3)}</div>
+                          </div>
+                          <div className="bg-slate-800/50 rounded-lg p-2">
+                            <div className="text-slate-400 text-xs mb-1">Total Reward</div>
+                            <div className="text-emerald-400 font-bold text-lg">{hoveredNode.total_reward.toFixed(3)}</div>
+                          </div>
+                        </div>
+
+                        {/* Node Type Badges */}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {hoveredNode.is_best_path && (
+                            <span className="px-2 py-1 bg-yellow-900/30 text-yellow-400 text-xs rounded-full border border-yellow-600">
+                              ⭐ Best Path
+                            </span>
+                          )}
+                          {hoveredNode.is_pruned && (
+                            <span className="px-2 py-1 bg-red-900/30 text-red-400 text-xs rounded-full border border-red-600">
+                              ✗ Pruned
+                            </span>
+                          )}
+                          {hoveredNode.worker_type && (
+                            <span className="px-2 py-1 bg-indigo-900/30 text-indigo-400 text-xs rounded-full border border-indigo-600">
+                              {hoveredNode.worker_type}
+                            </span>
+                          )}
+                          {hoveredNode.children.length > 0 && (
+                            <span className="px-2 py-1 bg-blue-900/30 text-blue-400 text-xs rounded-full border border-blue-600">
+                              {hoveredNode.children.length} children
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Tree Stats */}

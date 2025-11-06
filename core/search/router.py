@@ -13,6 +13,7 @@ import torch.optim as optim
 from sentence_transformers import SentenceTransformer
 from core.shared_encoder import get_shared_encoder
 from core.paths import DEFAULT_ROUTER_DIR
+from core.learning.human_feedback import HumanFeedbackEngine
 
 from ..detectors import DomainClassifier
 
@@ -170,6 +171,9 @@ class Router:
         self.model_file = self.data_dir / "model.pt"
         self.outcomes = []
         
+        # Load existing outcomes from file if it exists
+        self._load_outcomes()
+        
         # Online learning parameters
         self.buffer_size = buffer_size
         self.exploration_rate = exploration_rate
@@ -181,6 +185,10 @@ class Router:
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
         self.training_buffer = []
         self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
+        
+        # Human feedback integration
+        self.feedback_engine = HumanFeedbackEngine()
+        logger.info(f"ROUTER: Human feedback engine initialized")
         
         if model_path and Path(model_path).exists():
             self._load_model(model_path)
@@ -241,20 +249,39 @@ class Router:
                 
                 worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
                 
+                # APPLY HUMAN FEEDBACK ADJUSTMENTS TO WORKER PROBABILITIES
+                feedback_adjustments = []
+                for idx in range(len(self.idx_to_worker)):
+                    worker_name = self.idx_to_worker[idx]
+                    adjustment = self.feedback_engine.worker_reward_adjustments.get(worker_name, 0.0)
+                    feedback_adjustments.append(adjustment)
+                
+                # Convert adjustments to probability boosts/penalties
+                feedback_tensor = torch.tensor(feedback_adjustments, device=self.device).unsqueeze(0)
+                adjusted_probs = worker_probs + feedback_tensor * 0.3  # Scale feedback impact
+                adjusted_probs = torch.softmax(adjusted_probs, dim=-1)  # Renormalize
+                
+                logger.info("ROUTER: Human feedback adjustments applied:")
+                for idx, adj in enumerate(feedback_adjustments):
+                    if adj != 0:
+                        worker_name = self.idx_to_worker[idx]
+                        logger.info(f"  - {worker_name}: {adj:+.3f} adjustment")
+                
                 # Epsilon-greedy exploration for online learning
                 if self.learning_enabled and np.random.random() < self.exploration_rate:
                     worker_idx = np.random.randint(0, len(self.idx_to_worker))
-                    confidence = worker_probs[0, worker_idx].item()
+                    confidence = adjusted_probs[0, worker_idx].item()
                     logger.info(f"ROUTER: EXPLORATION MODE - Random worker selected")
                 else:
-                    worker_idx = torch.argmax(worker_probs, dim=-1).item()
-                    confidence = worker_probs[0, worker_idx].item()
+                    worker_idx = torch.argmax(adjusted_probs, dim=-1).item()
+                    confidence = adjusted_probs[0, worker_idx].item()
                 
-                # Log all worker probabilities
-                logger.info("ROUTER: Worker probabilities:")
-                for idx, prob in enumerate(worker_probs[0]):
+                # Log all worker probabilities (with feedback adjustments)
+                logger.info("ROUTER: Worker probabilities (feedback-adjusted):")
+                for idx, prob in enumerate(adjusted_probs[0]):
                     worker_name = self.idx_to_worker[idx]
-                    logger.info(f"  - {worker_name}: {prob.item():.3f}")
+                    orig_prob = worker_probs[0, idx].item()
+                    logger.info(f"  - {worker_name}: {prob.item():.3f} (original: {orig_prob:.3f})")
                 
                 max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
                 num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
@@ -336,6 +363,9 @@ class Router:
         logger.info(f"  - Confidence: {result.get('confidence', 0.0):.3f}")
         logger.info(f"  - Reward: {reward:.3f}")
         logger.info(f"  - Training buffer: {len(self.training_buffer)}/{self.buffer_size}")
+        
+        # Save outcome to JSONL file immediately
+        self._save_outcome(outcome)
         
         # Save training data immediately after every query
         self._save_training_data()
@@ -495,6 +525,49 @@ class Router:
         logger.info(f"  - Training steps: {self.training_step_count}")
         logger.info(f"  - Exploration rate: {self.exploration_rate:.3f}")
     
+    def _load_outcomes(self):
+        """Load existing routing outcomes from JSONL file."""
+        if not self.outcomes_file.exists():
+            logger.debug("ROUTER: No existing outcomes file found")
+            return
+        
+        try:
+            count = 0
+            with open(self.outcomes_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        # Reconstruct RoutingOutcome from saved data
+                        outcome = RoutingOutcome(
+                            query=data['query'],
+                            query_type=QueryType(data['query_type']),
+                            decision=RoutingDecision(
+                                worker_specialty=data['worker'],
+                                confidence=data['confidence'],
+                                reasoning=data.get('reasoning', ''),
+                                max_tree_depth=data.get('max_tree_depth', 4),
+                                num_simulations=data.get('num_simulations', 10),
+                                use_cache=data.get('use_cache', True),
+                                query_type=QueryType(data['query_type'])
+                            ),
+                            success=data['success'],
+                            accuracy_score=data.get('accuracy_score', data.get('confidence', 0.5)),
+                            latency_ms=data['latency_ms'],
+                            timestamp=data['timestamp']
+                        )
+                        self.outcomes.append(outcome)
+                        count += 1
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        logger.warning(f"ROUTER: Failed to parse outcome line: {e}")
+                        continue
+            
+            logger.info(f"ROUTER: Loaded {count} existing routing outcomes from {self.outcomes_file}")
+        except Exception as e:
+            logger.error(f"ROUTER: Error loading outcomes: {e}")
+    
     def save_model(self):
         torch.save({
             "model_state_dict": self.policy_network.state_dict(),
@@ -529,4 +602,48 @@ class Router:
             json.dump(data, f, indent=2)
         
         logger.debug(f"ROUTER: Saved {len(data)} training examples to {training_file}")
+    
+    def _save_outcome(self, outcome: RoutingOutcome):
+        """Append a single outcome to the JSONL file."""
+        try:
+            outcome_data = {
+                "query": outcome.query,
+                "query_type": outcome.query_type.value,
+                "worker": outcome.decision.worker_specialty,
+                "success": outcome.success,
+                "confidence": outcome.decision.confidence,
+                "accuracy_score": outcome.accuracy_score,
+                "latency_ms": outcome.latency_ms,
+                "timestamp": outcome.timestamp,
+                "reasoning": outcome.decision.reasoning,
+                "max_tree_depth": outcome.decision.max_tree_depth,
+                "num_simulations": outcome.decision.num_simulations,
+                "use_cache": outcome.decision.use_tree_cache
+            }
+            
+            with open(self.outcomes_file, 'a') as f:
+                f.write(json.dumps(outcome_data) + '\n')
+            
+            logger.debug(f"ROUTER: Saved outcome to {self.outcomes_file}")
+        except Exception as e:
+            logger.error(f"ROUTER: Failed to save outcome: {e}")
+    
+    def get_feedback_enhanced_stats(self) -> Dict[str, Any]:
+        """Get router statistics enhanced with human feedback data."""
+        
+        # Get feedback statistics
+        feedback_stats = self.feedback_engine.get_statistics()
+        
+        # Get worker performance from feedback
+        worker_feedback_performance = {}
+        for worker in self.idx_to_worker.values():
+            worker_feedback_performance[worker] = self.feedback_engine.get_worker_performance(worker)
+        
+        return {
+            "feedback_statistics": feedback_stats,
+            "worker_feedback_performance": worker_feedback_performance,
+            "worker_reward_adjustments": self.feedback_engine.worker_reward_adjustments,
+            "step_quality_multiplier": self.feedback_engine.step_quality_multiplier,
+            "total_feedback_count": feedback_stats.get("total_feedback", 0)
+        }
 

@@ -126,16 +126,27 @@ def query():
                 result = kaelum.kaelum_enhance_reasoning(query_text)
                 execution_time = time.time() - start_time
                 
-                yield f"data: {json.dumps({'type': 'router', 'worker': result.get('worker_used', 'unknown'), 'confidence': result.get('confidence', 0.0)})}\n\n"
+                # Safely extract values with proper defaults
+                worker_used = result.get('worker_used') or 'unknown'
+                confidence = result.get('confidence') or 0.0
+                reasoning_steps = result.get("reasoning_steps") or []
+                suggested_approach = result.get('suggested_approach') or ''
+                verification_passed = result.get('verification_passed') or False
+                cache_hit = result.get('cache_hit') or False
+                iterations = result.get('iterations') or 1
                 
-                for i, step in enumerate(result.get("reasoning_steps", [])):
-                    yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
+                yield f"data: {json.dumps({'type': 'router', 'worker': worker_used, 'confidence': confidence})}\n\n"
                 
-                yield f"data: {json.dumps({'type': 'answer', 'content': result.get('suggested_approach', '')})}\n\n"
-                yield f"data: {json.dumps({'type': 'verification', 'passed': result.get('verification_passed', False)})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': result.get('cache_hit', False), 'iterations': result.get('iterations', 1)})}\n\n"
+                for i, step in enumerate(reasoning_steps):
+                    if step:  # Only yield if step is not None
+                        yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
+                
+                yield f"data: {json.dumps({'type': 'answer', 'content': suggested_approach})}\n\n"
+                yield f"data: {json.dumps({'type': 'verification', 'passed': verification_passed})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'execution_time': execution_time, 'cache_hit': cache_hit, 'iterations': iterations})}\n\n"
             
             except Exception as e:
+                logger.error(f"Error in streaming query: {e}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         
         response = Response(stream_with_context(generate()), mimetype='text/event-stream')
@@ -267,11 +278,23 @@ def router_stats():
         success_rate = success_count / total_queries if total_queries > 0 else 0.0
         buffer_size = current_config.get("router_buffer_size", 32)
         
+        # Get actual router training buffer size if available
+        actual_buffer_size = total_queries % buffer_size if total_queries > 0 else 0
+        
+        # Try to get the actual router's training buffer size from orchestrator
+        try:
+            metrics_data = kaelum.get_metrics()
+            router_info = metrics_data.get('analytics', {}).get('router', {})
+            if 'training_buffer_size' in router_info:
+                actual_buffer_size = router_info['training_buffer_size']
+        except:
+            pass
+        
         return jsonify({
             "total_queries": total_queries,
             "model_trained": model_trained,
             "training_steps": training_steps,
-            "training_buffer_size": total_queries % buffer_size,
+            "training_buffer_size": actual_buffer_size,
             "success_rate": success_rate,
             "workers_distribution": workers_used,
             "recent_queries": training_data[-5:],
@@ -325,9 +348,28 @@ def cache_stats():
         accepted = sum(1 for v in validation_entries if v.get('validation_result', {}).get('valid', False))
         rejected = total_validations - accepted
         
-        cache_files = [{'query': e.get('query', '')[:100], 'worker': e.get('worker_specialty', 'unknown'), 
-                       'nodes': e.get('num_nodes', 0), 'cache_id': e.get('cache_id', '')} 
-                       for e in cache_data[:20]]
+        # Load node counts from actual tree files
+        cache_files = []
+        trees_dir = project_root / ".kaelum" / "cache" / "trees"
+        for e in cache_data[:20]:
+            tree_path = e.get('tree_path', '')
+            node_count = 0
+            
+            # Try to load the tree file to get node count
+            if tree_path and Path(tree_path).exists():
+                try:
+                    with open(tree_path, 'r') as tf:
+                        tree_data = json.load(tf)
+                        node_count = tree_data.get('tree_stats', {}).get('total_nodes', 0)
+                except:
+                    pass
+            
+            cache_files.append({
+                'query': e.get('query', '')[:100], 
+                'worker': e.get('worker_specialty', 'unknown'), 
+                'nodes': node_count,
+                'cache_id': e.get('tree_id', '')
+            })
         
         # Calculate tree-specific stats
         high_quality = sum(1 for e in cache_data if e.get('confidence', 0) > 0.7 or e.get('success', False))
@@ -425,17 +467,24 @@ def get_reasoning_trees():
                 with open(tree_file, 'r') as f:
                     tree_data = json.load(f)
                     
-                    # Extract result data
+                    # Extract result and tree data
                     result = tree_data.get('result', {})
                     metrics = result.get('metrics', {})
+                    lats_tree = tree_data.get('lats_tree', None)
+                    tree_stats = tree_data.get('tree_stats', {})
                     
-                    # Convert to format expected by frontend
-                    tree_info = {
-                        'tree_id': tree_file.stem,
-                        'query': result.get('query', 'Unknown query'),
-                        'worker': result.get('worker', tree_data.get('worker', 'unknown')),
-                        'timestamp': tree_file.stat().st_mtime,
-                        'root': {
+                    # If we have the full LATS tree structure, use it
+                    if lats_tree:
+                        root_node = parse_lats_node(lats_tree)
+                        best_path = extract_best_path(lats_tree)
+                        mark_best_path(root_node, best_path)  # Mark nodes on best path
+                        total_nodes = tree_stats.get('total_nodes', count_nodes(lats_tree))
+                        pruned_nodes = count_pruned_nodes(lats_tree)
+                        max_depth = tree_stats.get('max_depth', metrics.get('tree_depth', 1))
+                        avg_reward = tree_stats.get('avg_reward', result.get('confidence', 0.0))
+                    else:
+                        # Fallback to simple single-node structure for old cache entries
+                        root_node = {
                             'id': 'root',
                             'query': result.get('query', ''),
                             'children': [],
@@ -446,12 +495,25 @@ def get_reasoning_trees():
                             'is_best_path': True,
                             'depth': 0,
                             'worker_type': result.get('worker', 'unknown')
-                        },
-                        'best_path': ['root'],
-                        'total_nodes': metrics.get('num_simulations', 0),
-                        'pruned_nodes': 0,
-                        'max_depth': metrics.get('tree_depth', 1),
-                        'avg_reward': result.get('confidence', 0.0),
+                        }
+                        best_path = ['root']
+                        total_nodes = metrics.get('num_simulations', 0)
+                        pruned_nodes = 0
+                        max_depth = metrics.get('tree_depth', 1)
+                        avg_reward = result.get('confidence', 0.0)
+                    
+                    # Convert to format expected by frontend
+                    tree_info = {
+                        'tree_id': tree_file.stem,
+                        'query': result.get('query', 'Unknown query'),
+                        'worker': result.get('worker', tree_data.get('worker', 'unknown')),
+                        'timestamp': tree_file.stat().st_mtime,
+                        'root': root_node,
+                        'best_path': best_path,
+                        'total_nodes': total_nodes,
+                        'pruned_nodes': pruned_nodes,
+                        'max_depth': max_depth,
+                        'avg_reward': avg_reward,
                         'cache_status': tree_data.get('quality', 'none'),
                         'execution_time': metrics.get('execution_time_ms', 0) / 1000.0,
                         'verification_passed': result.get('verification_passed', False)
@@ -467,6 +529,173 @@ def get_reasoning_trees():
         })
     except Exception as e:
         return jsonify({'error': str(e), 'trees': []}), 500
+
+
+def parse_lats_node(node_dict):
+    """Convert LATS node dict to frontend format"""
+    visits = node_dict.get('visits', 0)
+    value = node_dict.get('value', 0.0)
+    avg_reward = value / visits if visits > 0 else 0.0
+    
+    return {
+        'id': node_dict.get('id', 'unknown'),
+        'query': node_dict.get('state', {}).get('step', node_dict.get('state', {}).get('query', '')),
+        'children': [parse_lats_node(child) for child in node_dict.get('children', [])],
+        'visits': visits,
+        'total_reward': value,
+        'avg_reward': avg_reward,
+        'is_pruned': node_dict.get('pruned', False),
+        'is_best_path': False,  # Will be marked later based on best_path
+        'depth': node_dict.get('state', {}).get('depth', 0),
+        'worker_type': node_dict.get('state', {}).get('worker', 'unknown')
+    }
+
+
+def extract_best_path(tree_dict):
+    """Extract the best path through the tree"""
+    path = []
+    current = tree_dict
+    
+    while current:
+        path.append(current.get('id', 'unknown'))
+        children = current.get('children', [])
+        
+        if not children:
+            break
+        
+        # Find child with highest average reward
+        best_child = max(children, key=lambda c: c.get('value', 0) / max(1, c.get('visits', 1)))
+        current = best_child
+    
+    return path
+
+
+def count_nodes(tree_dict):
+    """Count total nodes in tree"""
+    count = 1
+    for child in tree_dict.get('children', []):
+        count += count_nodes(child)
+    return count
+
+
+def count_pruned_nodes(tree_dict):
+    """Count pruned nodes in tree"""
+    count = 1 if tree_dict.get('pruned', False) else 0
+    for child in tree_dict.get('children', []):
+        count += count_pruned_nodes(child)
+    return count
+
+
+def mark_best_path(node, best_path_ids):
+    """Mark nodes that are on the best path"""
+    if node['id'] in best_path_ids:
+        node['is_best_path'] = True
+    
+    for child in node.get('children', []):
+        mark_best_path(child, best_path_ids)
+
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+    """Submit human feedback to improve system performance."""
+    try:
+        data = request.json
+        
+        # Import feedback engine
+        from core.learning.human_feedback import HumanFeedbackEngine, HumanFeedback
+        import hashlib
+        
+        # Create feedback object
+        query = data.get('query', '')
+        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+        
+        feedback = HumanFeedback(
+            query=query,
+            query_hash=query_hash,
+            timestamp=time.time(),
+            overall_liked=data.get('overall_liked', False),
+            overall_rating=data.get('overall_rating', 3),
+            worker_selected=data.get('worker_selected', ''),
+            worker_correct=data.get('worker_correct', True),
+            answer_correct=data.get('answer_correct', True),
+            answer_helpful=data.get('answer_helpful', True),
+            answer_complete=data.get('answer_complete', True),
+            answer_rating=data.get('answer_rating', 3),
+            confidence_shown=data.get('confidence_shown', 0.0),
+            verification_passed=data.get('verification_passed', False),
+            execution_time=data.get('execution_time', 0.0),
+            suggested_worker=data.get('suggested_worker'),
+            steps_helpful=data.get('steps_helpful', []),
+            steps_rating=data.get('steps_rating', []),
+            comment=data.get('comment')
+        )
+        
+        # Submit feedback
+        engine = HumanFeedbackEngine()
+        result = engine.submit_feedback(feedback)
+        
+        logger.info(f"✅ FEEDBACK: Received and processed feedback for query: {query[:50]}...")
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"❌ FEEDBACK: Error processing feedback: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback/stats', methods=['GET'])
+def get_feedback_stats():
+    """Get aggregated feedback statistics."""
+    try:
+        from core.learning.human_feedback import HumanFeedbackEngine
+        
+        engine = HumanFeedbackEngine()
+        stats = engine.get_statistics()
+        
+        return jsonify(stats)
+    
+    except Exception as e:
+        logger.error(f"❌ FEEDBACK STATS: Error getting stats: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback/worker/<worker>', methods=['GET'])
+def get_worker_feedback(worker):
+    """Get feedback statistics for a specific worker."""
+    try:
+        from core.learning.human_feedback import HumanFeedbackEngine
+        
+        engine = HumanFeedbackEngine()
+        stats = engine.get_worker_performance(worker)
+        
+        return jsonify(stats)
+    
+    except Exception as e:
+        logger.error(f"❌ WORKER FEEDBACK: Error getting worker stats: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback/router-impact', methods=['GET'])
+def get_router_feedback_impact():
+    """Get current impact of human feedback on router decisions."""
+    try:
+        ensure_initialized()
+        
+        # Get feedback-enhanced stats from orchestrator
+        metrics = kaelum.get_metrics()
+        feedback_data = metrics.get('human_feedback', {})
+        
+        return jsonify({
+            "worker_adjustments": feedback_data.get('worker_reward_adjustments', {}),
+            "step_quality_multiplier": feedback_data.get('step_quality_multiplier', 1.0),
+            "worker_performance": feedback_data.get('worker_feedback_performance', {}),
+            "total_feedback": feedback_data.get('total_feedback_count', 0),
+            "statistics": feedback_data.get('feedback_statistics', {})
+        })
+    
+    except Exception as e:
+        logger.error(f"❌ ROUTER FEEDBACK IMPACT: Error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':

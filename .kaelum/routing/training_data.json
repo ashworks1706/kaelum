@@ -1,20 +1,29 @@
 [
   {
-    "query": "What are the benefits of renewable energy?",
+    "query": "A painter is painting a room. She needs to paint the walls and the ceiling. The walls are 10 feet tall and 12 feet wide. The ceiling is 12 feet long and 12 feet wide. How much area will she need to paint?\t",
     "query_type": "analysis",
     "worker": "analysis",
     "success": false,
     "confidence": 0.5,
-    "latency_ms": 37887.40372657776,
-    "timestamp": 1762410799.7977026
+    "latency_ms": 64922.77812957764,
+    "timestamp": 1762418942.4277802
   },
   {
-    "query": "Explain the logical fallacy in: All dogs bark. My cat barks. Therefore my cat is a dog.",
+    "query": "Given the string: \"A# B# #B A# A# #B #B A# A# #B A# A#\" Could you check for any instances of \"A# #B\" and replace them with \"B# #A\"?\t",
+    "query_type": "analysis",
+    "worker": "analysis",
+    "success": false,
+    "confidence": 0.5,
+    "latency_ms": 30516.68930053711,
+    "timestamp": 1762419101.774116
+  },
+  {
+    "query": "Give me a list of 20 words that have 9 letters.\t",
     "query_type": "creative",
     "worker": "creative",
     "success": true,
-    "confidence": 0.8063063063063063,
-    "latency_ms": 26383.375644683838,
-    "timestamp": 1762411170.7696297
+    "confidence": 0.7,
+    "latency_ms": 52235.90397834778,
+    "timestamp": 1762419325.3893604
   }
 ]

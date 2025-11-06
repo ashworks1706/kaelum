@@ -1,0 +1,12 @@
+{
+  "worker_adjustments": {
+    "math": 0.1,
+    "code": 0.0,
+    "logic": 0.0,
+    "factual": 0.0,
+    "creative": -0.05,
+    "analysis": -0.15
+  },
+  "step_quality_multiplier": 1.0,
+  "last_updated": 1762419367.4881403
+}

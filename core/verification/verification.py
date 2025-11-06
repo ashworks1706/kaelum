@@ -304,6 +304,16 @@ class VerificationEngine:
     def _verify_code(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
+        # Handle None or empty answer
+        if not answer:
+            issues.append("No answer provided")
+            return {
+                "passed": False,
+                "confidence": 0.0,
+                "issues": issues,
+                "details": {"syntax_valid": False}
+            }
+        
         code_block_pattern = r'```(?:\w+)?\n(.*?)```'
         matches = re.findall(code_block_pattern, answer, re.DOTALL)
         code = matches[0].strip() if matches else None
@@ -396,6 +406,16 @@ class VerificationEngine:
     def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
         issues = []
         
+        # Handle None or empty answer
+        if not answer:
+            issues.append("No answer provided")
+            return {
+                "passed": False,
+                "confidence": 0.0,
+                "issues": issues,
+                "details": {"has_conclusion": False, "relevance": 0.0}
+            }
+        
         if len(reasoning_steps) < 2:
             issues.append("Insufficient logical reasoning steps")
         
@@ -434,6 +454,16 @@ class VerificationEngine:
     def _verify_factual(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
+        # Handle None or empty answer
+        if not answer:
+            issues.append("No answer provided")
+            return {
+                "passed": False,
+                "confidence": 0.0,
+                "issues": issues,
+                "details": {"relevance": 0.0, "has_specifics": False}
+            }
+        
         if len(answer) < 20:
             issues.append("Answer too short for factual query")
         
@@ -460,6 +490,16 @@ class VerificationEngine:
     
     def _verify_creative(self, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
+        
+        # Handle None or empty answer
+        if not answer:
+            issues.append("No answer provided")
+            return {
+                "passed": False,
+                "confidence": 0.0,
+                "issues": issues,
+                "details": {"word_count": 0, "unique_words": 0, "has_imagery": False}
+            }
         
         if len(answer) < 50:
             issues.append("Creative content too short")
@@ -537,6 +577,16 @@ class VerificationEngine:
     
     def _verify_analysis(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
+        
+        # Handle None or empty answer
+        if not answer:
+            issues.append("No answer provided")
+            return {
+                "passed": False,
+                "confidence": 0.0,
+                "issues": issues,
+                "details": {"relevance": 0.0, "step_count": len(reasoning_steps)}
+            }
         
         if len(reasoning_steps) < 2:
             issues.append("Insufficient analytical reasoning")

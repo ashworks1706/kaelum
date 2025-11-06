@@ -294,7 +294,13 @@ class KaelumOrchestrator:
                 logger.info(f"WORKER: ✓ Execution complete in {worker_time:.2f}s")
             logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
             logger.info(f"WORKER: Confidence = {result.confidence:.3f}")
-            logger.info(f"WORKER: Answer preview: {result.answer[:100]}...")
+            
+            # Safely log answer preview
+            if result.answer:
+                preview = result.answer[:100] if len(result.answer) > 100 else result.answer
+                logger.info(f"WORKER: Answer preview: {preview}...")
+            else:
+                logger.warning(f"WORKER: No answer generated (answer is None or empty)")
             
             # Step 3: Verification - check if reasoning is correct
             logger.info("\n" + "=" * 70)
@@ -389,18 +395,30 @@ class KaelumOrchestrator:
             }
         }
         
+        # Prepare cache data with full LATS tree structure
+        cache_data = {
+            "result": response,
+            "quality": "high" if verification_passed and final_result.confidence > 0.7 else "low",
+            "confidence": final_result.confidence,
+            "worker": worker_specialty
+        }
+        
+        # Include full LATS tree structure if available
+        if hasattr(final_result, 'lats_tree') and final_result.lats_tree is not None:
+            try:
+                cache_data["lats_tree"] = final_result.lats_tree.root.to_dict()
+                cache_data["tree_stats"] = {
+                    "total_nodes": len(final_result.lats_tree.nodes),
+                    "avg_reward": final_result.lats_tree.get_avg_reward(),
+                    "max_depth": final_result.metadata.get("tree_depth", 0)
+                }
+                logger.info(f"CACHE: Including full LATS tree with {len(final_result.lats_tree.nodes)} nodes")
+            except Exception as e:
+                logger.warning(f"CACHE: Failed to serialize LATS tree: {e}")
+        
         # Store in cache with quality metadata
-        quality = "high" if verification_passed and final_result.confidence > 0.7 else "low"
-        self.tree_cache.store(
-            query_embedding,
-            {
-                "result": response,
-                "quality": quality,
-                "confidence": final_result.confidence,
-                "worker": worker_specialty
-            }
-        )
-        logger.info(f"CACHE: Stored result with quality={quality}")
+        self.tree_cache.store(query_embedding, cache_data)
+        logger.info(f"CACHE: Stored result with quality={cache_data['quality']}")
         
         # Step 6: Record outcome for router learning with enhanced feedback
         if self.router:
@@ -420,7 +438,7 @@ class KaelumOrchestrator:
                 "actual_depth": actual_depth,
                 "predicted_sims": num_sims,
                 "actual_sims": actual_sims,
-                "cache_quality": quality
+                "cache_quality": cache_data['quality']
             }
             self.router.record_outcome(routing_decision, outcome)
         
@@ -468,9 +486,24 @@ class KaelumOrchestrator:
         session_metrics = self.metrics.get_session_metrics(session_id)
         analytics = self.metrics.get_analytics_summary()
         
+        # Add router metrics if available
+        router_metrics = {}
+        feedback_metrics = {}
+        if self.router:
+            router_metrics = {
+                "total_outcomes": len(self.router.outcomes),
+                "training_buffer_size": len(self.router.training_buffer),
+                "training_steps": self.router.training_step_count,
+                "exploration_rate": self.router.exploration_rate
+            }
+            # Add human feedback enhanced stats
+            feedback_metrics = self.router.get_feedback_enhanced_stats()
+        
         return {
             "session": session_metrics,
-            "analytics": analytics
+            "analytics": analytics,
+            "router": router_metrics,
+            "human_feedback": feedback_metrics
         }
     
     def get_active_learning_stats(self) -> Dict[str, Any]:

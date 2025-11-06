@@ -141,6 +141,7 @@ class CreativeWorker(WorkerAgent):
             verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
+            lats_tree=tree,  # Include the full LATS tree
             metadata={
                 'task_type': task_type,
                 'diversity_score': metrics['diversity'],

@@ -85,6 +85,7 @@ class AnalyticsDashboard:
         if summary.get('total_queries', 0) > 0:
             summary['avg_time_ms'] = summary['total_time_ms'] / summary['total_queries']
             summary['avg_tokens'] = summary['total_tokens'] / summary['total_queries']
+            summary['avg_simulations'] = summary.get('total_simulations', 0) / summary['total_queries']
             summary['verification_rate'] = summary.get('verified_queries', 0) / summary['total_queries']
             summary['cache_hit_rate'] = summary.get('cache_hits', 0) / summary['total_queries']
         

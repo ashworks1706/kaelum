@@ -1,0 +1,25 @@
+{
+  "total_feedback": 4,
+  "worker_accuracy": {
+    "analysis": 0.3333333333333333,
+    "creative": 1.0
+  },
+  "worker_preference": {
+    "analysis": 3,
+    "creative": 1
+  },
+  "worker_corrections": {
+    "analysis": {
+      "math": 2
+    },
+    "creative": {}
+  },
+  "answer_accuracy": 0.25,
+  "answer_helpfulness": 0.75,
+  "answer_completeness": 1.0,
+  "avg_answer_rating": 2.75,
+  "avg_step_rating": 3.0,
+  "step_helpfulness_rate": 1.0,
+  "overall_satisfaction": 0.25,
+  "avg_overall_rating": 3.0
+}
