@@ -1,7 +1,5 @@
 export { QueryInterface } from './QueryInterface'
-export { SystemArchitecture } from './SystemArchitecture'
 export { RouterVisualization } from './RouterVisualization'
-export { CacheVisualization } from './CacheVisualization'
 export { MetricsDashboard } from './MetricsDashboard'
 export { ConfigPanel } from './ConfigPanel'
 export { FineTuningPanel } from './FineTuningPanel'

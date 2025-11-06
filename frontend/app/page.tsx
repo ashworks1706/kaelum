@@ -3,9 +3,7 @@
 import { useState, useEffect } from 'react'
 import { QueryInterface } from '../components/QueryInterface'
 import { MetricsDashboard } from '../components/MetricsDashboard'
-import { SystemArchitecture } from '../components/SystemArchitecture'
 import { RouterVisualization } from '../components/RouterVisualization'
-import { CacheVisualization } from '../components/CacheVisualization'
 import { ConfigPanel } from '../components/ConfigPanel'
 import { FineTuningPanel } from '../components/FineTuningPanel'
 import { TreesVisualization } from '../components/TreesVisualization'
@@ -13,6 +11,11 @@ import { TreesVisualization } from '../components/TreesVisualization'
 export default function Home() {
   const [activeTab, setActiveTab] = useState('query')
   const [apiHealth, setApiHealth] = useState<boolean | null>(null)
+
+  // Make setActiveTab available globally for cross-component navigation
+  useEffect(() => {
+    (window as any).setActiveTab = setActiveTab
+  }, [])
 
   useEffect(() => {
     // Check API health on mount
@@ -44,11 +47,8 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Kaelum AI Research Platform
+                  Kaelum AI 
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Neural Routing + LATS + Verification | Educational & Research Playground
-                </p>
               </div>
             </div>
             
@@ -69,13 +69,11 @@ export default function Home() {
           <div className="flex space-x-4 overflow-x-auto">
             {[
               { id: 'query', label: 'Query Interface', icon: '💬' },
-              { id: 'metrics', label: 'Metrics', icon: '📊' },
-              { id: 'trees', label: 'Reasoning Trees', icon: '🌳' },
+              { id: 'metrics', label: 'Metrics & Cache', icon: '📊' },
+              { id: 'trees', label: 'Trees & Cache', icon: '🌳' },
               { id: 'router', label: 'Neural Router', icon: '🧠' },
-              { id: 'cache', label: 'Smart Cache', icon: '⚡' },
               { id: 'config', label: 'Configuration', icon: '⚙️' },
               { id: 'finetune', label: 'Fine-tuning', icon: '🎯' },
-              { id: 'architecture', label: 'Architecture', icon: '🏗️' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -100,10 +98,8 @@ export default function Home() {
         {activeTab === 'metrics' && <MetricsDashboard />}
         {activeTab === 'trees' && <TreesVisualization />}
         {activeTab === 'router' && <RouterVisualization />}
-        {activeTab === 'cache' && <CacheVisualization />}
         {activeTab === 'config' && <ConfigPanel />}
         {activeTab === 'finetune' && <FineTuningPanel />}
-        {activeTab === 'architecture' && <SystemArchitecture />}
       </main>
 
       {/* Footer */}

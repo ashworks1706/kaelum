@@ -45,12 +45,21 @@ export function CacheVisualization() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-linear-to-r from-green-600 to-emerald-600 rounded-2xl p-8 text-white">
-        <h2 className="text-3xl font-bold mb-2">Smart Cache System</h2>
+      <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl p-8 text-white">
+        <h2 className="text-3xl font-bold mb-2">Cache Validation System</h2>
         <p className="text-green-100">
           Two-stage validation: Fast cosine similarity (0.85 threshold) + LLM semantic check. 
           Prevents false positives while maintaining speed.
         </p>
+        <div className="mt-4">
+          <a 
+            href="#" 
+            onClick={(e) => { e.preventDefault(); (window as any).setActiveTab?.('trees'); }}
+            className="inline-flex items-center gap-2 text-sm bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+          >
+            🌳 View Reasoning Trees & Cache Contents
+          </a>
+        </div>
       </div>
 
       {/* Stats Grid */}

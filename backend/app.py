@@ -297,8 +297,15 @@ def cache_stats():
         
         cache_data = []
         if cache_file.exists():
+            # Handle JSONL format (one JSON object per line)
             with open(cache_file, 'r') as f:
-                cache_data = json.load(f)
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            cache_data.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
         
         validation_entries = []
         if validation_log.exists():
@@ -316,20 +323,36 @@ def cache_stats():
         
         total_validations = len(validation_entries)
         accepted = sum(1 for v in validation_entries if v.get('validation_result', {}).get('valid', False))
+        rejected = total_validations - accepted
         
         cache_files = [{'query': e.get('query', '')[:100], 'worker': e.get('worker_specialty', 'unknown'), 
                        'nodes': e.get('num_nodes', 0), 'cache_id': e.get('cache_id', '')} 
                        for e in cache_data[:20]]
         
+        # Calculate tree-specific stats
+        high_quality = sum(1 for e in cache_data if e.get('confidence', 0) > 0.7 or e.get('success', False))
+        low_quality = len(cache_data) - high_quality
+        
+        # Calculate cache hit rate from metadata
+        cache_hits = sum(1 for e in cache_data if e.get('cache_hit', False))
+        hit_rate = cache_hits / len(cache_data) if len(cache_data) > 0 else 0.0
+        
         return jsonify({
             "total_cached": len(cache_data),
             "by_worker": by_worker,
             "acceptance_rate": accepted / total_validations if total_validations > 0 else 0.0,
+            "rejection_rate": rejected / total_validations if total_validations > 0 else 0.0,
             "validations_accepted": accepted,
-            "validations_rejected": total_validations - accepted,
+            "validations_rejected": rejected,
             "total_validations": total_validations,
             "recent_validations": validation_entries[-5:],
-            "cache_files": cache_files
+            "cache_files": cache_files,
+            # Tree-specific stats for TreesVisualization
+            "total_trees": len(cache_data),
+            "high_quality": high_quality,
+            "low_quality": low_quality,
+            "hit_rate": hit_rate,
+            "avg_similarity": 0.85  # Default value, can be calculated from actual similarity scores
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -385,11 +408,12 @@ def get_workers():
 def get_reasoning_trees():
     """Get all reasoning trees from cache for visualization"""
     try:
-        from core.paths import DEFAULT_TREE_CACHE_DIR
         import json
         from pathlib import Path
         
-        trees_dir = Path(DEFAULT_TREE_CACHE_DIR)
+        # Trees are stored in .kaelum/cache/trees/
+        project_root = Path(__file__).parent.parent
+        trees_dir = project_root / ".kaelum" / "cache" / "trees"
         trees = []
         
         if not trees_dir.exists():
@@ -401,21 +425,36 @@ def get_reasoning_trees():
                 with open(tree_file, 'r') as f:
                     tree_data = json.load(f)
                     
+                    # Extract result data
+                    result = tree_data.get('result', {})
+                    metrics = result.get('metrics', {})
+                    
                     # Convert to format expected by frontend
                     tree_info = {
                         'tree_id': tree_file.stem,
-                        'query': tree_data.get('query', 'Unknown query'),
-                        'worker': tree_data.get('worker', 'unknown'),
-                        'timestamp': tree_data.get('timestamp', ''),
-                        'root': tree_data.get('root', {}),
-                        'best_path': tree_data.get('best_path', []),
-                        'total_nodes': tree_data.get('total_nodes', 0),
-                        'pruned_nodes': tree_data.get('pruned_nodes', 0),
-                        'max_depth': tree_data.get('max_depth', 0),
-                        'avg_reward': tree_data.get('avg_reward', 0.0),
+                        'query': result.get('query', 'Unknown query'),
+                        'worker': result.get('worker', tree_data.get('worker', 'unknown')),
+                        'timestamp': tree_file.stat().st_mtime,
+                        'root': {
+                            'id': 'root',
+                            'query': result.get('query', ''),
+                            'children': [],
+                            'visits': metrics.get('num_simulations', 0),
+                            'total_reward': result.get('confidence', 0.0),
+                            'avg_reward': result.get('confidence', 0.0),
+                            'is_pruned': False,
+                            'is_best_path': True,
+                            'depth': 0,
+                            'worker_type': result.get('worker', 'unknown')
+                        },
+                        'best_path': ['root'],
+                        'total_nodes': metrics.get('num_simulations', 0),
+                        'pruned_nodes': 0,
+                        'max_depth': metrics.get('tree_depth', 1),
+                        'avg_reward': result.get('confidence', 0.0),
                         'cache_status': tree_data.get('quality', 'none'),
-                        'execution_time': tree_data.get('execution_time', 0.0),
-                        'verification_passed': tree_data.get('verification_passed', False)
+                        'execution_time': metrics.get('execution_time_ms', 0) / 1000.0,
+                        'verification_passed': result.get('verification_passed', False)
                     }
                     trees.append(tree_info)
             except Exception as e:

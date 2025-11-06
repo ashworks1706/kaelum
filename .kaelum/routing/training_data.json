@@ -1,0 +1,20 @@
+[
+  {
+    "query": "What are the benefits of renewable energy?",
+    "query_type": "analysis",
+    "worker": "analysis",
+    "success": false,
+    "confidence": 0.5,
+    "latency_ms": 37887.40372657776,
+    "timestamp": 1762410799.7977026
+  },
+  {
+    "query": "Explain the logical fallacy in: All dogs bark. My cat barks. Therefore my cat is a dog.",
+    "query_type": "creative",
+    "worker": "creative",
+    "success": true,
+    "confidence": 0.8063063063063063,
+    "latency_ms": 26383.375644683838,
+    "timestamp": 1762411170.7696297
+  }
+]

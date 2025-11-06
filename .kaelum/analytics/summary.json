@@ -1,0 +1,12 @@
+{
+  "total_queries": 2,
+  "total_tokens": 1231,
+  "total_time_ms": 64270.7793712616,
+  "total_simulations": 10,
+  "by_worker": {
+    "analysis": 1,
+    "creative": 1
+  },
+  "last_updated": "2025-11-05T23:39:30.797055",
+  "verified_queries": 1
+}
