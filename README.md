@@ -9,7 +9,7 @@ A production-ready AI reasoning framework with human-in-the-loop feedback, neura
 **What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
 
 **Core Pipeline:**
-- Query → Cache Lookup → Neural Router → Expert Worker (LATS) → Verification → Result
+- Query → Cache Lookup → Feedback-Enhanced Neural Router → Expert Worker (LATS) → Verification → Result
 - Six specialized workers: Math, Logic, Code, Factual, Creative, Analysis
 - Human-in-the-Loop feedback for continuous improvement
 - Quality-aware semantic cache for instant retrieval
