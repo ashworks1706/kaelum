@@ -1,19 +1,10 @@
 # Kaelum
 
-A production-ready AI reasoning framework with human-in-the-loop feedback, neural routing, Monte Carlo Tree Search, domain-specific verification, and continuous learning for robust multi-step problem solving.
-
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
 <img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
 <img width="1983" height="844" alt="image" src="https://github.com/user-attachments/assets/6b000d29-d8bc-4219-8157-de5bf966f229" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/b53996f8-36d2-4e54-86f0-3dbe0a107d9e" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/4725ce30-33be-4d5a-a5ef-58eb6d1f6bf6" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/f5363583-5ad9-483b-a954-3b680fe087e5" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/2f332b9e-214c-4ba1-8f2e-79dac0f84659" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-01" src="https://github.com/user-attachments/assets/c58a413a-9c81-4022-988b-d28809ce790f" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-10" src="https://github.com/user-attachments/assets/e8b2693d-3b80-499d-9e52-0b4eb7b20a6e" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-15" src="https://github.com/user-attachments/assets/b7b59351-a64d-4a03-96e6-97c145034e87" />
 
-**What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
+Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
 
 - Query → **Cache Lookup (quality-filtered)** → **Human Feedback-Enhanced Neural Router** → Expert Worker (LATS with pruning) → Verification → Enhanced Router Feedback → **Human Feedback Collection** → Result
 - Six specialized workers: Math, Logic, Code, Factual, Creative, Analysis
