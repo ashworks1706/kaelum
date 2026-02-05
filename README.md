@@ -1,22 +1,10 @@
 # Kaelum
 
-A production-ready AI reasoning framework with human-in-the-loop feedback, neural routing, Monte Carlo Tree Search, domain-specific verification, and continuous learning for robust multi-step problem solving.
-
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
 <img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
 <img width="1983" height="844" alt="image" src="https://github.com/user-attachments/assets/6b000d29-d8bc-4219-8157-de5bf966f229" />
 
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/b53996f8-36d2-4e54-86f0-3dbe0a107d9e" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/4725ce30-33be-4d5a-a5ef-58eb6d1f6bf6" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/f5363583-5ad9-483b-a954-3b680fe087e5" />
-<img width="2338" height="1205" alt="image" src="https://github.com/user-attachments/assets/2f332b9e-214c-4ba1-8f2e-79dac0f84659" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-01" src="https://github.com/user-attachments/assets/c58a413a-9c81-4022-988b-d28809ce790f" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-10" src="https://github.com/user-attachments/assets/e8b2693d-3b80-499d-9e52-0b4eb7b20a6e" />
-<img width="2338" height="1205" alt="Screenshot From 2025-11-05 23-41-15" src="https://github.com/user-attachments/assets/b7b59351-a64d-4a03-96e6-97c145034e87" />
-
-**What is this?** Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
-
-**Core Pipeline:**
+Kaelum is an AI reasoning system that combines multiple AI techniques to solve complex problems step-by-step. It learns from human feedback to continuously improve, uses neural routing to select expert workers, and verifies answers before returning them.
 
 - Query → **Cache Lookup (quality-filtered)** → **Human Feedback-Enhanced Neural Router** → Expert Worker (LATS with pruning) → Verification → Enhanced Router Feedback → **Human Feedback Collection** → Result
 - Six specialized workers: Math, Logic, Code, Factual, Creative, Analysis
@@ -26,45 +14,6 @@ A production-ready AI reasoning framework with human-in-the-loop feedback, neura
 - **Persistent learning**: All routing outcomes, feedback, and calibrations saved across sessions
 
 ---
-
-## Key Features
-
-### Human Feedback Integration
-
-- **Comprehensive Feedback System**: Rate worker selection, answer quality, and individual reasoning steps
-- **Real-time Reward Adjustments**: Human feedback directly modifies worker selection probabilities and reasoning rewards
-- **Persistent Learning**: All feedback stored and applied to future queries
-- **Worker Performance Tracking**: See which workers perform best based on human validation
-- **Step Quality Multipliers**: Adjust intermediate reward scoring based on step-by-step feedback
-
-### Neural Router with Feedback
-
-- **Feedback-Enhanced Probabilities**: Worker selection adjusted by human feedback (±0.15 max)
-- **Automatic Training**: Learns from every query outcome after 32 samples
-- **Persistent Outcomes**: All routing decisions saved to `.kaelum/routing/outcomes.jsonl`
-- **Training Buffer**: Accumulates high-quality samples (>0.8 reward) for batch training
-- **Exploration Strategy**: Epsilon-greedy (10% random) for discovering new patterns
-
-### Intelligent Caching
-
-- **Semantic Similarity**: Finds similar queries using 384-dim embeddings (cosine ≥0.85)
-- **Quality Filtering**: Only serves verified high-confidence results
-- **Node Count Tracking**: Displays actual tree complexity for each cached result
-- **LLM Validation**: Prevents false positives through intelligent semantic checking
-
-### Interactive Visualizations
-
-- **Tree Visualization with Hover Tooltips**: Interactive LATS trees showing reasoning steps, node rewards, visits, and depth
-- **Live Metrics Dashboard**: Real-time system performance with auto-refresh
-- **Router Analytics**: Worker distribution, training progress, exploration rate
-- **Cache Statistics**: Hit rate, node counts, quality distribution
-- **Feedback Dashboard**: Human feedback statistics and impact on system behavior
-
----
-
-## How Kaelum Works: Complete System Architecture
-
-This section explains how Kaelum processes queries from start to finish, integrating all features and components into one comprehensive workflow.
 
 ### The Complete Pipeline
 
@@ -132,24 +81,11 @@ Query Input
     └─ Apply: Adjustments active for all future queries
 ```
 
-**Key Design Decisions:**
-
-- **Cache-first**: 23% speedup by checking cache before routing/detectors
-- **Human feedback integration**: Worker selection and reward scoring continuously improve based on real user feedback
-- **Quality filtering**: Only serve verified high-confidence cached results
-- **LLM validation**: Prevents false positives from embeddings alone
-- **Enhanced feedback**: Router learns from rich signals (rewards, depth, sims) not just success/fail
-- **Persistent storage**: All routing outcomes, feedback, and calibrations persist across restarts
-- **Early pruning**: Eliminates bad branches at visits=3 to save compute
-- **Robust verification**: Null checks prevent crashes from empty/invalid worker outputs
-
 ---
 
 ### 1.  Quality-Aware Semantic Cache (First Line of Defense)
 
-**What it does:** Instantly returns answers for queries similar to previously solved problems.
-
-**How it works:**
+Instantly returns answers for queries similar to previously solved problems.
 
 **Two-Stage Validation** (Fast pre-filter + Intelligent validation):
 
@@ -179,8 +115,6 @@ Query Input
 - **Learning loop**: Collect validation data → Fine-tune validator → Deploy better model → Repeat
 
 **Performance:** ~23% speedup on cache hits (0.001s vs 2-5s for new search) with safety guarantees
-
-**Implementation:** `core/search/tree_cache.py`, `core/cache_validator.py`
 
 ---
 
@@ -329,42 +263,34 @@ Output Heads:
 Each worker has domain-optimized prompting, scoring, and verification:
 
 **Math Worker**:
-
 - SymPy symbolic verification (derivatives, integrals, equations)
 - Rewards: +0.30 notation, +0.25 steps, +0.20 symbolic validity, +0.16 conclusion
 - Best for: Calculus, algebra, equations, proofs
 
 **Logic Worker**:
-
 - Semantic coherence checks, premise-conclusion validation
 - Rewards: +0.30 structure, +0.25 coherence, +0.20 premises, +0.16 conclusion
 - Best for: Logical reasoning, arguments, deduction
 
 **Code Worker**:
-
 - AST parsing (Python/JS/TS), syntax validation, execution sandboxing
 - Rewards: +0.30 syntax, +0.25 documentation, +0.20 modularity, +0.16 correctness
 - Best for: Programming, algorithms, debugging
 
 **Factual Worker**:
-
 - Information completeness scoring, joint embedding validation
 - Rewards specific cited evidence, comprehensive coverage
 - Best for: Knowledge queries, explanations, definitions
 
 **Creative Worker**:
-
 - Vocabulary diversity metrics, coherence detection
 - Rewards originality + structure balance
 - Best for: Writing, brainstorming, creative tasks
 
 **Analysis Worker**:
-
 - Depth scoring, keyword presence, multi-perspective evaluation
 - Rewards comprehensive multi-angle analysis
 - Best for: Complex reasoning, trade-offs, evaluations
-
-**Implementation:** `core/workers/`
 
 ---
 
@@ -372,101 +298,43 @@ Each worker has domain-optimized prompting, scoring, and verification:
 
 **What it does:** Explores multiple reasoning paths before committing to an answer, using Monte Carlo Tree Search.
 
-**Algorithm:**
-
-```python
-class LATSNode:
-    query: str           # Current reasoning state
-    visits: int = 0      # Times visited (N)
-    total_reward: float = 0.0  # Cumulative reward (Q)
-    is_pruned: bool = False    # Pruning flag
-  
-    def avg_reward(self) -> float:
-        return self.total_reward / self.visits if self.visits > 0 else 0.0
-  
-    def uct_score(self, c: float = 1.414) -> float:
-        if self.is_pruned:
-            return -inf
-        exploitation = self.avg_reward()
-        exploration = c * sqrt(log(self.parent.visits) / self.visits)
-        return exploitation + exploration
-```
-
 **Simulation Process:**
 
-1. **Selection**: Walk down tree using UCT (Upper Confidence Bound for Trees)
-
-   - Balance exploitation (Q/N) vs exploration (c×√(ln N_parent / N_node))
-   - Skip pruned nodes
+1. **Selection**: Walk down tree using UCT (Upper Confidence Bound for Trees), Balance exploitation (Q/N) vs exploration (c×√(ln N_parent / N_node)), Skip pruned nodes
 2. **Expansion**: LLM generates next reasoning steps from current node
 3. **Simulation**: Score the reasoning path using domain-specific reward functions
-
    - Math: Mathematical notation, step-by-step work, symbolic validity
    - Code: Syntax, documentation, modularity
    - Logic: Structure, coherence, logical flow
 4. **Backpropagation**: Update all ancestor nodes with rewards
-
-   - **Early Pruning**: Mark nodes with visits ≥3 AND avg_reward <0.3 as pruned
+   - Mark nodes with visits ≥3 AND avg_reward <0.3 as pruned
    - No further exploration of pruned branches
 5. **Best Path Extraction**: After N simulations, select highest-reward path
-
-**Why it works:**
-
 - MCTS finds non-obvious solutions by systematically exploring possibilities (like AlphaGo)
 - Early pruning eliminates bad paths at visits=3 to save compute
-- 2-3x better solution quality at same compute budget
-
-**Implementation:** `core/search/lats.py`
 
 ---
 
 ### 5.  Multi-Layer Verification
 
-**What it does:** Validates reasoning correctness using domain-specific methods.
+ Validates reasoning correctness using domain-specific methods.
 
 **Symbolic Math Verification** (SymPy engine):
-
-```python
-# Converts candidate to symbolic expression
-candidate = sp.sympify("2*x + 3")
-
-# Computes expected answer symbolically
-expected = sp.diff(x**2 + 3*x, x)  # → 2*x + 3
-
-# Checks algebraic equivalence (not string matching!)
-assert sp.simplify(expected - candidate) == 0
-```
-
 - **Catches subtle errors**: "2x+3", "3+2x", "2(x+1.5)" all verify as equivalent
 - **Formal proof**: Actual mathematical equivalence checking
 
 **Code Verification** (AST + Execution):
 
-```python
-# Parse to Abstract Syntax Tree
-tree = ast.parse(code)
-
-# Check syntax validity
-# Detect dangerous patterns (eval, exec, __import__)
-# Language-specific validators (Python, JavaScript, TypeScript)
-# Optional sandboxed execution
-```
-
 **Semantic Verification** (Embedding-based):
-
 - Logic/Factual: Encode with sentence-transformers, measure coherence
 - Check conclusion presence, information completeness, specificity
 - Creative: Vocabulary diversity (unique words / total), sentence coherence
-
-**Implementation:** `core/verification/`, `core/verification/sympy_engine.py`, `core/verification/syntax_validator.py`
 
 ---
 
 ### 6.  Reflection Engine (Self-Correction)
 
-**What it does:** When verification fails, analyzes the error and tries again with improved guidance.
-
-**Process:**
+ When verification fails, analyzes the error and tries again with improved guidance.
 
 1. **Error Analysis**:
 
@@ -489,19 +357,11 @@ tree = ast.parse(code)
    - Each iteration learns from previous mistakes
    - Stops early if verification passes
 
-**Research basis:** Reflexion, Self-Refine papers show LLMs improve significantly with feedback
-
-**Effect:** ~40% improvement in eventual success rate through self-correction
-
-**Implementation:** `core/verification/reflection.py`
-
 ---
 
 ### 7. ️ Adaptive Threshold Calibration
 
-**What it does:** Automatically optimizes decision thresholds for binary predictions.
-
-**How it works:**
+Automatically optimizes decision thresholds for binary predictions.
 
 - **Problem**: Models output confidence scores (0-1), need threshold to decide "yes/no"
 - **Solution**: Record (score, threshold, outcome) for every decision
@@ -511,18 +371,11 @@ tree = ast.parse(code)
   - Select threshold that maximizes F1
   - Persist to `.kaelum/calibration/optimal_thresholds.json`
 
-**Effect:** System automatically tunes decision boundaries for best accuracy per domain
-
-**Implementation:** `core/learning/threshold_calibrator.py`
-
 ---
 
 ### 8.  Active Learning & Fine-Tuning
 
-**What it does:** Intelligently selects valuable training examples from real usage.
-
-**Selection Strategies:**
-
+Intelligently selects valuable training examples from real usage.
 - **Uncertainty**: Queries where model had low confidence → improve weak areas
 - **Diversity**: Max-min distance in embedding space → broad coverage
 - **Error**: Failed verifications with reflections → learn from mistakes
@@ -535,9 +388,7 @@ tree = ast.parse(code)
 - Format: `{instruction, input, output}` for instruction-tuning
 - Export: `runtime/orchestrator.py`
 
-**Effect:** Continual learning loop - system generates its own training data from real usage
-
-**Implementation:** `core/learning/active_learning.py`, `core/learning/metrics.py`
+Continual learning loop - system generates its own training data from real usage
 
 ---
 
@@ -550,10 +401,7 @@ tree = ast.parse(code)
 - **Tokens**: Input/output per worker, cost estimation
 - **Latency**: Time in cache/routing/search/verification/reflection
 - **Export**: JSON/CSV formats
-- **Web Dashboard**: Real-time metrics (see [Full-Stack Demo](#full-stack-demo-webui))
-
-**Implementation:** `core/learning/metrics.py`
-
+- **Web Dashboard**: Real-time metrics 
 ---
 
 ## Complete Workflow: From Query to Answer
@@ -693,28 +541,7 @@ assert sp.simplify(expected - candidate) == 0  # Algebraically equivalent
 - **Factual**: Information completeness + specificity scoring
 - **Creative**: Vocabulary diversity + coherence metrics
 
-**Why this matters:**
-This isn't just checking if the answer "looks right" - it's **formal verification**. SymPy uses computer algebra to prove algebraic equivalence. "2x + 3" and "3 + 2x" and "2(x + 1.5)" all verify as correct because they're symbolically equivalent. This catches subtle errors that string matching would miss.
-
 #### **Step 6: Success Path - Quality-Aware Cache Storage & Enhanced Router Feedback**
-
-```
-Verification passed
-→ Store tree in cache with embedding + quality="high" metadata
-→ Update router training data with enhanced feedback:
-   {
-     "query": "...",
-     "worker": "math",
-     "success": true,
-     "avg_reward": 0.91,
-     "actual_depth": 5,
-     "actual_simulations": 10
-   }
-→ Return result
-```
-
-**What happens:**
-
 - Successful tree stored in **semantic cache** with query embedding AND quality metadata
 - Cache only serves results with quality="high" on future lookups (prevents serving low-confidence answers)
 - Router records enhanced feedback: worker type, success/failure, average tree reward, actual search depth used, and simulation count
@@ -772,34 +599,6 @@ optimizer.step()  # Update neural network weights
 **Why this matters:**
 This is **self-correction** through reflection. The system doesn't just fail - it analyzes **why** it failed and tries again with that knowledge. Research shows LLMs significantly improve when given feedback about their mistakes (Reflexion, Self-Refine papers). Kaelum automates this process.
 
-### Key Concepts Summary
-
- Concept                          What It Does                                       Why It Matters
-
----
-
- **Embeddings**             Convert text to vectors that capture meaning       Enables semantic similarity, not just keyword matching
- **Neural Router**          Learned model that selects expert worker           Improves over time via gradient descent on outcomes
- **MCTS (UCT)**             Explores multiple solution paths before deciding   Finds non-obvious solutions by balancing exploration/exploitation
- **Domain Scoring**         Rewards reasoning quality (not just final answer)  Prefers paths with clear logic, even if answer is partial
- **Symbolic Verification**  Formal proof of correctness (e.g., SymPy)          Catches subtle errors that string matching misses
- **Semantic Cache**         Stores solutions with meaning-based lookup         1000x speedup on similar queries with natural language flexibility
- **Reflection**             Self-correction by analyzing failures              Learns from mistakes like humans do
- **Continual Learning**     Router + thresholds improve with each query        System gets smarter over time without manual retraining
-
-### Performance Profile
-
-```
-Cache Hit:     0.001s  (semantic lookup)
-New Query:     2-5s    (LATS + verification)
-With Retry:    4-12s   (reflection + re-search)
-```
-
-The workflow is designed for **quality over speed** on first attempt, but **speed over recomputation** on similar queries. This makes Kaelum ideal for:
-
-- Interactive problem-solving (tutoring, coding assistants)
-- Repeated similar queries (documentation Q&A, support bots)
-- Tasks requiring verified correctness (math, code generation)
 
 ---
 
@@ -864,61 +663,6 @@ npm run dev
 
 Then open http://localhost:3000 in your browser.
 
-### Architecture
-
-- **Backend (Flask)**: REST API on port 5000 with full logging and analytics
-
-  - `/api/query` - Process reasoning queries with streaming support
-  - `/api/metrics` - System-wide metrics and analytics (includes human feedback impact)
-  - `/api/logs` - Real-time system logs
-  - `/api/stats/*` - Router, cache, and calibration statistics
-  - `/api/feedback` - Submit human feedback (POST)
-  - `/api/feedback/stats` - Aggregated feedback statistics (GET)
-  - `/api/feedback/worker/<worker>` - Per-worker feedback performance (GET)
-  - `/api/feedback/router-impact` - Current feedback adjustments (GET)
-  - `/api/config` - Configuration management
-- **Frontend (Next.js)**: Interactive web UI on port 3000
-
-  - Query interface with live streaming results and logs
-  - **Human feedback panel**: Rate worker selection, answer quality, and reasoning steps
-  - System architecture visualization
-  - Router training and worker distribution charts with feedback impact
-  - Cache validation analytics with node count tracking
-  - **Interactive tree visualization**: Hover over nodes to see reasoning steps, rewards, visits
-  - Comprehensive metrics dashboard with real-time updates and feedback statistics
-
-### Example Queries to Try
-
-**Math**:
-
-```
-Solve the quadratic equation: 2x² + 5x - 3 = 0
-```
-
-**Code**:
-
-```
-Write a Python function to find all prime numbers up to n using the Sieve of Eratosthenes
-```
-
-**Logic**:
-
-```
-If all roses are flowers and some flowers fade quickly, can we conclude that some roses fade quickly?
-```
-
-**Factual**:
-
-```
-What are the main differences between mitosis and meiosis?
-```
-
-**Creative**:
-
-```
-Write a haiku about artificial intelligence and consciousness
-```
-
 ---
 
 ## Supported LLMs
@@ -948,10 +692,6 @@ Kaelum is **model-agnostic** and works with any OpenAI-compatible API. Below are
 
 ### vLLM Setup (Recommended)
 
-**Best for:** Production deployments, high throughput, GPU optimization, batch processing
-
-**Basic Setup:**
-
 ```bash
 # 1. Install vLLM
 pip install vllm
@@ -977,44 +717,6 @@ python -m vllm.entrypoints.openai.api_server \
 python run.py --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
 ```
 
-**Advanced vLLM Configuration:**
-
-```bash
-# Multi-GPU setup
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-14B-Instruct \
-    --tensor-parallel-size 2 \
-    --port 8000
-
-# Quantization for lower VRAM
-python -m vllm.entrypoints.openai.api_server \
-    --model microsoft/phi-4 \
-    --quantization awq \
-    --port 8000
-
-# CPU offloading for large models
-python -m vllm.entrypoints.openai.api_server \
-    --model mistralai/Mixtral-8x7B-Instruct-v0.1 \
-    --cpu-offload-gb 32 \
-    --port 8000
-```
-
-**Supported Architectures:**
-
-- Any Hugging Face model with chat template
-- Qwen, Llama, Mistral, Yi, DeepSeek, Phi families
-- Custom fine-tuned models with transformer architecture
-
-### ️ Cloud APIs (Alternative)
-
-| Provider    | Setup                                        | Base URL                                  | Example                                                                                                      |
-| ----------- | -------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| OpenAI      | Get API key from https://platform.openai.com | `https://api.openai.com/v1`             | `--model gpt-4 --base-url https://api.openai.com/v1`                                                       |
-| Anthropic   | Use via proxy/adapter (OpenAI-compatible)    | `via proxy`                             | `--model claude-2 --base-url https://your-proxy.example.com/v1`                                            |
-| Together AI | Get key from together.ai                     | `https://api.together.xyz/v1`           | `--model meta-llama/Llama-3-70b-chat-hf --base-url https://api.together.xyz/v1`                            |
-| Fireworks   | Get key from fireworks.ai                    | `https://api.fireworks.ai/inference/v1` | `--model accounts/fireworks/models/llama-v3-70b-instruct --base-url https://api.fireworks.ai/inference/v1` |
-| Groq        | Get key from groq.com                        | `https://api.groq.com/openai/v1`        | `--model llama3-70b-8192 --base-url https://api.groq.com/openai/v1`                                        |
-
 **Example with OpenAI:**
 
 ```bash
@@ -1022,28 +724,6 @@ export OPENAI_API_KEY="sk-..."
 python run.py --model gpt-4 --base-url https://api.openai.com/v1
 ```
 
-### Other Deployment Options
-
-| Option                | Best For                       | Setup Difficulty | OpenAI Compatible |
-| --------------------- | ------------------------------ | :--------------: | :---------------: |
-| vLLM (Recommended)    | Production, GPU optimization   |  ⭐⭐ Moderate  |        Yes        |
-| Ollama                | Quick local testing, beginners |     ⭐ Easy     |        Yes        |
-| LM Studio             | GUI-based, no-code deployment  |     ⭐ Easy     |        Yes        |
-| llama.cpp             | CPU inference, low VRAM        |  ⭐⭐ Moderate  |  Yes (w/server)  |
-| text-generation-webui | Full UI + API                  |  ⭐⭐ Moderate  |        Yes        |
-| LocalAI               | Docker-based multi-backend     |  ⭐⭐ Moderate  |        Yes        |
-
-### Model Recommendations by Use Case
-
-| Use Case              | Recommended Model        | Why                                                        |
-| --------------------- | ------------------------ | ---------------------------------------------------------- |
-| Edge / Mobile         | SmolLM2 1.7B             | Smallest efficient model, runs on-device                   |
-| Development / Testing | Qwen 2.5 3B / Phi-3-mini | Fast inference, low VRAM, solid reasoning                  |
-| Math / Logic          | Phi-4 / DeepSeek-R1 7B   | Specialized for reasoning (Phi-4: strong MATH performance) |
-| Code Generation       | Qwen 2.5 14B / Phi-4     | Strong code capabilities, function-calling support         |
-| General Reasoning     | Qwen 2.5 7B              | Best balance of speed, quality, and VRAM                   |
-| Production            | Qwen 2.5 14B / Phi-4     | High quality, reliable, SOTA performance                   |
-| Research              | Custom fine-tuned        | Domain-specific optimization with PEFT / LoRA              |
 
 ## Detailed Setup Guide
 
@@ -1102,95 +782,6 @@ python run.py \
 python run.py --help
 ```
 
-### Multi-GPU Setup with vLLM
-
-For large models or high throughput:
-
-```bash
-# Tensor parallelism (split model across GPUs)
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-14B-Instruct \
-    --tensor-parallel-size 2 \
-    --port 8000
-
-# Pipeline parallelism (for extremely large models)
-python -m vllm.entrypoints.openai.api_server \
-    --model mistralai/Mixtral-8x7B-Instruct-v0.1 \
-    --pipeline-parallel-size 2 \
-    --tensor-parallel-size 2 \
-    --port 8000
-
-# Quantization for VRAM optimization
-python -m vllm.entrypoints.openai.api_server \
-    --model microsoft/phi-4 \
-    --quantization awq \
-    --dtype half \
-    --port 8000
-```
-
-### Alternative: Quick Testing with Ollama
-
-For **quick local testing** without GPU setup complexity:
-
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh  sh
-
-# Pull and run a model
-ollama pull Qwen/Qwen2.5-1.5B-Instruct
-ollama serve
-
-# Run Kaelum (in another terminal)
-python run.py --model Qwen/Qwen2.5-1.5B-Instruct --base-url http://localhost:11434/v1
-```
-
----
-
-## Project Structure
-
-```
-Kaelum/
-├── backend/
-│   ├── app.py            # Flask REST API with streaming & logging
-│   └── requirements.txt  # Backend dependencies
-├── frontend/
-│   ├── app/
-│   │   ├── components/  # React components
-│   │   └── page.tsx     # Main dashboard
-│   ├── package.json     # Node dependencies
-│   └── next.config.ts   # Next.js configuration
-├── core/
-│   ├── reasoning.py     # LLM client
-├   ├── config.py        # System configuration
-│   ├── detectors/       # Query classifiers
-│   │   ├── outsomes.jsonl       # All routing decisions (persistent)
-    │   ├── treining_data.json   # Latest training batar
-    │   └── modcl.pt            # Trained router weights
-    ├── cacheh/          # LATS + rou trees
-    │   ├── metadata.json        # Tree metadata with embeddings
-    │   ├── trees/              # Individual tree files with node counts
-    │   └── feedback/           # Human feedbacktstorage
-    │       ├── feedback.jsonl          # All user feedback
-    │       ├── statistics.json         # Aggregated seats
-    │       └── r ward_adjustm+nts.j on # Current adjustmentscache
-│   ├── verification/    # Multi-layer verification
-   ││   ├── metrics.jsonl        # Query-level metrics
-    │   ├── summary.json        # Aggregated statistiws with ovg_simuratkons
-    └── caliers/         # Expert workersation
-        ├── optiml_hresholds.json
-        └── decisons.jsl
-│   └── learning/        # Active learning
-├── runtime/
-│   └── orchestrator.py  # Main orchestration
-├── kaelum.py           # Python API
-├── start_demo.sh       # Quick start script
-├── requirements.txt    # Python dependencies
-└── .kaelum/            # Persistent data
-    ├── routing/        # Router training data
-    ├── cache/          # Cached LATS trees
-    ├── analytics/      # Performance metrics
-    └── calibration/    # Threshold calibration
-```
 
 ## Configuration
 
@@ -1219,223 +810,7 @@ Configuration is managed through the web interface or via the Flask API `/api/co
   "enable_active_learning": true
 }
 ```
-
-**Update Configuration via API:**
-
-```bash
-curl -X POST http://localhost:5000/api/config \
-  -H "Content-Type: application/json" \
-  -d '{"temperature": 0.8, "max_tree_depth": 8}'
-```
-
-## Python API Example
-
-```python
-from kaelum import kaelum_enhance_reasoning, set_reasoning_model
-
-# Configure the system
-set_reasoning_model(
-    base_url="http://localhost:8000/v1",
-    model="Qwen/Qwen2.5-7B-Instruct",
-    temperature=0.7,
-    enable_routing=True,
-    use_symbolic_verification=True,
-    cache_dir=".kaelum/cache",
-    router_data_dir=".kaelum/routing"
-)
-
-# Process a query
-result = kaelum_enhance_reasoning("What is the derivative of x² + 3x?")
-
-print(f"Answer: {result['suggested_approach']}")
-print(f"Worker: {result['worker_used']}")
-print(f"Confidence: {result['confidence']:.2f}")
-print(f"Reasoning steps: {len(result['reasoning_steps'])}")
-```
-
 ---
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. **vLLM: Out of Memory (OOM) / CUDA out of memory**
-
-**Problem:** Model too large for your GPU VRAM.
-
-**Solutions:**
-
-```bash
-# Use a smaller model
-python -m vllm.entrypoints.openai.api_server \
-    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
-    --port 8000
-
-# Reduce GPU memory utilization
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --gpu-memory-utilization 0.7 \
-    --port 8000
-
-# Enable quantization (AWQ, GPTQ)
-python -m vllm.entrypoints.openai.api_server \
-    --model TheBloke/Mistral-7B-Instruct-v0.2-AWQ \
-    --quantization awq \
-    --port 8000
-
-# Use CPU offloading for large models
-python -m vllm.entrypoints.openai.api_server \
-    --model microsoft/phi-4 \
-    --cpu-offload-gb 16 \
-    --port 8000
-
-# Alternative: Use Ollama for easier memory management
-ollama run Qwen/Qwen2.5-1.5B-Instruct
-```
-
-#### 2. **vLLM: Slow inference / Timeout errors**
-
-**Problem:** Model inference is slow or timing out.
-
-**Solutions:**
-
-```bash
-# Use smaller/faster model
-python -m vllm.entrypoints.openai.api_server \
-    --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
-    --port 8000
-
-# Enable tensor parallelism (multi-GPU)
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-14B-Instruct \
-    --tensor-parallel-size 2 \
-    --port 8000
-
-# Reduce Kaelum search parameters
-python run.py --model Qwen/Qwen2.5-7B-Instruct \
-    --base-url http://localhost:8000/v1 \
-    --max-tree-depth 3 \
-    --num-simulations 5
-
-# Disable verification (faster but less accurate)
-python run.py --model Qwen/Qwen2.5-7B-Instruct \
-    --base-url http://localhost:8000/v1 \
-    --no-symbolic-verification
-
-# Increase vLLM batch size for throughput
-python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-7B-Instruct \
-    --max-num-seqs 256 \
-    --port 8000
-```
-
-#### 3. **vLLM: Model not found / Download errors**
-
-**Problem:** vLLM can't find or download the model from Hugging Face.
-
-**Solutions:**
-
-```bash
-# Verify model name is correct (case-sensitive)
-#  Correct: Qwen/Qwen2.5-7B-Instruct
-#  Wrong: qwen/qwen2.5-7b-instruct
-
-# Pre-download model manually
-pip install huggingface-hub
-python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-7B-Instruct')"
-
-# Use local model path
-python -m vllm.entrypoints.openai.api_server \
-    --model /path/to/local/model \
-    --port 8000
-
-# Set HF token for gated models (Llama, etc.)
-export HF_TOKEN="hf_..."
-python -m vllm.entrypoints.openai.api_server \
-    --model meta-llama/Llama-3.1-8B-Instruct \
-    --port 8000
-```
-
-#### 4. **SymPy verification always fails**
-
-**Problem:** Math expressions not in SymPy-compatible format.
-
-**Solutions:**
-
-```bash
-# Disable symbolic verification if not needed
-python run.py --no-symbolic-verification
-
-# Check debug output
-python run.py --debug-verification
-```
-
-#### 4. **Cache not working / Always computing fresh**
-
-**Problem:** Cache disabled or similarity threshold too high.
-
-**Solutions:**
-
-```bash
-# Ensure cache is enabled (it is by default)
-python run.py  # Cache enabled
-
-# Check cache directory exists
-ls .kaelum/cache
-
-# Lower similarity threshold (edit code if needed)
-# Default is 0.85, can adjust in TreeCache class
-```
-
-#### 8. **Router always selects wrong worker**
-
-**Problem:** Router needs training data.
-
-**Solutions:**
-
-```bash
-# Force specific worker during testing
-python run.py --worker math
-
-# Disable router and use default
-python run.py --no-routing
-
-# Let router learn - it improves after ~10-20 queries
-# Just keep using it!
-```
-
-### Performance Tuning
-
-**For Maximum Accuracy (slower):**
-
-```bash
-python run.py \
-    --model qwen2.5:14b \
-    --max-tree-depth 10 \
-    --num-simulations 25 \
-    --max-reflection-iterations 5 \
-    --enable-factual-verification
-```
-
-**For Maximum Speed (less accurate):**
-
-```bash
-python run.py \
-    --model Qwen/Qwen2.5-1.5B-Instruct \
-    --max-tree-depth 3 \
-    --num-simulations 5 \
-    --max-reflection-iterations 0 \
-    --no-symbolic-verification
-```
-
-**Balanced (recommended):**
-
-```bash
-python run.py \
-    --model qwen2.5:7b \
-    --temperature 0.7
-# Let router decide depth/sims automatically
-```
 
 ## Research & References
 
