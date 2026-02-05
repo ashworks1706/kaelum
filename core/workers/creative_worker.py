@@ -97,7 +97,9 @@ class CreativeWorker(WorkerAgent):
                     "content_parts": parent_state.get("content_parts", []) + ([next_step] if not is_final else []),
                     "content": next_step if is_final else None
                 }
-            except:
+            except Exception as e:
+
+                logger.warning(f"Creative expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Creative iteration {depth + 1}",

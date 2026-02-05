@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { apiUrl } from '@/lib/api-config'
 
 export function FineTuningPanel() {
   const [selectedStrategy, setSelectedStrategy] = useState('mixed')
@@ -52,7 +53,7 @@ export function FineTuningPanel() {
     setMessage(null)
 
     try {
-      const response = await fetch('http://localhost:5000/api/export/training-data')
+      const response = await fetch(apiUrl('/api/export/training-data'))
       const data = await response.json()
 
       if (data.status === 'exported') {

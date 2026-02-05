@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from 'react'
+import { apiUrl } from '@/lib/api-config'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface FeedbackPanelProps {

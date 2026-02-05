@@ -3,7 +3,7 @@
 print(">>> app.py starting - before imports", flush=True)
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 os.environ['OMP_NUM_THREADS'] = '4'
 
 print(">>> environment vars set", flush=True)
@@ -18,8 +18,6 @@ from pathlib import Path
 
 print(">>> base imports done", flush=True)
 
-print(">>> base imports done", flush=True)
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 print(">>> path setup done", flush=True)
@@ -28,12 +26,9 @@ try:
     import torch
     print(">>> torch imported", flush=True)
     torch.set_default_device('cpu')
-    if torch.cuda.is_available():
-        torch.cuda.is_available = lambda: False
-    print(">>> torch configured", flush=True)
+    print(">>> torch configured (CPU only)", flush=True)
 except ImportError:
     print(">>> torch not available", flush=True)
-    pass
 
 print(">>> importing kaelum", flush=True)
 import kaelum
@@ -253,8 +248,8 @@ def router_stats():
                 checkpoint = torch.load(model_file, map_location='cpu')
                 training_steps = checkpoint.get("training_step_count", 0)
                 exploration_rate = checkpoint.get("exploration_rate", exploration_rate)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not load router checkpoint: {e}")
         
         total_queries = len(training_data)
         workers_used = {}
@@ -274,8 +269,8 @@ def router_stats():
             router_info = metrics_data.get('analytics', {}).get('router', {})
             if 'training_buffer_size' in router_info:
                 actual_buffer_size = router_info['training_buffer_size']
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Could not fetch router metrics: {e}")
         
         return jsonify({
             "total_queries": total_queries,
@@ -322,8 +317,8 @@ def cache_stats():
                 for line in f:
                     try:
                         validation_entries.append(json.loads(line))
-                    except:
-                        pass
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Skipped malformed validation log entry: {e}")
         
         by_worker = {}
         for entry in cache_data:
@@ -345,8 +340,8 @@ def cache_stats():
                     with open(tree_path, 'r') as tf:
                         tree_data = json.load(tf)
                         node_count = tree_data.get('tree_stats', {}).get('total_nodes', 0)
-                except:
-                    pass
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.debug(f"Could not read tree file {tree_path}: {e}")
             
             cache_files.append({
                 'query': e.get('query', '')[:100], 
@@ -660,15 +655,18 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("🚀 KAELUM API SERVER STARTING...")
     print("="*70)
+    BACKEND_HOST = os.getenv('BACKEND_HOST', '0.0.0.0')
+    BACKEND_PORT = int(os.getenv('BACKEND_PORT', '5000'))
+    
     print(f"⚙️  CPU-ONLY MODE: GPU reserved for vLLM")
-    print(f"🌐 API: http://localhost:5000")
-    print(f"💚 Health: http://localhost:5000/api/health")
-    print(f"📊 Metrics: http://localhost:5000/api/metrics")
+    print(f"🌐 API: http://localhost:{BACKEND_PORT}")
+    print(f"💚 Health: http://localhost:{BACKEND_PORT}/api/health")
+    print(f"📊 Metrics: http://localhost:{BACKEND_PORT}/api/metrics")
     print("="*70)
     print("📝 NOTE: First query will take 10-30s to load embedding model")
     print("="*70 + "\n")
     
     logger = logging.getLogger(__name__)
     
-    app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False, threaded=True)
+    app.run(debug=False, host=BACKEND_HOST, port=BACKEND_PORT, use_reloader=False, threaded=True)
     

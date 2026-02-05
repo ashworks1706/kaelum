@@ -1,4 +1,5 @@
 import time
+import logging
 import re
 from typing import Dict, Any, Optional, List
 
@@ -11,6 +12,8 @@ from ..search import RewardModel
 from ..detectors import TaskClassifier
 from ..detectors import ConclusionDetector
 from ..detectors import CompletenessDetector
+
+logger = logging.getLogger("kaelum.factual_worker")
 from ..learning import AdaptivePenalty
 from sentence_transformers import SentenceTransformer, util
 
@@ -108,7 +111,9 @@ class FactualWorker(WorkerAgent):
                     "facts_gathered": parent_state.get("facts_gathered", []) + ([next_step] if not is_final else []),
                     "answer": next_step if is_final else None
                 }
-            except:
+            except Exception as e:
+
+                logger.warning(f"Factual expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Gathering fact {depth + 1}",

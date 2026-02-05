@@ -9,16 +9,21 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 class CompletenessDetector:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        import logging
+        logger = logging.getLogger("kaelum.detectors")
+        
         try:
             self.nli_pipeline = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
-        except:
+        except Exception as e:
+            logger.info(f"NLI pipeline unavailable: {e}")
             self.nli_pipeline = None
         
         self.encoder = SentenceTransformer(embedding_model)
         
         try:
             self.qa_model = pipeline("question-answering", model="deepset/roberta-base-squad2", device=-1)
-        except:
+        except Exception as e:
+            logger.info(f"QA model unavailable: {e}")
             self.qa_model = None
         
         self.threshold_calibrator = ThresholdCalibrator()

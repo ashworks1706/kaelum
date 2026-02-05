@@ -1,6 +1,9 @@
 import json
+import logging
 import time
 from pathlib import Path
+
+logger = logging.getLogger("kaelum.cache_validator")
 from typing import Dict, Optional
 from core.paths import DEFAULT_CACHE_VALIDATION_DIR
 
@@ -137,7 +140,7 @@ Respond in JSON format:
                 f.write(json.dumps(log_entry) + '\n')
         except Exception as e:
 
-            print(f"Warning: Failed to log validation: {e}")
+            logger.warning(f"Failed to log validation: {e}")
     
     def export_training_data(self, output_file: str = None):
         """Export validation logs as fine-tuning training data.
@@ -149,7 +152,7 @@ Respond in JSON format:
             str: Path to the output file
         """
         if not self.validation_log.exists():
-            print("No validation log found")
+            logger.info("No validation log found")
             return None
         
         if output_file is None:
@@ -176,9 +179,9 @@ Question: Would the cached answer FULLY and CORRECTLY satisfy the new query?""",
                         
                         f_out.write(json.dumps(training_example) + '\n')
                     except Exception as e:
-                        print(f"Warning: Skipped malformed log entry: {e}")
+                        logger.debug(f"Skipped malformed log entry: {e}")
         
-        print(f"Exported training data to {output_file}")
+        logger.info(f"Exported training data to {output_file}")
         return output_file
     
     def get_validation_stats(self) -> Dict:

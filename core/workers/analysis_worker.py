@@ -1,4 +1,5 @@
 import time
+import logging
 from typing import Dict, Any, Optional, List
 
 from ..config import KaelumConfig
@@ -10,6 +11,8 @@ from ..search import RewardModel
 from ..detectors import ConclusionDetector
 from ..learning import AdaptivePenalty
 from ..verification import RelevanceValidator
+
+logger = logging.getLogger("kaelum.analysis_worker")
 
 class AnalysisWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
@@ -89,7 +92,8 @@ class AnalysisWorker(WorkerAgent):
                     "analysis_points": parent_state.get("analysis_points", []) + ([next_step] if not is_final else []),
                     "conclusion": next_step if is_final else None
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"Analysis expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Analysis point {depth + 1}",

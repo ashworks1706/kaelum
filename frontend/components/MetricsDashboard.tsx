@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api-config'
 
 interface Metrics {
   total_queries: number
@@ -56,7 +57,7 @@ export function MetricsDashboard() {
 
   const fetchMetrics = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/metrics')
+      const response = await fetch(apiUrl('/api/metrics'))
       const data = await response.json()
       setMetrics(data)
     } catch (error) {
@@ -68,7 +69,7 @@ export function MetricsDashboard() {
 
   const fetchCacheStats = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/stats/cache')
+      const response = await fetch(apiUrl('/api/stats/cache'))
       const data = await response.json()
       setCacheStats(data)
     } catch (error) {

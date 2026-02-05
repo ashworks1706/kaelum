@@ -394,7 +394,27 @@ npm install
 cd ..
 ```
 
-### 2. Start vLLM Backend
+### 2. Configuration (Optional)
+
+Copy the example environment file and customize:
+
+```bash
+cp .env.example .env
+# Edit .env to change ports, URLs, or API keys
+```
+
+Default configuration:
+- Backend: `http://localhost:5000`
+- LLM endpoint: `http://localhost:8000/v1`
+- Frontend: `http://localhost:3000`
+
+You can override these with environment variables:
+```bash
+BACKEND_PORT=8080 python backend/app.py
+# or edit .env file
+```
+
+### 3. Start vLLM Backend
 
 I recommend vLLM because it's way faster than standard transformers inference. Here are some models I've tested:
 
@@ -548,3 +568,42 @@ These papers influenced the design:
 - **Sentence-BERT**: Reimers & Gurevych (2019), "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks". Semantic similarity with embeddings.
 
 Reading these papers helped me understand the techniques, but implementing them taught me where the tricky parts are. A lot of the details that matter for making things work aren't in the papers - they come from experimentation and debugging.
+
+---
+
+## Project Structure
+
+```
+Kaelum/
+├── backend/           # Flask API server
+├── frontend/          # Next.js web interface
+├── core/
+│   ├── detectors/     # Query classification and detection
+│   ├── learning/      # Human feedback, active learning, metrics
+│   ├── search/        # LATS, router, tree cache, reward models
+│   ├── verification/  # SymPy, syntax validation, calibrators
+│   └── workers/       # Specialized workers (Math, Code, Logic, etc.)
+├── runtime/           # Orchestrator that ties everything together
+├── docs/              # Technical documentation
+└── .kaelum/          # Runtime data (cache, routing, feedback)
+```
+
+---
+
+## Code Quality Notes
+
+This codebase has been cleaned up for production quality:
+- ✅ Proper error handling with logging throughout
+- ✅ No silent failures (all exceptions logged)
+- ✅ Configurable via environment variables (`.env.example`)
+- ✅ Centralized API configuration
+- ✅ Magic numbers documented with rationale
+- ✅ No dead code or unused imports
+
+Some components are intentionally complex for educational exploration:
+- Large ML models (BART) demonstrate NLI and zero-shot classification
+- Task classifier with exemplars shows semantic similarity approaches
+- Multiple calibrators explore adaptive thresholding techniques
+- Human feedback system implements learning from user corrections
+
+See `docs/HARDCODED_ISSUES.md` for detailed technical analysis of design decisions and trade-offs.

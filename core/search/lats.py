@@ -168,6 +168,10 @@ class LATS:
             
             avg_reward = cur.value / cur.visits
             
+            # Early pruning: Stop exploring branches that show poor performance
+            # - visits >= 3: Need minimum samples for statistical confidence
+            # - avg_reward < 0.3: Empirically, paths below this rarely recover to become good solutions
+            # This prevents wasting simulations on unpromising branches (similar to alpha-beta pruning)
             if cur.visits >= 3 and avg_reward < 0.3:
                 if not cur.pruned:
                     cur.pruned = True

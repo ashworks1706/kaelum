@@ -20,6 +20,10 @@ except ImportError:
     faiss = None
 
 WORKER_THRESHOLDS = {
+# Worker-specific similarity thresholds for cache hits
+# Higher thresholds for math/code (require exact matches) 
+# Lower thresholds for creative/factual (more semantic flexibility)
+# These values tuned empirically based on false positive rates
     "math": 0.90,
     "code": 0.87,
     "logic": 0.88,

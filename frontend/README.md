@@ -6,6 +6,15 @@ The frontend shows live logs from all components, tracks metrics like cache hit 
 
 ## Getting Started
 
+**Configuration (optional):**
+Backend URL can be configured with environment variable:
+```bash
+# In frontend/.env.local
+NEXT_PUBLIC_API_URL=http://localhost:5000
+```
+
+The frontend automatically detects localhost vs production and adjusts the API URL accordingly.
+
 **Automatic (easiest way):**
 ```bash
 ./start_demo.sh
@@ -13,11 +22,14 @@ The frontend shows live logs from all components, tracks metrics like cache hit 
 
 **Manual:**
 ```bash
-# Terminal 1 - Backend
+# Terminal 1 - Backend (default: http://localhost:5000)
 cd backend
 python app.py
 
-# Terminal 2 - Frontend
+# Or with custom port:
+BACKEND_PORT=8080 python app.py
+
+# Terminal 2 - Frontend (default: http://localhost:3000)
 cd frontend
 npm install  # first time only
 npm run dev

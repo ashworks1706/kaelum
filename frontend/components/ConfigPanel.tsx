@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api-config'
 
 interface Config {
   base_url: string
@@ -32,7 +33,7 @@ export function ConfigPanel() {
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/config')
+      const response = await fetch(apiUrl('/api/config'))
       const data = await response.json()
       setConfig(data)
     } catch (error) {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api-config'
 
 interface RouterStats {
   total_queries: number
@@ -32,7 +33,7 @@ export function RouterVisualization() {
 
   const fetchRouterStats = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/stats/router')
+      const response = await fetch(apiUrl('/api/stats/router'))
       const data = await response.json()
       setStats(data)
     } catch (error) {

@@ -1,6 +1,7 @@
 import re
 import ast
 import time
+import logging
 from typing import Optional, Dict, List, Any
 
 from .workers import WorkerAgent, WorkerResult, WorkerSpecialty
@@ -12,6 +13,8 @@ from ..search import RewardModel
 from ..detectors import TaskClassifier
 from ..learning import AdaptivePenalty
 from ..verification import ConfidenceCalibrator
+
+logger = logging.getLogger("kaelum.code_worker")
 
 class CodeWorker(WorkerAgent):
     
@@ -108,7 +111,8 @@ class CodeWorker(WorkerAgent):
                     "code_parts": parent_state.get("code_parts", []) + ([next_step] if not is_final else []),
                     "code": code if is_final else None
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"Code expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Implementation step {depth + 1}",

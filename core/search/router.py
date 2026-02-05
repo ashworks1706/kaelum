@@ -244,6 +244,9 @@ class Router:
                     feedback_adjustments.append(adjustment)
                 
                 feedback_tensor = torch.tensor(feedback_adjustments, device=self.device).unsqueeze(0)
+                # Apply human feedback adjustments to worker probabilities
+                # Multiplier 0.3 balances neural network predictions with user corrections
+                # Too high (>0.5) and it overreacts to single feedback instances
                 adjusted_probs = worker_probs + feedback_tensor * 0.3
                 adjusted_probs = torch.softmax(adjusted_probs, dim=-1)
                 
@@ -267,6 +270,9 @@ class Router:
                     orig_prob = worker_probs[0, idx].item()
                     logger.info(f"  - {worker_name}: {prob.item():.3f} (original: {orig_prob:.3f})")
                 
+                # Constrain predictions to reasonable ranges based on empirical observations:
+                # Depth 3-10: Shallower wastes MCTS potential, deeper hits diminishing returns
+                # Simulations 5-25: Fewer misses good paths, more wastes time for marginal gain
                 max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
                 num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
                 use_cache = torch.sigmoid(outputs['cache_logits']).item() > 0.5

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api-config'
 
 interface CacheStats {
   total_cached: number
@@ -24,7 +25,7 @@ export function CacheVisualization() {
 
   const fetchCacheStats = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/stats/cache')
+      const response = await fetch(apiUrl('/api/stats/cache'))
       const data = await response.json()
       setStats(data)
     } catch (error) {

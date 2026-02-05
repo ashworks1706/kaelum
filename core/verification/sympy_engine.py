@@ -14,7 +14,9 @@ class SympyEngine:
     @classmethod
     def _log_debug(cls, message: str):
         if cls.debug:
-            print(f"    [SYMPY ENGINE] {message}")
+            import logging
+            logger = logging.getLogger("kaelum.sympy")
+            logger.debug(f"[SYMPY ENGINE] {message}")
 
     @staticmethod
     def _normalize_equation(equation: str) -> Tuple[str, str]:

@@ -30,7 +30,8 @@ class LLMClient:
         if self._client is not None:
             try:
                 self._client.close()
-            except:
+            except Exception:
+                # Client cleanup failed, ignore during garbage collection
                 pass
 
     def _get_headers(self) -> dict:

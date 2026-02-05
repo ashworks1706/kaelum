@@ -8,14 +8,19 @@ from ..verification.threshold_calibrator import ThresholdCalibrator
 
 class ConclusionDetector:
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
+        import logging
+        logger = logging.getLogger("kaelum.detectors")
+        
         try:
             self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli", device=-1)
             self.use_zero_shot = True
-        except:
+        except Exception as e:
+            logger.info(f"Zero-shot classifier unavailable: {e}")
             try:
                 self.classifier = pipeline("text-classification", model="facebook/bart-large-mnli", device=-1)
                 self.use_zero_shot = False
-            except:
+            except Exception as e2:
+                logger.warning(f"Text classifier unavailable, using embedding-only mode: {e2}")
                 self.classifier = None
                 self.use_zero_shot = False
         
@@ -134,8 +139,10 @@ class ConclusionDetector:
                 zero_shot_score = result['scores'][conclusion_idx]
                 
                 return float(0.5 * contrastive_score + 0.5 * zero_shot_score)
-            except:
-                pass
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("kaelum.detectors")
+                logger.debug(f"Zero-shot classification failed: {e}")
         elif self.classifier:
             try:
                 hypothesis = "This text presents a final conclusion or result."
@@ -153,8 +160,10 @@ class ConclusionDetector:
                         nli_score = 0.0
                     
                     return float(0.5 * contrastive_score + 0.5 * nli_score)
-            except:
-                pass
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("kaelum.detectors")
+                logger.debug(f"Text classification failed: {e}")
         
         return float(contrastive_score)
     

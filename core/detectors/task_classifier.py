@@ -1,7 +1,6 @@
 from typing import Dict, List, Tuple
 from sentence_transformers import SentenceTransformer
 import numpy as np
-from sklearn.isotonic import IsotonicRegression
 import time
 from ..verification.threshold_calibrator import ThresholdCalibrator
 

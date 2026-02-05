@@ -6,7 +6,6 @@ from .domain_classifier import DomainClassifier
 from .conclusion_detector import ConclusionDetector
 from .completeness_detector import CompletenessDetector
 from .coherence_detector import CoherenceDetector
-from .repetition_detector import RepetitionDetector
 
 __all__ = [
     'TaskClassifier',
@@ -15,5 +14,4 @@ __all__ = [
     'ConclusionDetector',
     'CompletenessDetector',
     'CoherenceDetector',
-    'RepetitionDetector',
 ]

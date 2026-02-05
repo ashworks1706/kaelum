@@ -10,7 +10,7 @@ from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
 DEFAULT_CONFIG = {
     "base_url": "http://localhost:8000/v1",
     "model": "Qwen/Qwen2.5-1.5B-Instruct",
-    "api_key": "EMPTY",
+    "api_key": None,
     "temperature": 0.7,
     "max_tokens": 512,
     "embedding_model": "all-MiniLM-L6-v2",

@@ -12,7 +12,10 @@ class CoherenceDetector:
             self.nli_pipeline = pipeline('text-classification', 
                                          model='facebook/bart-large-mnli',
                                          device=-1)
-        except:
+        except Exception as e:
+            import logging
+            logger = logging.getLogger("kaelum.detectors")
+            logger.info(f"BART NLI model unavailable for coherence detection: {e}")
             self.nli_pipeline = None
         self.threshold_calibrator = ThresholdCalibrator()
     
@@ -76,7 +79,10 @@ class CoherenceDetector:
                     continuity_scores.append(result['score'] * 0.5)
                 else:
                     continuity_scores.append(0.0)
-            except:
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("kaelum.detectors")
+                logger.debug(f"NLI coherence check failed: {e}")
                 continuity_scores.append(0.5)
         
         return float(np.mean(continuity_scores)) if continuity_scores else 0.5

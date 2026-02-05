@@ -50,8 +50,10 @@ class WorkerResult:
         if self.lats_tree is not None:
             try:
                 result["lats_tree"] = self.lats_tree.root.to_dict()
-            except:
-                pass
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("kaelum.worker")
+                logger.warning(f"Failed to serialize LATS tree: {e}")
         
         return result
 
@@ -214,7 +216,8 @@ class MathWorker(WorkerAgent):
                     has_answer = answer and len(str(answer)) > 0
                     query_complexity = AdaptivePenalty.compute_complexity(query)
                     return RewardModel.get_reward("math", state, depth, has_answer=has_answer, query_complexity=query_complexity)
-                except:
+                except Exception as e:
+                    logger.debug(f"Failed to extract answer from state: {e}")
                     query_complexity = AdaptivePenalty.compute_complexity(query)
                     return RewardModel.get_reward("math", state, depth, query_complexity=query_complexity)
             
@@ -258,7 +261,8 @@ class MathWorker(WorkerAgent):
                     "partial_solution": next_step if not is_final else None,
                     "answer": next_step if is_final else None
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"Expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Continue solving step {depth + 1}",
@@ -394,7 +398,8 @@ class LogicWorker(WorkerAgent):
                     "premises": parent_state.get("premises", []),
                     "conclusion": next_step if is_conclusion else None
                 }
-            except:
+            except Exception as e:
+                logger.warning(f"Logic expansion failed at depth {depth}: {e}")
                 return {
                     "query": query,
                     "step": f"Logical step {depth + 1}",

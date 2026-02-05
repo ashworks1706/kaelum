@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { apiUrl } from '@/lib/api-config'
 import { QueryInterface } from '../components/QueryInterface'
 import { MetricsDashboard } from '../components/MetricsDashboard'
 import { RouterVisualization } from '../components/RouterVisualization'
@@ -18,13 +19,13 @@ export default function Home() {
 
   useEffect(() => {
 
-    fetch('http://localhost:5000/api/health')
+    fetch(apiUrl('/api/health'))
       .then(res => res.json())
       .then(() => setApiHealth(true))
       .catch(() => setApiHealth(false))
 
     const interval = setInterval(() => {
-      fetch('http://localhost:5000/api/health')
+      fetch(apiUrl('/api/health'))
         .then(res => res.json())
         .then(() => setApiHealth(true))
         .catch(() => setApiHealth(false))

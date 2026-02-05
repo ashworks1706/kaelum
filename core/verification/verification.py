@@ -21,7 +21,9 @@ class SymbolicVerifier:
     
     def _log_debug(self, message: str):
         if self.debug:
-            print(f"  [SYMPY DEBUG] {message}")
+            import logging
+            logger = logging.getLogger("kaelum.verification")
+            logger.debug(f"[SYMPY DEBUG] {message}")
 
     def verify_step(self, step: str) -> Tuple[bool, Optional[str]]:
         self._log_debug(f"Verifying step: {step[:100]}...")
@@ -151,7 +153,9 @@ class VerificationEngine:
     
     def _log_debug(self, message: str):
         if self.debug:
-            print(f"[VERIFICATION DEBUG] {message}")
+            import logging
+            logger = logging.getLogger("kaelum.verification")
+            logger.debug(f"[VERIFICATION DEBUG] {message}")
 
     def verify_trace(self, trace: List[str]) -> Tuple[List[str], dict]:
         self._log_debug(f"Starting verification of {len(trace)} steps")

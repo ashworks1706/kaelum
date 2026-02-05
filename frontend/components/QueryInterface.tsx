@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { apiUrl } from '@/lib/api-config'
 import { FeedbackPanel } from './FeedbackPanel'
 
 interface StreamEvent {
