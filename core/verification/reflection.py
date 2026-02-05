@@ -4,7 +4,6 @@ from transformers import pipeline
 
 from ..reasoning import LLMClient, Message
 
-
 class ReflectionEngine:
     def __init__(self, llm_client: LLMClient, verification_engine=None, max_iterations: int = 2):
         self.llm = llm_client
@@ -79,7 +78,6 @@ class ReflectionEngine:
             Message(role="system", content="You are a critical reasoning verifier. List any logical errors or gaps."),
             Message(role="user", content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nList issues (or 'None'):"),
         ]
-        
         
         response = self.llm_client.generate(messages).strip()
         

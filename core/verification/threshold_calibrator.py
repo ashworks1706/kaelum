@@ -8,7 +8,6 @@ from core.paths import DEFAULT_CALIBRATION_DIR
 
 logger = logging.getLogger("kaelum.threshold_calibrator")
 
-
 @dataclass
 class ThresholdDecision:
     score: float
@@ -17,7 +16,6 @@ class ThresholdDecision:
     actual_positive: bool
     task_type: str
     timestamp: float
-
 
 class ThresholdCalibrator:
     def __init__(self, data_dir: str = DEFAULT_CALIBRATION_DIR):

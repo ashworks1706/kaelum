@@ -14,7 +14,6 @@ from ..detectors import CompletenessDetector
 from ..learning import AdaptivePenalty
 from sentence_transformers import SentenceTransformer, util
 
-
 class FactualWorker(WorkerAgent):
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)

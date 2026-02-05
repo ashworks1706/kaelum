@@ -45,17 +45,17 @@ export function ConfigPanel() {
 
   const saveConfig = async () => {
     if (!config) return
-    
+
     setSaving(true)
     setMessage(null)
-    
+
     try {
       const response = await fetch('http://localhost:5000/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
       })
-      
+
       if (response.ok) {
         setMessage({ type: 'success', text: 'Configuration saved successfully! System reinitialized.' })
       } else {
@@ -84,19 +84,19 @@ export function ConfigPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {}
       <div className="bg-linear-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">System Configuration</h2>
         <p className="text-indigo-100">
-          Configure LLM backend, routing, verification, and search parameters. 
+          Configure LLM backend, routing, verification, and search parameters.
           Changes require system reinitialization.
         </p>
       </div>
 
-      {/* Message Display */}
+      {}
       {message && (
         <div className={`rounded-xl p-4 ${
-          message.type === 'success' 
+          message.type === 'success'
             ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200'
             : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
         }`}>
@@ -104,7 +104,7 @@ export function ConfigPanel() {
         </div>
       )}
 
-      {/* LLM Configuration */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">🤖 LLM Backend</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -179,7 +179,7 @@ export function ConfigPanel() {
         </div>
       </div>
 
-      {/* Embeddings & Routing */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">🧠 Neural Router & Embeddings</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -220,8 +220,8 @@ export function ConfigPanel() {
             </label>
           </div>
         </div>
-        
-        {/* Online Learning Settings */}
+
+        {}
         {config.enable_routing && (
           <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
             <h4 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">⚡ Online Learning</h4>
@@ -243,7 +243,7 @@ export function ConfigPanel() {
                   How fast the router learns (0.001 = default)
                 </p>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Buffer Size
@@ -261,7 +261,7 @@ export function ConfigPanel() {
                   Queries before model update (32 = default)
                 </p>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Exploration Rate
@@ -284,7 +284,7 @@ export function ConfigPanel() {
         )}
       </div>
 
-      {/* Verification Settings */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">✅ Verification & Reflection</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -341,7 +341,7 @@ export function ConfigPanel() {
         </div>
       </div>
 
-      {/* LATS Search Settings */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">🌳 LATS Search Settings</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -382,7 +382,7 @@ export function ConfigPanel() {
         </div>
       </div>
 
-      {/* Save Button */}
+      {}
       <div className="flex justify-end space-x-4">
         <button
           onClick={fetchConfig}
@@ -400,7 +400,7 @@ export function ConfigPanel() {
         </button>
       </div>
 
-      {/* Info Box */}
+      {}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6">
         <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-3">ℹ️ Configuration Notes</h3>
         <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-200">

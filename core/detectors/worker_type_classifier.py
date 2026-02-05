@@ -4,7 +4,6 @@ import numpy as np
 import time
 from ..verification.threshold_calibrator import ThresholdCalibrator
 
-
 class WorkerTypeClassifier:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):

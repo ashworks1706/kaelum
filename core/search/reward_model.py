@@ -2,7 +2,6 @@ import math
 from typing import Dict, Any, Optional
 from ..learning import AdaptivePenalty
 
-# Late import to avoid circular dependency
 _feedback_engine = None
 
 def get_feedback_engine():
@@ -15,7 +14,6 @@ def get_feedback_engine():
         except:
             _feedback_engine = None
     return _feedback_engine
-
 
 class RewardModel:
     CONFIGS = {
@@ -78,7 +76,6 @@ class RewardModel:
         
         config = RewardModel.CONFIGS.get(worker_type, RewardModel.CONFIGS["math"])
         
-        # Get base reward from config
         base_reward = 0.0
         
         if has_answer:
@@ -98,7 +95,6 @@ class RewardModel:
             base_reward = max(0.1, config["base"] - depth * adaptive_penalty)
             logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (base={config['base']:.2f}, depth_penalty={adaptive_penalty:.3f}, depth={depth})")
         
-        # Apply human feedback adjustments
         feedback_engine = get_feedback_engine()
         if feedback_engine:
             adjusted_reward = feedback_engine.get_adjusted_reward(

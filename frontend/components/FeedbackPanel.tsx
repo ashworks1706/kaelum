@@ -37,7 +37,7 @@ const WORKERS = ['math', 'code', 'logic', 'factual', 'creative', 'analysis']
 
 const StarRating = ({ rating, onRate, size = 'md' }: { rating: number; onRate: (r: number) => void; size?: 'sm' | 'md' }) => {
   const sizeClass = size === 'sm' ? 'w-4 h-4' : 'w-6 h-6'
-  
+
   return (
     <div className="flex gap-1">
       {[1, 2, 3, 4, 5].map((star) => (
@@ -71,26 +71,21 @@ export function FeedbackPanel({
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-  
-  // Overall feedback
+
   const [overallLiked, setOverallLiked] = useState<boolean | null>(null)
   const [overallRating, setOverallRating] = useState(3)
-  
-  // Worker feedback
+
   const [workerCorrect, setWorkerCorrect] = useState<boolean | null>(null)
   const [suggestedWorker, setSuggestedWorker] = useState<string>('')
-  
-  // Answer feedback
+
   const [answerCorrect, setAnswerCorrect] = useState<boolean | null>(null)
   const [answerHelpful, setAnswerHelpful] = useState<boolean | null>(null)
   const [answerComplete, setAnswerComplete] = useState<boolean | null>(null)
   const [answerRating, setAnswerRating] = useState(3)
-  
-  // Step feedback
+
   const [stepsHelpful, setStepsHelpful] = useState<boolean[]>(reasoningSteps.map(() => true))
   const [stepsRating, setStepsRating] = useState<number[]>(reasoningSteps.map(() => 3))
-  
-  // Comment
+
   const [comment, setComment] = useState('')
 
   const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (typeof window !== 'undefined'
@@ -165,7 +160,7 @@ export function FeedbackPanel({
 
   return (
     <>
-      {/* Feedback Button */}
+      {}
       <motion.button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2 z-40"
@@ -176,11 +171,11 @@ export function FeedbackPanel({
         <span className="font-semibold">Give Feedback</span>
       </motion.button>
 
-      {/* Feedback Modal */}
+      {}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
+            {}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -189,14 +184,14 @@ export function FeedbackPanel({
               onClick={() => !isSubmitting && setIsOpen(false)}
             />
 
-            {/* Modal */}
+            {}
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-4xl md:max-h-[90vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
             >
-              {/* Header */}
+              {}
               <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -214,7 +209,7 @@ export function FeedbackPanel({
                 </div>
               </div>
 
-              {/* Content */}
+              {}
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {submitted ? (
                   <motion.div
@@ -232,7 +227,7 @@ export function FeedbackPanel({
                   </motion.div>
                 ) : (
                   <>
-                    {/* Overall Satisfaction */}
+                    {}
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
                       <h3 className="font-bold text-slate-900 dark:text-white mb-3">
                         1️⃣ Overall Experience
@@ -274,7 +269,7 @@ export function FeedbackPanel({
                       </div>
                     </div>
 
-                    {/* Worker Selection Feedback */}
+                    {}
                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
                       <h3 className="font-bold text-slate-900 dark:text-white mb-3">
                         2️⃣ Worker Selection
@@ -343,7 +338,7 @@ export function FeedbackPanel({
                       </div>
                     </div>
 
-                    {/* Answer Quality Feedback */}
+                    {}
                     <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
                       <h3 className="font-bold text-slate-900 dark:text-white mb-3">
                         3️⃣ Answer Quality
@@ -376,7 +371,7 @@ export function FeedbackPanel({
                             </button>
                           </div>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
@@ -405,7 +400,7 @@ export function FeedbackPanel({
                               </button>
                             </div>
                           </div>
-                          
+
                           <div>
                             <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
                               Was it complete?
@@ -444,7 +439,7 @@ export function FeedbackPanel({
                       </div>
                     </div>
 
-                    {/* Reasoning Steps Feedback */}
+                    {}
                     {reasoningSteps.length > 0 && (
                       <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4">
                         <h3 className="font-bold text-slate-900 dark:text-white mb-3">
@@ -484,7 +479,7 @@ export function FeedbackPanel({
                       </div>
                     )}
 
-                    {/* Additional Comments */}
+                    {}
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
                       <h3 className="font-bold text-slate-900 dark:text-white mb-3">
                         5️⃣ Additional Comments (Optional)
@@ -501,7 +496,7 @@ export function FeedbackPanel({
                 )}
               </div>
 
-              {/* Footer */}
+              {}
               {!submitted && (
                 <div className="border-t border-slate-200 dark:border-slate-700 p-6 bg-slate-50 dark:bg-slate-900/50">
                   <div className="flex gap-3">

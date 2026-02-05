@@ -14,7 +14,6 @@ from ..search import RewardModel
 from ..detectors import ConclusionDetector
 from ..learning import AdaptivePenalty
 
-
 class WorkerSpecialty(Enum):
     MATH = "math"
     LOGIC = "logic"
@@ -22,7 +21,6 @@ class WorkerSpecialty(Enum):
     FACTUAL = "factual"
     CREATIVE = "creative"
     ANALYSIS = "analysis"
-
 
 @dataclass
 @dataclass
@@ -35,7 +33,7 @@ class WorkerResult:
     execution_time: float
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
-    lats_tree: Optional[Any] = None  # Store the full LATS tree for visualization
+    lats_tree: Optional[Any] = None
     
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -49,7 +47,6 @@ class WorkerResult:
             "metadata": self.metadata or {}
         }
         
-        # Include serialized LATS tree if available
         if self.lats_tree is not None:
             try:
                 result["lats_tree"] = self.lats_tree.root.to_dict()
@@ -57,7 +54,6 @@ class WorkerResult:
                 pass
         
         return result
-
 
 class WorkerAgent(ABC):
     
@@ -143,12 +139,10 @@ class WorkerAgent(ABC):
         
         tree, metadata, similarity = cached
         
-        # Extract answer from best path in tree
         best_node = tree.best_child()
         if best_node is None:
             return None
         
-        # Build reasoning steps from tree path
         reasoning_steps = []
         node = best_node
         while node is not None:
@@ -160,11 +154,11 @@ class WorkerAgent(ABC):
         
         return WorkerResult(
             answer=answer,
-            confidence=metadata.confidence * similarity,  # Adjust confidence by similarity
+            confidence=metadata.confidence * similarity,
             reasoning_steps=reasoning_steps,
             verification_passed=metadata.success,
             specialty=self.get_specialty(),
-            execution_time=0.001,  # Cache hit is fast
+            execution_time=0.001,
             metadata={
                 "cache_hit": True,
                 "similarity": similarity,
@@ -179,9 +173,6 @@ class WorkerAgent(ABC):
         return await loop.run_in_executor(
             None, self.solve, query, context, use_cache, max_tree_depth, num_simulations
         )
-
-
-
 
 class MathWorker(WorkerAgent):
     
@@ -324,7 +315,6 @@ class MathWorker(WorkerAgent):
             }
         )
 
-
 class LogicWorker(WorkerAgent):
     
     def get_specialty(self) -> WorkerSpecialty:
@@ -453,7 +443,6 @@ class LogicWorker(WorkerAgent):
                 "avg_reward": avg_reward
             }
         )
-
 
 def create_worker(specialty: WorkerSpecialty, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None, **kwargs) -> WorkerAgent:
     from core.workers.code_worker import CodeWorker

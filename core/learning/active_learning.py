@@ -9,7 +9,6 @@ from core.shared_encoder import get_shared_encoder
 from core.paths import DEFAULT_ACTIVE_LEARNING_DIR
 import numpy as np
 
-
 class QuerySelector:
     """Intelligent query selection for fine-tuning data collection.
     
@@ -218,7 +217,6 @@ class QuerySelector:
             worker = q.get("worker", "unknown")
             counts[worker] = counts.get(worker, 0) + 1
         return counts
-
 
 class ActiveLearningEngine:
     """Active learning engine for continuous model improvement."""

@@ -75,16 +75,16 @@ export function FineTuningPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {}
       <div className="bg-linear-to-r from-purple-600 to-pink-600 rounded-2xl p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">Fine-tuning Data Collection</h2>
         <p className="text-purple-100">
-          Intelligently select queries for model fine-tuning. Export high-quality reasoning traces 
+          Intelligently select queries for model fine-tuning. Export high-quality reasoning traces
           to train specialized worker models.
         </p>
       </div>
 
-      {/* Message Display */}
+      {}
       {message && (
         <div className={`rounded-xl p-4 ${
           message.type === 'success'
@@ -95,7 +95,7 @@ export function FineTuningPanel() {
         </div>
       )}
 
-      {/* Strategy Selection */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">🎯 Selection Strategy</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -120,7 +120,7 @@ export function FineTuningPanel() {
         </div>
       </div>
 
-      {/* Configuration */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">⚙️ Export Configuration</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -166,7 +166,7 @@ export function FineTuningPanel() {
         </button>
       </div>
 
-      {/* Fine-tuning Workflow */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">🔄 Fine-tuning Workflow</h3>
         <div className="space-y-4">
@@ -225,7 +225,7 @@ export function FineTuningPanel() {
         </div>
       </div>
 
-      {/* Available Scripts */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">📜 Available Scripts</h3>
         <div className="space-y-4">
@@ -251,7 +251,7 @@ export function FineTuningPanel() {
         </div>
       </div>
 
-      {/* Info */}
+      {}
       <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-2xl p-6">
         <h3 className="text-lg font-bold text-purple-900 dark:text-purple-100 mb-3">💡 Fine-tuning Tips</h3>
         <ul className="space-y-2 text-sm text-purple-800 dark:text-purple-200">

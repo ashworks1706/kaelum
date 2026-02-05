@@ -55,7 +55,6 @@ print(">>> CORS configured", flush=True)
 
 current_config = DEFAULT_CONFIG.copy()
 
-
 def initialize_kaelum():
     """Initialize Kaelum system with full configuration."""
     logger = logging.getLogger(__name__)
@@ -72,8 +71,6 @@ def initialize_kaelum():
     
     logger.info("✓ Kaelum system initialized successfully")
 
-
-# Lazy initialization - only initialize on first query, not on import
 _initialized = False
 
 def ensure_initialized():
@@ -83,11 +80,9 @@ def ensure_initialized():
         initialize_kaelum()
         _initialized = True
 
-
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "version": kaelum.__version__, "timestamp": time.time()})
-
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def config():
@@ -97,14 +92,13 @@ def config():
         return jsonify(current_config)
     
     current_config.update(request.json)
-    ensure_initialized()  # Initialize if needed before applying config
+    ensure_initialized()
     kaelum.set_reasoning_model(**current_config)
     return jsonify({"status": "updated", "config": current_config})
 
-
 @app.route('/api/query', methods=['POST'])
 def query():
-    ensure_initialized()  # Lazy initialization on first query
+    ensure_initialized()
     data = request.json
     query_text = data.get('query', '')
     use_stream = data.get('stream', False)
@@ -112,7 +106,6 @@ def query():
     if not query_text:
         return jsonify({"error": "Query text is required"}), 400
     
-    # Clear log file at start of query
     if LOG_FILE.exists():
         with open(LOG_FILE, 'w') as f:
             f.write('')
@@ -126,7 +119,6 @@ def query():
                 result = kaelum.kaelum_enhance_reasoning(query_text)
                 execution_time = time.time() - start_time
                 
-                # Safely extract values with proper defaults
                 worker_used = result.get('worker_used') or 'unknown'
                 confidence = result.get('confidence') or 0.0
                 reasoning_steps = result.get("reasoning_steps") or []
@@ -138,7 +130,7 @@ def query():
                 yield f"data: {json.dumps({'type': 'router', 'worker': worker_used, 'confidence': confidence})}\n\n"
                 
                 for i, step in enumerate(reasoning_steps):
-                    if step:  # Only yield if step is not None
+                    if step:
                         yield f"data: {json.dumps({'type': 'reasoning_step', 'index': i, 'content': step})}\n\n"
                 
                 yield f"data: {json.dumps({'type': 'answer', 'content': suggested_approach})}\n\n"
@@ -173,7 +165,6 @@ def query():
     except Exception as e:
         return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
-
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
     """Get logs from file with optional offset for polling."""
@@ -186,13 +177,13 @@ def get_logs():
         with open(LOG_FILE, 'r') as f:
             all_lines = f.readlines()
             total_lines = len(all_lines)
-            # Apply offset and limit
+
             selected_lines = all_lines[offset:offset + limit] if offset > 0 else all_lines[-limit:]
             
             for line in selected_lines:
                 line = line.strip()
                 if line:
-                    # Simple text logs, create a basic structure for frontend
+
                     logs.append({
                         'timestamp': '',
                         'level': 'info',
@@ -207,10 +198,9 @@ def get_logs():
         "timestamp": time.time()
     })
 
-
 @app.route('/api/metrics', methods=['GET'])
 def metrics():
-    ensure_initialized()  # Lazy initialization
+    ensure_initialized()
     try:
         metrics_data = kaelum.get_metrics()
         analytics = metrics_data.get('analytics', {})
@@ -241,11 +231,10 @@ def metrics():
             "reflection_metrics": {"total_reflections": 0, "avg_iterations": 0.0, "improvement_rate": 0.0}
         })
 
-
 @app.route('/api/stats/router', methods=['GET'])
 def router_stats():
     try:
-        # Use absolute path to root .kaelum folder
+
         project_root = Path(__file__).parent.parent
         router_file = project_root / ".kaelum" / "routing" / "training_data.json"
         training_data = []
@@ -278,10 +267,8 @@ def router_stats():
         success_rate = success_count / total_queries if total_queries > 0 else 0.0
         buffer_size = current_config.get("router_buffer_size", 32)
         
-        # Get actual router training buffer size if available
         actual_buffer_size = total_queries % buffer_size if total_queries > 0 else 0
         
-        # Try to get the actual router's training buffer size from orchestrator
         try:
             metrics_data = kaelum.get_metrics()
             router_info = metrics_data.get('analytics', {}).get('router', {})
@@ -309,18 +296,17 @@ def router_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/stats/cache', methods=['GET'])
 def cache_stats():
     try:
-        # Use absolute path to root .kaelum folder
+
         project_root = Path(__file__).parent.parent
         cache_file = project_root / ".kaelum" / "cache" / "metadata.json"
         validation_log = project_root / ".kaelum" / "cache_validation" / "validation_log.jsonl"
         
         cache_data = []
         if cache_file.exists():
-            # Handle JSONL format (one JSON object per line)
+
             with open(cache_file, 'r') as f:
                 for line in f:
                     line = line.strip()
@@ -348,14 +334,12 @@ def cache_stats():
         accepted = sum(1 for v in validation_entries if v.get('validation_result', {}).get('valid', False))
         rejected = total_validations - accepted
         
-        # Load node counts from actual tree files
         cache_files = []
         trees_dir = project_root / ".kaelum" / "cache" / "trees"
         for e in cache_data[:20]:
             tree_path = e.get('tree_path', '')
             node_count = 0
             
-            # Try to load the tree file to get node count
             if tree_path and Path(tree_path).exists():
                 try:
                     with open(tree_path, 'r') as tf:
@@ -371,11 +355,9 @@ def cache_stats():
                 'cache_id': e.get('tree_id', '')
             })
         
-        # Calculate tree-specific stats
         high_quality = sum(1 for e in cache_data if e.get('confidence', 0) > 0.7 or e.get('success', False))
         low_quality = len(cache_data) - high_quality
         
-        # Calculate cache hit rate from metadata
         cache_hits = sum(1 for e in cache_data if e.get('cache_hit', False))
         hit_rate = cache_hits / len(cache_data) if len(cache_data) > 0 else 0.0
         
@@ -389,21 +371,20 @@ def cache_stats():
             "total_validations": total_validations,
             "recent_validations": validation_entries[-5:],
             "cache_files": cache_files,
-            # Tree-specific stats for TreesVisualization
+
             "total_trees": len(cache_data),
             "high_quality": high_quality,
             "low_quality": low_quality,
             "hit_rate": hit_rate,
-            "avg_similarity": 0.85  # Default value, can be calculated from actual similarity scores
+            "avg_similarity": 0.85
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/stats/calibration', methods=['GET'])
 def calibration_stats():
     try:
-        # Use absolute path to root .kaelum folder
+
         project_root = Path(__file__).parent.parent
         calibration_file = project_root / ".kaelum" / "calibration" / "optimal_thresholds.json"
         decisions_file = project_root / ".kaelum" / "calibration" / "decisions.jsonl"
@@ -426,17 +407,15 @@ def calibration_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/export/training-data', methods=['GET'])
 def export_training():
-    ensure_initialized()  # Lazy initialization
+    ensure_initialized()
     try:
         output_path = f"/tmp/kaelum_training_{int(time.time())}.jsonl"
         count = kaelum.export_training_data(output_path)
         return jsonify({"status": "exported", "count": count, "path": output_path})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/api/workers', methods=['GET'])
 def get_workers():
@@ -445,7 +424,6 @@ def get_workers():
         'workers': ['math', 'logic', 'code', 'factual', 'creative', 'analysis']
     })
 
-
 @app.route('/api/trees', methods=['GET'])
 def get_reasoning_trees():
     """Get all reasoning trees from cache for visualization"""
@@ -453,7 +431,6 @@ def get_reasoning_trees():
         import json
         from pathlib import Path
         
-        # Trees are stored in .kaelum/cache/trees/
         project_root = Path(__file__).parent.parent
         trees_dir = project_root / ".kaelum" / "cache" / "trees"
         trees = []
@@ -461,29 +438,26 @@ def get_reasoning_trees():
         if not trees_dir.exists():
             return jsonify({'trees': [], 'total': 0})
         
-        # Read all tree files
         for tree_file in sorted(trees_dir.glob('tree_*.json'), key=lambda f: f.stat().st_mtime, reverse=True):
             try:
                 with open(tree_file, 'r') as f:
                     tree_data = json.load(f)
                     
-                    # Extract result and tree data
                     result = tree_data.get('result', {})
                     metrics = result.get('metrics', {})
                     lats_tree = tree_data.get('lats_tree', None)
                     tree_stats = tree_data.get('tree_stats', {})
                     
-                    # If we have the full LATS tree structure, use it
                     if lats_tree:
                         root_node = parse_lats_node(lats_tree)
                         best_path = extract_best_path(lats_tree)
-                        mark_best_path(root_node, best_path)  # Mark nodes on best path
+                        mark_best_path(root_node, best_path)
                         total_nodes = tree_stats.get('total_nodes', count_nodes(lats_tree))
                         pruned_nodes = count_pruned_nodes(lats_tree)
                         max_depth = tree_stats.get('max_depth', metrics.get('tree_depth', 1))
                         avg_reward = tree_stats.get('avg_reward', result.get('confidence', 0.0))
                     else:
-                        # Fallback to simple single-node structure for old cache entries
+
                         root_node = {
                             'id': 'root',
                             'query': result.get('query', ''),
@@ -502,7 +476,6 @@ def get_reasoning_trees():
                         max_depth = metrics.get('tree_depth', 1)
                         avg_reward = result.get('confidence', 0.0)
                     
-                    # Convert to format expected by frontend
                     tree_info = {
                         'tree_id': tree_file.stem,
                         'query': result.get('query', 'Unknown query'),
@@ -530,7 +503,6 @@ def get_reasoning_trees():
     except Exception as e:
         return jsonify({'error': str(e), 'trees': []}), 500
 
-
 def parse_lats_node(node_dict):
     """Convert LATS node dict to frontend format"""
     visits = node_dict.get('visits', 0)
@@ -545,11 +517,10 @@ def parse_lats_node(node_dict):
         'total_reward': value,
         'avg_reward': avg_reward,
         'is_pruned': node_dict.get('pruned', False),
-        'is_best_path': False,  # Will be marked later based on best_path
+        'is_best_path': False,
         'depth': node_dict.get('state', {}).get('depth', 0),
         'worker_type': node_dict.get('state', {}).get('worker', 'unknown')
     }
-
 
 def extract_best_path(tree_dict):
     """Extract the best path through the tree"""
@@ -563,12 +534,10 @@ def extract_best_path(tree_dict):
         if not children:
             break
         
-        # Find child with highest average reward
         best_child = max(children, key=lambda c: c.get('value', 0) / max(1, c.get('visits', 1)))
         current = best_child
     
     return path
-
 
 def count_nodes(tree_dict):
     """Count total nodes in tree"""
@@ -577,14 +546,12 @@ def count_nodes(tree_dict):
         count += count_nodes(child)
     return count
 
-
 def count_pruned_nodes(tree_dict):
     """Count pruned nodes in tree"""
     count = 1 if tree_dict.get('pruned', False) else 0
     for child in tree_dict.get('children', []):
         count += count_pruned_nodes(child)
     return count
-
 
 def mark_best_path(node, best_path_ids):
     """Mark nodes that are on the best path"""
@@ -594,18 +561,15 @@ def mark_best_path(node, best_path_ids):
     for child in node.get('children', []):
         mark_best_path(child, best_path_ids)
 
-
 @app.route('/api/feedback', methods=['POST'])
 def submit_feedback():
     """Submit human feedback to improve system performance."""
     try:
         data = request.json
         
-        # Import feedback engine
         from core.learning.human_feedback import HumanFeedbackEngine, HumanFeedback
         import hashlib
         
-        # Create feedback object
         query = data.get('query', '')
         query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
         
@@ -630,7 +594,6 @@ def submit_feedback():
             comment=data.get('comment')
         )
         
-        # Submit feedback
         engine = HumanFeedbackEngine()
         result = engine.submit_feedback(feedback)
         
@@ -641,7 +604,6 @@ def submit_feedback():
     except Exception as e:
         logger.error(f"❌ FEEDBACK: Error processing feedback: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/api/feedback/stats', methods=['GET'])
 def get_feedback_stats():
@@ -658,7 +620,6 @@ def get_feedback_stats():
         logger.error(f"❌ FEEDBACK STATS: Error getting stats: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/feedback/worker/<worker>', methods=['GET'])
 def get_worker_feedback(worker):
     """Get feedback statistics for a specific worker."""
@@ -674,14 +635,12 @@ def get_worker_feedback(worker):
         logger.error(f"❌ WORKER FEEDBACK: Error getting worker stats: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/feedback/router-impact', methods=['GET'])
 def get_router_feedback_impact():
     """Get current impact of human feedback on router decisions."""
     try:
         ensure_initialized()
         
-        # Get feedback-enhanced stats from orchestrator
         metrics = kaelum.get_metrics()
         feedback_data = metrics.get('human_feedback', {})
         
@@ -696,7 +655,6 @@ def get_router_feedback_impact():
     except Exception as e:
         logger.error(f"❌ ROUTER FEEDBACK IMPACT: Error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == '__main__':
     print("\n" + "="*70)

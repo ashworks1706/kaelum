@@ -13,7 +13,6 @@ from ..learning import AdaptivePenalty
 from ..verification import ConfidenceCalibrator
 from ..detectors import CoherenceDetector
 
-
 class CreativeWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
@@ -141,7 +140,7 @@ class CreativeWorker(WorkerAgent):
             verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
-            lats_tree=tree,  # Include the full LATS tree
+            lats_tree=tree,
             metadata={
                 'task_type': task_type,
                 'diversity_score': metrics['diversity'],
@@ -153,14 +152,11 @@ class CreativeWorker(WorkerAgent):
             }
         )
     
-    
     def _build_creative_prompt(self, query: str, task_type: str) -> str:
         prompt_parts = []
         
-        # Base instruction emphasizing creativity
         prompt_parts.append("You are a creative expert. Think imaginatively and generate novel, engaging content.")
         
-        # Task-type specific instructions
         if task_type == 'storytelling':
             prompt_parts.append("\nFocus on narrative structure, character development, and engaging plot.")
         elif task_type == 'poetry':
@@ -174,10 +170,8 @@ class CreativeWorker(WorkerAgent):
         elif task_type == 'dialogue':
             prompt_parts.append("\nCreate natural, engaging dialogue with distinct voices.")
         
-        # Encourage exploration
         prompt_parts.append("\nBe creative, original, and don't be afraid to take risks.")
         
-        # Add the query
         prompt_parts.append(f"\n\nTask: {query}")
         prompt_parts.append("\nResponse:")
         

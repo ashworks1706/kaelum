@@ -12,32 +12,30 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('query')
   const [apiHealth, setApiHealth] = useState<boolean | null>(null)
 
-  // Make setActiveTab available globally for cross-component navigation
   useEffect(() => {
     (window as any).setActiveTab = setActiveTab
   }, [])
 
   useEffect(() => {
-    // Check API health on mount
+
     fetch('http://localhost:5000/api/health')
       .then(res => res.json())
       .then(() => setApiHealth(true))
       .catch(() => setApiHealth(false))
-    
-    // Recheck every 10 seconds
+
     const interval = setInterval(() => {
       fetch('http://localhost:5000/api/health')
         .then(res => res.json())
         .then(() => setApiHealth(true))
         .catch(() => setApiHealth(false))
     }, 10000)
-    
+
     return () => clearInterval(interval)
   }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      {/* Header */}
+      {}
       <header className="border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
@@ -47,12 +45,12 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  Kaelum AI 
+                  Kaelum AI
                 </h1>
               </div>
             </div>
-            
-            {/* API Status */}
+
+            {}
             <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${apiHealth ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
               <span className="text-sm text-slate-600 dark:text-slate-400">
@@ -63,7 +61,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {}
       <nav className="border-b border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-4 overflow-x-auto">
@@ -92,7 +90,7 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Main Content */}
+      {}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'query' && <QueryInterface />}
         {activeTab === 'metrics' && <MetricsDashboard />}
@@ -102,7 +100,7 @@ export default function Home() {
         {activeTab === 'finetune' && <FineTuningPanel />}
       </main>
 
-      {/* Footer */}
+      {}
       <footer className="mt-16 border-t border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-900/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-sm text-slate-600 dark:text-slate-400">

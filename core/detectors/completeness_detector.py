@@ -6,7 +6,6 @@ import re
 import time
 from ..verification.threshold_calibrator import ThresholdCalibrator
 
-
 class CompletenessDetector:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):

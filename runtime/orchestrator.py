@@ -29,7 +29,6 @@ from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
 
 logger = logging.getLogger("kaelum.orchestrator")
 
-
 class KaelumOrchestrator:
     """Orchestrates complete reasoning pipeline with verification and reflection."""
 
@@ -125,7 +124,6 @@ class KaelumOrchestrator:
         logger.info(f"QUERY: {query}")
         logger.info("=" * 70)
         
-        # Use shared encoder to avoid loading model multiple times
         if self._encoder is None:
             self._encoder = get_shared_encoder(self.config.embedding_model, device='cpu')
         
@@ -139,7 +137,6 @@ class KaelumOrchestrator:
             cache_result["metrics"]["total_time_ms"] = 1
             return cache_result
         
-        # Step 2: Route query to appropriate expert worker (only on cache miss)
         logger.info("\n" + "=" * 70)
         logger.info("STEP 2: ROUTING TO EXPERT WORKER")
         logger.info("=" * 70)
@@ -166,7 +163,6 @@ class KaelumOrchestrator:
             use_ensemble = False
             logger.info(f"ROUTING: Default to {worker_specialty.upper()} worker (router disabled)")
         
-        # Apply CLI overrides if provided
         if self.override_max_tree_depth is not None:
             logger.info(f"ROUTING: Overriding max_tree_depth: {max_depth} → {self.override_max_tree_depth} (from CLI)")
             max_depth = self.override_max_tree_depth
@@ -192,14 +188,11 @@ class KaelumOrchestrator:
         else:
             ensemble_workers = None
         
-        # Router already provides optimal params via neural network
-        # No need for separate adaptive config
-        
         session_id = f"session_{int(time.time() * 1000)}"
         self.metrics.start_session(session_id, metadata={"query": query[:50]})
         start_time = time.time()
         
-        max_iterations = self.config.max_reflection_iterations + 1  # Initial attempt + reflections
+        max_iterations = self.config.max_reflection_iterations + 1
         iteration = 0
         verification_passed = False
         final_result = None
@@ -210,7 +203,6 @@ class KaelumOrchestrator:
             logger.info(f"ITERATION {iteration}/{max_iterations}")
             logger.info(f"{'=' * 70}")
             
-            # Step 2: Worker reasons using LATS + caching
             logger.info("\n" + "=" * 70)
             logger.info(f"STEP 3: WORKER EXECUTION ({worker_specialty.upper()})")
             logger.info("=" * 70)
@@ -295,14 +287,12 @@ class KaelumOrchestrator:
             logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
             logger.info(f"WORKER: Confidence = {result.confidence:.3f}")
             
-            # Safely log answer preview
             if result.answer:
                 preview = result.answer[:100] if len(result.answer) > 100 else result.answer
                 logger.info(f"WORKER: Answer preview: {preview}...")
             else:
                 logger.warning(f"WORKER: No answer generated (answer is None or empty)")
             
-            # Step 3: Verification - check if reasoning is correct
             logger.info("\n" + "=" * 70)
             logger.info("STEP 4: VERIFICATION")
             logger.info("=" * 70)
@@ -339,7 +329,6 @@ class KaelumOrchestrator:
                     for i, issue in enumerate(issues, 1):
                         logger.info(f"    {i}. {issue}")
                 
-                # Step 4: Reflection - improve reasoning if not last iteration
                 if iteration < max_iterations:
                     logger.info("\n" + "=" * 70)
                     logger.info("STEP 5: REFLECTION")
@@ -356,8 +345,6 @@ class KaelumOrchestrator:
                     )
                     reflection_time = time.time() - reflection_start_time
                     
-                    # Update worker's reasoning for next iteration
-                    # (Next iteration will generate new answer based on improved understanding)
                     logger.info(f"REFLECTION: ✓ Completed in {reflection_time:.2f}s")
                     logger.info(f"REFLECTION: Generated {len(improved_steps)} improved reasoning steps")
                     logger.info(f"REFLECTION: Will retry with iteration {iteration + 1}/{max_iterations}")
@@ -376,7 +363,6 @@ class KaelumOrchestrator:
         logger.info(f"TIME: {total_time:.3f}s")
         logger.info(f"{'=' * 70}\n")
         
-        # Format response
         response = {
             "query": query,
             "reasoning_trace": final_result.reasoning_steps,
@@ -395,7 +381,6 @@ class KaelumOrchestrator:
             }
         }
         
-        # Prepare cache data with full LATS tree structure
         cache_data = {
             "result": response,
             "quality": "high" if verification_passed and final_result.confidence > 0.7 else "low",
@@ -403,7 +388,6 @@ class KaelumOrchestrator:
             "worker": worker_specialty
         }
         
-        # Include full LATS tree structure if available
         if hasattr(final_result, 'lats_tree') and final_result.lats_tree is not None:
             try:
                 cache_data["lats_tree"] = final_result.lats_tree.root.to_dict()
@@ -416,11 +400,9 @@ class KaelumOrchestrator:
             except Exception as e:
                 logger.warning(f"CACHE: Failed to serialize LATS tree: {e}")
         
-        # Store in cache with quality metadata
         self.tree_cache.store(query_embedding, cache_data)
         logger.info(f"CACHE: Stored result with quality={cache_data['quality']}")
         
-        # Step 6: Record outcome for router learning with enhanced feedback
         if self.router:
             avg_reward = final_result.metadata.get("avg_reward", final_result.confidence)
             actual_depth = final_result.metadata.get("tree_depth", max_depth)
@@ -442,7 +424,6 @@ class KaelumOrchestrator:
             }
             self.router.record_outcome(routing_decision, outcome)
         
-        # Format response
         response = {
             "query": query,
             "reasoning_trace": final_result.reasoning_steps,
@@ -461,7 +442,6 @@ class KaelumOrchestrator:
             }
         }
         
-        # Log metrics with token counting
         input_text = query
         output_text = final_result.answer + " ".join(final_result.reasoning_steps[:3])
         self.metrics.log_inference(
@@ -475,7 +455,6 @@ class KaelumOrchestrator:
             session_id=session_id
         )
         
-        # Collect for active learning
         if self.active_learning:
             self.active_learning.collect_query(query, response)
         
@@ -486,7 +465,6 @@ class KaelumOrchestrator:
         session_metrics = self.metrics.get_session_metrics(session_id)
         analytics = self.metrics.get_analytics_summary()
         
-        # Add router metrics if available
         router_metrics = {}
         feedback_metrics = {}
         if self.router:
@@ -496,7 +474,7 @@ class KaelumOrchestrator:
                 "training_steps": self.router.training_step_count,
                 "exploration_rate": self.router.exploration_rate
             }
-            # Add human feedback enhanced stats
+
             feedback_metrics = self.router.get_feedback_enhanced_stats()
         
         return {

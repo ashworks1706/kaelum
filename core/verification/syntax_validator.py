@@ -5,7 +5,6 @@ import tempfile
 import os
 from typing import Dict, Optional, Tuple
 
-
 class SyntaxValidator:
     
     SUPPORTED_LANGUAGES = ['python', 'javascript', 'typescript']
@@ -95,8 +94,6 @@ class SyntaxValidator:
             }
         except Exception as e:
             return self._fallback_validate(code, language)
-    
-
     
     def _validate_balanced_syntax(self, code: str, language: str) -> Dict:
         stack = []

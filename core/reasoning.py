@@ -6,11 +6,9 @@ import httpx
 from pydantic import BaseModel, Field
 from core.config import LLMConfig
 
-
 class Message(BaseModel):
     role: str = Field(description="Role: 'user', 'assistant', or 'system'")
     content: str = Field(description="Message content")
-
 
 class LLMClient:
     def __init__(self, config: LLMConfig):
@@ -148,7 +146,6 @@ class LLMClient:
                 f"The model may be too slow or overloaded."
             ) from e
 
-
 class ReasoningGenerator:
 
     def __init__(self, llm_client: LLMClient, system_prompt=None, user_template=None):
@@ -216,4 +213,3 @@ class ReasoningGenerator:
             items.append(' '.join(current_item))
         
         return items
-

@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict, Optional
 from core.paths import DEFAULT_CACHE_VALIDATION_DIR
 
-
 class CacheValidator:
     """LLM-powered semantic cache validation.
     
@@ -38,7 +37,7 @@ class CacheValidator:
         logger = logging.getLogger("kaelum.cache_validator")
         
         if not self.llm_client:
-            # Fallback: accept if queries are similar enough
+
             logger.debug("CACHE VALIDATION: No LLM client, accepting based on similarity")
             return {
                 'valid': True,
@@ -72,7 +71,6 @@ Respond in JSON format:
     "reason": "brief explanation"
 }}"""
 
-            # Use LLMClient.generate() with Message objects
             from core.reasoning import Message
             messages = [
                 Message(role="system", content="You are a precise semantic validator. Respond only with valid JSON."),
@@ -83,7 +81,6 @@ Respond in JSON format:
             
             response = self.llm_client.generate(messages, stream=False)
             
-            # Parse JSON response
             try:
                 result = json.loads(response)
                 if 'valid' not in result:
@@ -93,7 +90,7 @@ Respond in JSON format:
                 if 'reason' not in result:
                     result['reason'] = 'No reason provided'
             except json.JSONDecodeError:
-                # Fallback parsing
+
                 result = {
                     'valid': 'true' in response.lower() and 'false' not in response.lower(),
                     'confidence': 0.6,
@@ -105,13 +102,12 @@ Respond in JSON format:
             logger.info(f"  Confidence: {result['confidence']:.3f}")
             logger.info(f"  Reason: {result['reason'][:100]}...")
             
-            # Log validation decision
             self._log_validation(new_query, cached_query, cached_answer, result)
             
             return result
             
         except Exception as e:
-            # Log error and fail safe (reject cache)
+
             logger.warning(f"CACHE VALIDATION: Error during validation: {str(e)}")
             logger.warning(f"CACHE VALIDATION: ✗ REJECTED (error)")
             return {
@@ -140,7 +136,7 @@ Respond in JSON format:
             with open(self.validation_log, 'a') as f:
                 f.write(json.dumps(log_entry) + '\n')
         except Exception as e:
-            # Don't fail validation if logging fails
+
             print(f"Warning: Failed to log validation: {e}")
     
     def export_training_data(self, output_file: str = None):
@@ -167,7 +163,6 @@ Respond in JSON format:
                     try:
                         entry = json.loads(line)
                         
-                        # Format as instruction-following training data
                         training_example = {
                             'instruction': 'Analyze if a cached answer can be reused for a new query.',
                             'input': f"""CACHED QUERY: {entry['cached_query']}

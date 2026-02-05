@@ -1,6 +1,5 @@
 from typing import Dict
 
-
 class AdaptivePenalty:
     
     BASE_PENALTIES = {

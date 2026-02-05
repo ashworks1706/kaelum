@@ -5,7 +5,6 @@ import json
 import time
 from core.paths import DEFAULT_ANALYTICS_DIR
 
-
 class TokenCounter:
     
     @staticmethod
@@ -26,7 +25,6 @@ class TokenCounter:
             total += TokenCounter.count_tokens(content)
             total += 4
         return total
-
 
 class AnalyticsDashboard:
     
@@ -102,7 +100,6 @@ class AnalyticsDashboard:
                 queries.append(json.loads(line))
         
         return queries[-limit:]
-
 
 class CostTracker:
     def __init__(self):
@@ -241,4 +238,3 @@ class CostTracker:
         if not sid or sid not in self.sessions:
             return "{}"
         return json.dumps(self.sessions[sid], indent=2)
-

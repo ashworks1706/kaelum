@@ -7,7 +7,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import time
 from ..verification.threshold_calibrator import ThresholdCalibrator
 
-
 class RepetitionDetector:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):

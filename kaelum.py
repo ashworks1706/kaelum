@@ -11,7 +11,6 @@ from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
 _orchestrator: Optional[KaelumOrchestrator] = None
 _embedding_model: str = "all-MiniLM-L6-v2"
 
-
 def set_reasoning_model(
     base_url: str = "http://localhost:11434/v1",
     model: str = "Qwen/Qwen2.5-1.5B-Instruct",
@@ -69,11 +68,9 @@ def set_reasoning_model(
         router_exploration_rate=router_exploration_rate,
     )
 
-
 def get_embedding_model() -> str:
     """Get the currently configured embedding model name."""
     return _embedding_model
-
 
 def enhance(query: str) -> str:
     global _orchestrator
@@ -106,7 +103,6 @@ def enhance(query: str) -> str:
     
     return output
 
-
 def enhance_stream(query: str):
     global _orchestrator
     
@@ -115,7 +111,6 @@ def enhance_stream(query: str):
     
     for chunk in _orchestrator.infer(query, stream=True):
         yield chunk
-
 
 def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, Any]:
     global _orchestrator
@@ -137,7 +132,6 @@ def kaelum_enhance_reasoning(query: str, domain: str = "general") -> Dict[str, A
         "domain": domain,
     }
 
-
 def get_metrics() -> Dict[str, Any]:
     """Get comprehensive metrics and analytics."""
     global _orchestrator
@@ -147,7 +141,6 @@ def get_metrics() -> Dict[str, Any]:
     
     return _orchestrator.get_metrics_summary()
 
-
 def get_active_learning_stats() -> Dict[str, Any]:
     """Get active learning statistics."""
     global _orchestrator
@@ -156,7 +149,6 @@ def get_active_learning_stats() -> Dict[str, Any]:
         return {"error": "Orchestrator not initialized"}
     
     return _orchestrator.get_active_learning_stats()
-
 
 def generate_training_batch(
     strategy: str = "mixed",
@@ -178,7 +170,6 @@ def generate_training_batch(
     
     return _orchestrator.generate_training_batch(strategy, batch_size)
 
-
 def export_training_data(output_path: str) -> int:
     """Export collected training data.
     
@@ -194,7 +185,6 @@ def export_training_data(output_path: str) -> int:
         return 0
     
     return _orchestrator.export_training_dataset(output_path)
-
 
 __all__ = [
     "enhance", 

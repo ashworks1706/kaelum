@@ -15,7 +15,7 @@ interface StreamEvent {
   cache_hit?: boolean
   iterations?: number
   metadata?: Record<string, unknown>
-  // Log-specific fields
+
   level?: string
   logger?: string
   timestamp?: number
@@ -41,9 +41,7 @@ interface QueryResult {
 }
 
 export function QueryInterface() {
-  // Determine backend base URL:
-  // - Use NEXT_PUBLIC_API_BASE when provided (build-time env)
-  // - In the browser, prefer localhost:5000 for local dev, otherwise use same-origin
+
   const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (typeof window !== 'undefined'
     ? (window.location.hostname === 'localhost' ? `${window.location.protocol}//localhost:5000` : window.location.origin)
     : 'http://localhost:5000')
@@ -63,9 +61,8 @@ export function QueryInterface() {
     setLogs(prev => [...prev, { timestamp, level, message }])
   }
 
-  // Poll logs from file only while loading (processing query)
   useEffect(() => {
-    // Only poll if loading
+
     if (!loading) {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current)
@@ -77,32 +74,30 @@ export function QueryInterface() {
     const pollLogs = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/logs?offset=${logOffsetRef.current}&limit=100`)
-        
+
         if (!response.ok) {
           console.error('Failed to fetch logs')
           return
         }
 
         const data = await response.json()
-        
+
         if (data.logs && data.logs.length > 0) {
-          // Update offset for next poll
+
           logOffsetRef.current += data.logs.length
 
-          // Process new log entries
           for (const logData of data.logs) {
             if (logData.message) {
               const message = logData.message
-              
-              // Determine log level based on component prefix or message content
+
               let level: 'info' | 'error' | 'success' = 'info'
-              
+
               if (message.includes('✅ [VERIFICATION]') || message.includes('✓') || message.includes('passed')) {
                 level = 'success'
               } else if (message.includes('ERROR') || message.includes('FAILED') || message.includes('✗') || message.includes('failed')) {
                 level = 'error'
               }
-              
+
               const timestamp = logData.timestamp ? new Date(logData.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()
               setLogs(prev => [...prev, { timestamp, level, message }])
             }
@@ -113,11 +108,9 @@ export function QueryInterface() {
       }
     }
 
-    // Start polling every 200ms
     pollIntervalRef.current = setInterval(pollLogs, 200)
-    pollLogs() // Initial poll
+    pollLogs()
 
-    // Cleanup on unmount or when loading changes
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current)
@@ -143,8 +136,8 @@ export function QueryInterface() {
     setResult(null)
     setStreamingStatus('')
     setStreamingSteps([])
-    setLogs([]) // Clear previous logs
-    logOffsetRef.current = 0 // Reset log offset for new query
+    setLogs([])
+    logOffsetRef.current = 0
 
     addLog('info', `Starting query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`)
 
@@ -165,7 +158,6 @@ export function QueryInterface() {
         throw new Error(`API request failed: ${response.status} ${response.statusText}`)
       }
 
-      // Handle Server-Sent Events
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
 
@@ -265,19 +257,18 @@ export function QueryInterface() {
 
   return (
     <div className="space-y-6">
-      {/* Architecture Overview - Top Section */}
-      
+      {}
 
-      {/* Hero Section */}
+      {}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-8 text-white">
         <h2 className="text-3xl font-bold mb-2">Agentic Neural Deep Reasoning Trees</h2>
         <p className="text-blue-100">
-          Ask anything! The system automatically routes to the right expert (Math, Code, Logic, etc.), 
+          Ask anything! The system automatically routes to the right expert (Math, Code, Logic, etc.),
           explores multiple solution paths with LATS, and verifies answers.
         </p>
       </div>
 
-      {/* Query Input */}
+      {}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -328,7 +319,7 @@ export function QueryInterface() {
           </div>
         </form>
 
-        {/* Example Queries */}
+        {}
         <div className="mt-6">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Example queries:</p>
           <div className="flex flex-wrap gap-2">
@@ -345,14 +336,14 @@ export function QueryInterface() {
         </div>
       </div>
 
-      {/* Error Display */}
+      {}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
           <p className="text-red-800 dark:text-red-200 font-medium">Error: {error}</p>
         </div>
       )}
 
-      {/* Streaming Progress */}
+      {}
       {loading && streamingSteps.length > 0 && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
           <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-4">
@@ -371,10 +362,10 @@ export function QueryInterface() {
         </div>
       )}
 
-      {/* Results Display */}
+      {}
       {result && (
         <div className="space-y-4">
-          {/* Metadata Cards */}
+          {}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow">
               <div className="text-sm text-slate-600 dark:text-slate-400">Worker</div>
@@ -410,7 +401,7 @@ export function QueryInterface() {
             </div>
           </div>
 
-          {/* Answer */}
+          {}
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Answer</h3>
             <div className="prose dark:prose-invert max-w-none">
@@ -418,7 +409,7 @@ export function QueryInterface() {
             </div>
           </div>
 
-          {/* Reasoning Steps */}
+          {}
           {result.reasoning_steps && result.reasoning_steps.length > 0 && (
             <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-6">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
@@ -437,11 +428,11 @@ export function QueryInterface() {
             </div>
           )}
 
-          {/* Iterations Info */}
+          {}
           {result.iterations > 1 && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
               <p className="text-amber-800 dark:text-amber-200">
-                <span className="font-semibold">Self-Correction:</span> This answer required {result.iterations} iteration(s) 
+                <span className="font-semibold">Self-Correction:</span> This answer required {result.iterations} iteration(s)
                 to pass verification. The system automatically improved its reasoning through reflection.
               </p>
             </div>
@@ -449,7 +440,7 @@ export function QueryInterface() {
         </div>
       )}
 
-      {/* Human Feedback Panel - Show after result */}
+      {}
       {result && (
         <FeedbackPanel
           query={result.query}
@@ -465,7 +456,7 @@ export function QueryInterface() {
         />
       )}
 
-      {/* Live Logs Panel */}
+      {}
       {logs.length > 0 && (
         <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
           <div className="bg-gray-100 dark:bg-gray-700 px-6 py-3 border-b border-gray-200 dark:border-gray-600">
@@ -475,14 +466,13 @@ export function QueryInterface() {
           </div>
           <div className="p-4 max-h-96 overflow-y-auto bg-gray-50 dark:bg-gray-900">
             {logs.map((log, index) => {
-              // Extract component prefix and message (now includes more emojis)
+
               const componentMatch = log.message.match(/^([🧭🎯🌳👷✅🔄💾🔍🤖⭐🔗📋🎬🏷️🔁📝🔀➗🧠💻📚🎨🔬]\s*\[[\w\s]+\])\s*(.*)/)
               const componentPrefix = componentMatch ? componentMatch[1] : ''
               const messageText = componentMatch ? componentMatch[2] : log.message
-              
-              // Color based on component type
+
               let componentColor = ''
-              // Core components
+
               if (componentPrefix.includes('ROUTER')) componentColor = 'text-purple-600 dark:text-purple-400'
               else if (componentPrefix.includes('ORCHESTRATOR')) componentColor = 'text-blue-600 dark:text-blue-400'
               else if (componentPrefix.includes('TREE SEARCH')) componentColor = 'text-green-600 dark:text-green-400'
@@ -492,7 +482,7 @@ export function QueryInterface() {
               else if (componentPrefix.includes('CACHE')) componentColor = 'text-indigo-600 dark:text-indigo-400'
               else if (componentPrefix.includes('LLM')) componentColor = 'text-pink-600 dark:text-pink-400'
               else if (componentPrefix.includes('REWARD')) componentColor = 'text-yellow-600 dark:text-yellow-400'
-              // Detectors
+
               else if (componentPrefix.includes('COHERENCE')) componentColor = 'text-teal-600 dark:text-teal-400'
               else if (componentPrefix.includes('COMPLETENESS')) componentColor = 'text-lime-600 dark:text-lime-400'
               else if (componentPrefix.includes('CONCLUSION')) componentColor = 'text-amber-600 dark:text-amber-400'
@@ -500,15 +490,15 @@ export function QueryInterface() {
               else if (componentPrefix.includes('REPETITION')) componentColor = 'text-fuchsia-600 dark:text-fuchsia-400'
               else if (componentPrefix.includes('TASK TYPE')) componentColor = 'text-sky-600 dark:text-sky-400'
               else if (componentPrefix.includes('WORKER TYPE')) componentColor = 'text-slate-600 dark:text-slate-400'
-              // Workers
+
               else if (componentPrefix.includes('MATH')) componentColor = 'text-red-600 dark:text-red-400'
               else if (componentPrefix.includes('LOGIC')) componentColor = 'text-purple-600 dark:text-purple-400'
               else if (componentPrefix.includes('CODE')) componentColor = 'text-blue-600 dark:text-blue-400'
               else if (componentPrefix.includes('FACTUAL')) componentColor = 'text-green-600 dark:text-green-400'
               else if (componentPrefix.includes('CREATIVE')) componentColor = 'text-pink-600 dark:text-pink-400'
               else if (componentPrefix.includes('ANALYSIS')) componentColor = 'text-orange-600 dark:text-orange-400'
-              else if (componentPrefix.includes('WORKER')) componentColor = 'text-orange-600 dark:text-orange-400' // Generic worker
-              
+              else if (componentPrefix.includes('WORKER')) componentColor = 'text-orange-600 dark:text-orange-400'
+
               return (
                 <div
                   key={index}
@@ -544,7 +534,7 @@ export function QueryInterface() {
         </div>
       )}
 
-      {/* Core Technologies - Bottom Section */}
+      {}
       <div className="mt-12">
         <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">Core Technologies</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -602,35 +592,35 @@ export function QueryInterface() {
         </div>
       </div>
 
-      {/* Research Highlights */}
+      {}
       <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-8 text-white">
         <h3 className="text-2xl font-bold mb-4">🔬 Research Contributions</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <h4 className="font-semibold mb-2">📊 Neural Router with Enhanced Feedback</h4>
             <p className="text-sm text-emerald-100">
-              Learns from avg tree rewards, actual depth/simulations used - not just success/failure. 
+              Learns from avg tree rewards, actual depth/simulations used - not just success/failure.
               Achieves continuous improvement through gradient descent.
             </p>
           </div>
           <div>
             <h4 className="font-semibold mb-2">🌲 LATS with Early Pruning</h4>
             <p className="text-sm text-emerald-100">
-              Eliminates unpromising branches (visits{`>=`}3, reward&lt;0.3) to focus compute on high-quality paths. 
+              Eliminates unpromising branches (visits{`>=`}3, reward&lt;0.3) to focus compute on high-quality paths.
               2-3x better solution quality at same compute budget.
             </p>
           </div>
           <div>
             <h4 className="font-semibold mb-2">⚡ Two-Stage Cache Validation</h4>
             <p className="text-sm text-emerald-100">
-              Fast embedding similarity (0.001s) + intelligent LLM validation (0.1-0.3s). 
+              Fast embedding similarity (0.001s) + intelligent LLM validation (0.1-0.3s).
               Prevents false positives while maintaining speed.
             </p>
           </div>
           <div>
             <h4 className="font-semibold mb-2">🔄 Automated Reflection Loop</h4>
             <p className="text-sm text-emerald-100">
-              Analyzes verification failures and generates improved reasoning with specific guidance. 
+              Analyzes verification failures and generates improved reasoning with specific guidance.
               ~40% improvement in eventual success rate.
             </p>
           </div>

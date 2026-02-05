@@ -20,7 +20,6 @@ from ..detectors import DomainClassifier
 logger = logging.getLogger("kaelum.router")
 logger.setLevel(logging.INFO)
 
-
 class QueryType(Enum):
     MATH = "math"
     LOGIC = "logic"
@@ -30,14 +29,12 @@ class QueryType(Enum):
     ANALYSIS = "analysis"
     UNKNOWN = "unknown"
 
-
 class ReasoningStrategy(Enum):
     SYMBOLIC_HEAVY = "symbolic_heavy"
     FACTUAL_HEAVY = "factual_heavy"
     BALANCED = "balanced"
     FAST = "fast"
     DEEP = "deep"
-
 
 @dataclass
 class RoutingDecision:
@@ -55,7 +52,6 @@ class RoutingDecision:
         if self.secondary_types is None:
             self.secondary_types = []
 
-
 @dataclass
 class RoutingOutcome:
     query: str
@@ -70,7 +66,6 @@ class RoutingOutcome:
     factual_passed: bool
     reflection_iterations: int
     timestamp: float
-
 
 @dataclass
 class NeuralRoutingFeatures:
@@ -109,7 +104,6 @@ class NeuralRoutingFeatures:
         
         features = np.concatenate([self.embedding, handcrafted])
         return torch.from_numpy(features).float()
-
 
 class PolicyNetwork(nn.Module):
     def __init__(self, input_dim: int = 398, hidden_dim: int = 256):
@@ -157,7 +151,6 @@ class PolicyNetwork(nn.Module):
             'cache_logits': self.cache_head(h)
         }
 
-
 class Router:
     def __init__(self, learning_enabled: bool = True, data_dir: str = DEFAULT_ROUTER_DIR,
                  model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2",
@@ -171,22 +164,18 @@ class Router:
         self.model_file = self.data_dir / "model.pt"
         self.outcomes = []
         
-        # Load existing outcomes from file if it exists
         self._load_outcomes()
         
-        # Online learning parameters
         self.buffer_size = buffer_size
         self.exploration_rate = exploration_rate
         self.training_step_count = 0
         
-        # Use shared encoder to avoid loading model multiple times
         self.encoder = get_shared_encoder(embedding_model, device='cpu')
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
         self.training_buffer = []
         self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
         
-        # Human feedback integration
         self.feedback_engine = HumanFeedbackEngine()
         logger.info(f"ROUTER: Human feedback engine initialized")
         
@@ -222,7 +211,6 @@ class Router:
         logger.info(f"  - Question words: {features.question_words}")
         logger.info(f"  - Complexity score: {features.complexity_score:.3f}")
         
-        # HEURISTIC OVERRIDE: Simple math queries should always go to math worker
         import re
         simple_math_pattern = r'(?:what\s+(?:is|are|does)?\s*)?(\d+)\s*([+\-*/×÷^])\s*(\d+)'
         math_match = re.search(simple_math_pattern, query.lower())
@@ -234,8 +222,8 @@ class Router:
             logger.info(f"  - Operation: {math_match.group(2)}")
             worker_specialty = "math"
             confidence = 0.99
-            max_tree_depth = 3  # Simple math doesn't need deep trees
-            num_simulations = 5  # Few simulations needed
+            max_tree_depth = 3
+            num_simulations = 5
             use_cache = True
             query_type = QueryType.MATH
             reasoning = f"Heuristic override: Simple arithmetic detected ({math_match.group(0)})"
@@ -249,17 +237,15 @@ class Router:
                 
                 worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
                 
-                # APPLY HUMAN FEEDBACK ADJUSTMENTS TO WORKER PROBABILITIES
                 feedback_adjustments = []
                 for idx in range(len(self.idx_to_worker)):
                     worker_name = self.idx_to_worker[idx]
                     adjustment = self.feedback_engine.worker_reward_adjustments.get(worker_name, 0.0)
                     feedback_adjustments.append(adjustment)
                 
-                # Convert adjustments to probability boosts/penalties
                 feedback_tensor = torch.tensor(feedback_adjustments, device=self.device).unsqueeze(0)
-                adjusted_probs = worker_probs + feedback_tensor * 0.3  # Scale feedback impact
-                adjusted_probs = torch.softmax(adjusted_probs, dim=-1)  # Renormalize
+                adjusted_probs = worker_probs + feedback_tensor * 0.3
+                adjusted_probs = torch.softmax(adjusted_probs, dim=-1)
                 
                 logger.info("ROUTER: Human feedback adjustments applied:")
                 for idx, adj in enumerate(feedback_adjustments):
@@ -267,7 +253,6 @@ class Router:
                         worker_name = self.idx_to_worker[idx]
                         logger.info(f"  - {worker_name}: {adj:+.3f} adjustment")
                 
-                # Epsilon-greedy exploration for online learning
                 if self.learning_enabled and np.random.random() < self.exploration_rate:
                     worker_idx = np.random.randint(0, len(self.idx_to_worker))
                     confidence = adjusted_probs[0, worker_idx].item()
@@ -276,7 +261,6 @@ class Router:
                     worker_idx = torch.argmax(adjusted_probs, dim=-1).item()
                     confidence = adjusted_probs[0, worker_idx].item()
                 
-                # Log all worker probabilities (with feedback adjustments)
                 logger.info("ROUTER: Worker probabilities (feedback-adjusted):")
                 for idx, prob in enumerate(adjusted_probs[0]):
                     worker_name = self.idx_to_worker[idx]
@@ -364,13 +348,10 @@ class Router:
         logger.info(f"  - Reward: {reward:.3f}")
         logger.info(f"  - Training buffer: {len(self.training_buffer)}/{self.buffer_size}")
         
-        # Save outcome to JSONL file immediately
         self._save_outcome(outcome)
         
-        # Save training data immediately after every query
         self._save_training_data()
         
-        # Train when buffer reaches configured size
         if len(self.training_buffer) >= self.buffer_size:
             logger.info(f"ROUTER TRAINING: Buffer full ({len(self.training_buffer)} samples), starting training...")
             self._train_step()
@@ -431,10 +412,8 @@ class Router:
         logger.info(f"    - Cache loss: {cache_loss.item():.4f}")
         logger.info(f"  - Avg reward: {rewards.mean().item():.3f}")
         
-        # Save model after every training step
         self.save_model()
         
-        # Gradually reduce exploration rate over time
         if self.training_step_count % 10 == 0:
             old_rate = self.exploration_rate
             self.exploration_rate = max(0.05, self.exploration_rate * 0.95)
@@ -540,7 +519,7 @@ class Router:
                         continue
                     try:
                         data = json.loads(line)
-                        # Reconstruct RoutingOutcome from saved data
+
                         outcome = RoutingOutcome(
                             query=data['query'],
                             query_type=QueryType(data['query_type']),
@@ -631,10 +610,8 @@ class Router:
     def get_feedback_enhanced_stats(self) -> Dict[str, Any]:
         """Get router statistics enhanced with human feedback data."""
         
-        # Get feedback statistics
         feedback_stats = self.feedback_engine.get_statistics()
         
-        # Get worker performance from feedback
         worker_feedback_performance = {}
         for worker in self.idx_to_worker.values():
             worker_feedback_performance[worker] = self.feedback_engine.get_worker_performance(worker)
@@ -646,4 +623,3 @@ class Router:
             "step_quality_multiplier": self.feedback_engine.step_quality_multiplier,
             "total_feedback_count": feedback_stats.get("total_feedback", 0)
         }
-

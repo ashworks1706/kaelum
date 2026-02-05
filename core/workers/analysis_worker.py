@@ -130,7 +130,7 @@ class AnalysisWorker(WorkerAgent):
             verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
-            lats_tree=tree,  # Include the full LATS tree
+            lats_tree=tree,
             metadata={
                 'num_simulations': num_simulations,
                 'tree_depth': best_node.state.get("depth", 0),

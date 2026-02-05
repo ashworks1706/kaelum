@@ -6,7 +6,6 @@ from .sympy_engine import SympyEngine
 from sentence_transformers import SentenceTransformer, util
 from core.shared_encoder import get_shared_encoder
 
-
 class SymbolicVerifier:
     DERIVATIVE_PATTERN = re.compile(r"(?:d/d\w+|∂/∂\w+|diff)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
     INTEGRAL_PATTERN = re.compile(r"(?:integrate|∫)\s*\([^)]+\)\s*=\s*[^=\n]+(?=\s|$|\n|\.)")
@@ -17,7 +16,7 @@ class SymbolicVerifier:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', debug: bool = False):
         self.debug = debug
-        # Enable SympyEngine debug mode if verification debug is enabled
+
         SympyEngine.set_debug(debug)
     
     def _log_debug(self, message: str):
@@ -27,7 +26,6 @@ class SymbolicVerifier:
     def verify_step(self, step: str) -> Tuple[bool, Optional[str]]:
         self._log_debug(f"Verifying step: {step[:100]}...")
         
-        # 1. Derivative checks
         derivative_matches = self.DERIVATIVE_PATTERN.findall(step)
         if derivative_matches:
             self._log_debug(f"Found {len(derivative_matches)} derivative pattern(s)")
@@ -41,7 +39,6 @@ class SymbolicVerifier:
                 return False, f"Incorrect derivative: {match.strip()}"
             self._log_debug(f"  ✓ Derivative verified")
 
-        # 2. Integral checks
         integral_matches = self.INTEGRAL_PATTERN.findall(step)
         if integral_matches:
             self._log_debug(f"Found {len(integral_matches)} integral pattern(s)")
@@ -55,7 +52,6 @@ class SymbolicVerifier:
                 return False, f"Incorrect integral: {match.strip()}"
             self._log_debug(f"  ✓ Integral verified")
 
-        # 3. Equation equivalence checks (algebraic)
         equations = self._extract_equations(step)
         if equations:
             self._log_debug(f"Found {len(equations)} algebraic equation(s)")
@@ -74,29 +70,26 @@ class SymbolicVerifier:
         return True, None
 
     def _extract_equations(self, text: str) -> List[str]:
-        # Clean markdown formatting and normalize symbols
-        cleaned = re.sub(r'\*\*|\*|__?', '', text)  # Remove markdown bold/italic
-        cleaned = cleaned.replace('$', '')           # Remove currency symbols
-        cleaned = cleaned.replace('×', '*')          # Normalize multiplication
-        cleaned = cleaned.replace('÷', '/')          # Normalize division
+
+        cleaned = re.sub(r'\*\*|\*|__?', '', text)
+        cleaned = cleaned.replace('$', '')
+        cleaned = cleaned.replace('×', '*')
+        cleaned = cleaned.replace('÷', '/')
         
         equations = []
         
-        # Use the specific equation pattern to extract only complete equations
         for match in self.EQUATION_PATTERN.finditer(cleaned):
             lhs, rhs = match.groups()
             lhs = lhs.strip()
             rhs = rhs.strip()
             
-            # Validate both sides can be parsed by SymPy
             try:
                 SympyEngine._sympify(lhs)
                 SympyEngine._sympify(rhs)
                 equation = f"{lhs} = {rhs}"
                 
-                # Skip if this is part of a calculus transformation
                 if self.DERIVATIVE_PATTERN.search(text) or self.INTEGRAL_PATTERN.search(text):
-                    # Only add if the equation is not within the calculus pattern
+
                     if equation not in text:
                         equations.append(equation)
                         self._log_debug(f"  Extracted equation: {equation}")
@@ -127,10 +120,7 @@ class SymbolicVerifier:
             return True
         except Exception as e:
             self._log_debug(f"    ⚠ Parse error (ignored): {e}")
-            return True  # Silently ignore parsing failures
-
-
-
+            return True
 
 import logging
 from typing import List, Dict, Optional
@@ -144,17 +134,15 @@ from ..detectors.conclusion_detector import ConclusionDetector
 from ..detectors.worker_type_classifier import WorkerTypeClassifier
 from ..detectors.domain_classifier import DomainClassifier
 
-
 class VerificationEngine:
 
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False, embedding_model: str = "all-MiniLM-L6-v2"):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
         self.use_factual = use_factual
-        self.factual_verifier = None  # TODO: Implement factual verifier if needed
+        self.factual_verifier = None
         self.debug = debug
         
-        # Use shared encoder to avoid loading model multiple times
         self.semantic_encoder = get_shared_encoder(embedding_model, device='cpu')
         self.syntax_validator = SyntaxValidator()
         self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
@@ -184,7 +172,7 @@ class VerificationEngine:
             step_passed = True
             
             if self.symbolic_verifier:
-                # Count potential calculus transformations before verification
+
                 deriv_matches = self.symbolic_verifier.DERIVATIVE_PATTERN.findall(step)
                 integ_matches = self.symbolic_verifier.INTEGRAL_PATTERN.findall(step)
                 details["calculus_checks"] += len(deriv_matches) + len(integ_matches)
@@ -193,7 +181,7 @@ class VerificationEngine:
                 details["symbolic_checks"] += 1
                 if is_valid:
                     details["symbolic_passed"] += 1
-                    # All matched calculus transformations considered passed if whole step valid
+
                     details["calculus_passed"] += len(deriv_matches) + len(integ_matches)
                 else:
                     self._log_debug(f"❌ Step {i+1} FAILED symbolic verification: {error}")
@@ -255,7 +243,7 @@ class VerificationEngine:
         logger.info(f"  Confidence: {result['confidence']:.3f}")
         if not result["passed"] and result.get("issues"):
             logger.info(f"  Issues found: {len(result['issues'])}")
-            for i, issue in enumerate(result["issues"][:3], 1):  # Show first 3 issues
+            for i, issue in enumerate(result["issues"][:3], 1):
                 logger.info(f"    {i}. {issue}")
             if len(result['issues']) > 3:
                 logger.info(f"    ... and {len(result['issues']) - 3} more")
@@ -304,7 +292,6 @@ class VerificationEngine:
     def _verify_code(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
-        # Handle None or empty answer
         if not answer:
             issues.append("No answer provided")
             return {
@@ -368,7 +355,6 @@ class VerificationEngine:
         code_lower = code.lower()
         query_lower = query.lower()
         
-        # Check query for explicit language mentions
         if 'python' in query_lower or 'py' in query_lower:
             return 'python'
         elif 'javascript' in query_lower or 'js' in query_lower:
@@ -384,7 +370,6 @@ class VerificationEngine:
         elif 'go' in query_lower and 'golang' in query_lower:
             return 'go'
         
-        # Check code patterns
         if 'def ' in code or 'import ' in code or 'from ' in code:
             return 'python'
         elif 'function ' in code or 'const ' in code or 'let ' in code or 'var ' in code:
@@ -400,13 +385,11 @@ class VerificationEngine:
         elif 'func ' in code and 'package ' in code:
             return 'go'
         
-        # Default to python
         return 'python'
     
     def _verify_logic(self, query: str, reasoning_steps: List[str], answer: str) -> dict:
         issues = []
         
-        # Handle None or empty answer
         if not answer:
             issues.append("No answer provided")
             return {
@@ -454,7 +437,6 @@ class VerificationEngine:
     def _verify_factual(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
-        # Handle None or empty answer
         if not answer:
             issues.append("No answer provided")
             return {
@@ -491,7 +473,6 @@ class VerificationEngine:
     def _verify_creative(self, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
-        # Handle None or empty answer
         if not answer:
             issues.append("No answer provided")
             return {
@@ -578,7 +559,6 @@ class VerificationEngine:
     def _verify_analysis(self, query: str, answer: str, reasoning_steps: List[str]) -> dict:
         issues = []
         
-        # Handle None or empty answer
         if not answer:
             issues.append("No answer provided")
             return {

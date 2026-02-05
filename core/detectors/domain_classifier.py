@@ -4,7 +4,6 @@ from sentence_transformers import SentenceTransformer
 import time
 from ..verification.threshold_calibrator import ThresholdCalibrator
 
-
 class DomainClassifier:
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
         self.encoder = SentenceTransformer(embedding_model)

@@ -12,7 +12,6 @@ logger = logging.getLogger("kaelum.shared_encoder")
 
 _shared_encoder: Optional[SentenceTransformer] = None
 
-
 def get_shared_encoder(model_name: str = "all-MiniLM-L6-v2", device: str = 'cpu') -> SentenceTransformer:
     """Get or create the shared encoder instance.
     
@@ -31,7 +30,6 @@ def get_shared_encoder(model_name: str = "all-MiniLM-L6-v2", device: str = 'cpu'
         logger.info(f"✓ Shared encoder loaded (will be reused by all components)")
     
     return _shared_encoder
-
 
 def reset_shared_encoder():
     """Reset the shared encoder (useful for testing or config changes)."""

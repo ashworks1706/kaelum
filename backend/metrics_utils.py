@@ -2,7 +2,6 @@
 
 from typing import Dict, Any
 
-
 def compute_worker_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
     """Compute per-worker metrics from analytics."""
     worker_metrics = {}
@@ -19,7 +18,6 @@ def compute_worker_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
     
     return worker_metrics
 
-
 def compute_verification_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
     """Compute verification metrics."""
     total_queries = analytics.get('total_queries', 0)
@@ -31,7 +29,6 @@ def compute_verification_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
         "failed": total_queries - verified,
         "pass_rate": verified / total_queries if total_queries > 0 else 0.0
     }
-
 
 def compute_reflection_metrics(analytics: Dict[str, Any]) -> Dict[str, Any]:
     """Compute reflection/self-correction metrics."""

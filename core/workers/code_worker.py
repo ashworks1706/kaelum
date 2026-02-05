@@ -1,4 +1,3 @@
-
 import re
 import ast
 import time
@@ -13,7 +12,6 @@ from ..search import RewardModel
 from ..detectors import TaskClassifier
 from ..learning import AdaptivePenalty
 from ..verification import ConfidenceCalibrator
-
 
 class CodeWorker(WorkerAgent):
     
@@ -179,7 +177,6 @@ class CodeWorker(WorkerAgent):
         """Simple heuristic language detection from query keywords."""
         query_lower = query.lower()
         
-        # Check for explicit language mentions
         lang_keywords = {
             'python': ['python', '.py', 'def ', 'import ', 'class '],
             'javascript': ['javascript', 'js', '.js', 'function', 'const ', 'let ', '=>'],
@@ -200,7 +197,6 @@ class CodeWorker(WorkerAgent):
             return max(scores, key=scores.get)
         return None
     
-    
     def _classify_task(self, query: str) -> str:
         result = self.task_classifier.classify_single(query, 'code')
         return result['task']
@@ -214,7 +210,6 @@ class CodeWorker(WorkerAgent):
     ) -> str:
         prompt_parts = []
         
-        # Task-specific instructions
         if task_type == 'debugging':
             prompt_parts.append("You are debugging code. Identify the issue and provide a fix.")
         elif task_type == 'optimization':
@@ -228,7 +223,6 @@ class CodeWorker(WorkerAgent):
         else:
             prompt_parts.append("You are generating code. Write clean, idiomatic, well-documented code.")
         
-        # Language-specific guidelines
         if language:
             prompt_parts.append(f"\nLanguage: {language}")
             if language == 'python':
@@ -238,17 +232,14 @@ class CodeWorker(WorkerAgent):
             elif language == 'java':
                 prompt_parts.append("Follow Java naming conventions. Use proper access modifiers.")
         
-        # Best practices
         prompt_parts.append("\nBest practices:")
         prompt_parts.append("- Write clear, self-documenting code")
         prompt_parts.append("- Include comments for complex logic")
         prompt_parts.append("- Handle edge cases and errors")
         prompt_parts.append("- Use descriptive variable/function names")
         
-        # Original query
         prompt_parts.append(f"\nTask: {query}")
         
-        # Context if provided
         if context:
             prompt_parts.append(f"\nContext: {context}")
         
@@ -257,13 +248,12 @@ class CodeWorker(WorkerAgent):
         return "\n".join(prompt_parts)
     
     def _extract_code(self, response: str) -> Optional[str]:
-        # Try to extract from markdown code blocks
+
         code_block_pattern = r'```(?:\w+)?\n(.*?)```'
         matches = re.findall(code_block_pattern, response, re.DOTALL)
         if matches:
             return matches[0].strip()
         
-        # Try to find indented code blocks
         lines = response.split('\n')
         code_lines = []
         in_code = False
@@ -273,7 +263,7 @@ class CodeWorker(WorkerAgent):
                 in_code = True
                 code_lines.append(line)
             elif in_code and line.strip():
-                # Check if it's a continuation
+
                 if any(line.startswith(kw) for kw in ['def ', 'class ', 'if ', 'for ', 'while ']):
                     code_lines.append(line)
                 else:

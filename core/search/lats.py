@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
 @dataclass
 class LATSNode:
     id: str
@@ -82,7 +81,6 @@ class LATSNode:
         
         return root
 
-
 class LATS:
     def __init__(self, root_state: Dict[str, Any], root_id: str = "root", *,
                  simulator: Optional[callable] = None,
@@ -117,7 +115,6 @@ class LATS:
             max_idx = int(max(range(len(scores)), key=lambda i: scores[i]))
             selected_child = unpruned[max_idx]
             
-            # Log selection details
             avg_reward = selected_child.value / max(1, selected_child.visits)
             logger.debug(f"LATS-SELECT: Depth {depth} → Node {selected_child.id} "
                         f"(UCT={scores[max_idx]:.3f}, visits={selected_child.visits}, "
@@ -171,9 +168,8 @@ class LATS:
             
             avg_reward = cur.value / cur.visits
             
-            # Early pruning check
             if cur.visits >= 3 and avg_reward < 0.3:
-                if not cur.pruned:  # Only log when first pruned
+                if not cur.pruned:
                     cur.pruned = True
                     logger.info(f"LATS-PRUNE: Node {cur.id} pruned at depth {depth} "
                                f"(visits={cur.visits}, avg_reward={avg_reward:.3f} < 0.3)")

@@ -19,7 +19,6 @@ except ImportError:
     FAISS_AVAILABLE = False
     faiss = None
 
-
 WORKER_THRESHOLDS = {
     "math": 0.90,
     "code": 0.87,
@@ -28,7 +27,6 @@ WORKER_THRESHOLDS = {
     "creative": 0.75,
     "analysis": 0.82
 }
-
 
 @dataclass
 class CachedTree:
@@ -56,10 +54,9 @@ class CachedTree:
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'CachedTree':
         data['query_embedding'] = np.array(data['query_embedding'])
-        # Remove old fingerprint data if present
+
         data.pop('query_fingerprint', None)
         return CachedTree(**data)
-
 
 class TreeCache:
     def __init__(self, cache_dir: str = DEFAULT_TREE_CACHE_DIR, similarity_threshold: float = 0.85, 
@@ -73,16 +70,14 @@ class TreeCache:
         self.metadata_path = self.cache_dir / "metadata.json"
         self.similarity_threshold = similarity_threshold
         
-        # Cache size and FAISS settings
-        self.max_cache_size = 1000  # Maximum number of cached trees
-        self.use_faiss = False  # Will be enabled automatically when cache grows
+        self.max_cache_size = 1000
+        self.use_faiss = False
         self.faiss_index = None
         
-        # Use shared encoder to avoid loading model multiple times
         self.encoder = get_shared_encoder(embedding_model, device='cpu')
         self.validator = CacheValidator(llm_client=llm_client)
         self.cached_trees: List[CachedTree] = self._load_metadata()
-        self.access_times: Dict[str, float] = {}  # Track access times for LRU
+        self.access_times: Dict[str, float] = {}
         
     def _load_metadata(self) -> List[CachedTree]:
         if not self.metadata_path.exists():

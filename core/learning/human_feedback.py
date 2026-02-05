@@ -15,39 +15,32 @@ logger = logging.getLogger("kaelum.feedback")
 
 DEFAULT_FEEDBACK_DIR = str(Path(DEFAULT_CACHE_DIR) / "feedback")
 
-
 @dataclass
 class HumanFeedback:
     """Comprehensive human feedback on query execution."""
     
-    # Query identification
     query: str
     query_hash: str
     timestamp: float
     
-    # Overall feedback
     overall_liked: bool
-    overall_rating: int  # 1-5 stars
+    overall_rating: int
     
-    # Worker selection feedback
     worker_selected: str
     worker_correct: bool
     
-    # Answer quality feedback
     answer_correct: bool
     answer_helpful: bool
     answer_complete: bool
     answer_rating: int
     
-    # What was shown to user
     confidence_shown: float
     verification_passed: bool
     execution_time: float
     
-    # Optional fields with defaults
     suggested_worker: Optional[str] = None
     steps_helpful: List[bool] = None
-    steps_rating: List[int] = None  # 1-5 per step
+    steps_rating: List[int] = None
     comment: Optional[str] = None
     
     def __post_init__(self):
@@ -56,29 +49,24 @@ class HumanFeedback:
         if self.steps_rating is None:
             self.steps_rating = []
 
-
 @dataclass
 class FeedbackStatistics:
     """Aggregated statistics from human feedback."""
     
     total_feedback: int = 0
     
-    # Worker statistics
     worker_accuracy: Dict[str, float] = None
     worker_preference: Dict[str, int] = None
-    worker_corrections: Dict[str, Dict[str, int]] = None  # {from_worker: {to_worker: count}}
+    worker_corrections: Dict[str, Dict[str, int]] = None
     
-    # Answer quality
     answer_accuracy: float = 0.0
     answer_helpfulness: float = 0.0
     answer_completeness: float = 0.0
     avg_answer_rating: float = 0.0
     
-    # Step quality
     avg_step_rating: float = 0.0
     step_helpfulness_rate: float = 0.0
     
-    # Overall
     overall_satisfaction: float = 0.0
     avg_overall_rating: float = 0.0
     
@@ -89,7 +77,6 @@ class FeedbackStatistics:
             self.worker_preference = {}
         if self.worker_corrections is None:
             self.worker_corrections = {}
-
 
 class HumanFeedbackEngine:
     """Engine for collecting and utilizing human feedback to improve the system."""
@@ -105,7 +92,6 @@ class HumanFeedbackEngine:
         self.feedback_history: List[HumanFeedback] = []
         self.statistics = FeedbackStatistics()
         
-        # Reward adjustments based on feedback
         self.worker_reward_adjustments: Dict[str, float] = {
             "math": 0.0,
             "code": 0.0,
@@ -115,7 +101,6 @@ class HumanFeedbackEngine:
             "analysis": 0.0
         }
         
-        # Step quality adjustments (multiplier for intermediate rewards)
         self.step_quality_multiplier = 1.0
         
         self._load_data()
@@ -137,16 +122,12 @@ class HumanFeedbackEngine:
         logger.info(f"  - Answer correct: {feedback.answer_correct}")
         logger.info(f"  - Answer rating: {feedback.answer_rating}/5")
         
-        # Add to history
         self.feedback_history.append(feedback)
         
-        # Update statistics
         self._update_statistics(feedback)
         
-        # Adjust reward models based on feedback
         adjustments = self._adjust_reward_models(feedback)
         
-        # Save immediately
         self._save_feedback(feedback)
         self._save_statistics()
         self._save_adjustments()
@@ -166,7 +147,6 @@ class HumanFeedbackEngine:
     def _update_statistics(self, feedback: HumanFeedback):
         """Update aggregated statistics with new feedback."""
         
-        # Initialize if needed
         if self.statistics.worker_accuracy is None:
             self.statistics.worker_accuracy = {}
         if self.statistics.worker_preference is None:
@@ -174,32 +154,27 @@ class HumanFeedbackEngine:
         if self.statistics.worker_corrections is None:
             self.statistics.worker_corrections = {}
         
-        # Update total count
         self.statistics.total_feedback += 1
         n = self.statistics.total_feedback
         
-        # Worker statistics
         worker = feedback.worker_selected
         if worker not in self.statistics.worker_accuracy:
             self.statistics.worker_accuracy[worker] = 0.0
             self.statistics.worker_preference[worker] = 0
             self.statistics.worker_corrections[worker] = {}
         
-        # Update worker accuracy (running average)
         old_acc = self.statistics.worker_accuracy[worker]
         count = self.statistics.worker_preference[worker] + 1
         new_acc = (old_acc * self.statistics.worker_preference[worker] + float(feedback.worker_correct)) / count
         self.statistics.worker_accuracy[worker] = new_acc
         self.statistics.worker_preference[worker] += 1
         
-        # Track corrections
         if not feedback.worker_correct and feedback.suggested_worker:
             suggested = feedback.suggested_worker
             if suggested not in self.statistics.worker_corrections[worker]:
                 self.statistics.worker_corrections[worker][suggested] = 0
             self.statistics.worker_corrections[worker][suggested] += 1
         
-        # Answer quality (running averages)
         self.statistics.answer_accuracy = (
             (self.statistics.answer_accuracy * (n - 1) + float(feedback.answer_correct)) / n
         )
@@ -213,7 +188,6 @@ class HumanFeedbackEngine:
             (self.statistics.avg_answer_rating * (n - 1) + feedback.answer_rating) / n
         )
         
-        # Step quality
         if feedback.steps_rating:
             avg_step = np.mean(feedback.steps_rating)
             self.statistics.avg_step_rating = (
@@ -226,7 +200,6 @@ class HumanFeedbackEngine:
                 (self.statistics.step_helpfulness_rate * (n - 1) + helpful_rate) / n
             )
         
-        # Overall satisfaction
         self.statistics.overall_satisfaction = (
             (self.statistics.overall_satisfaction * (n - 1) + float(feedback.overall_liked)) / n
         )
@@ -244,18 +217,15 @@ class HumanFeedbackEngine:
         
         adjustments = {}
         
-        # 1. WORKER SELECTION ADJUSTMENT
-        # If human says worker was wrong, penalize that worker's rewards
         if not feedback.worker_correct:
             worker = feedback.worker_selected
-            # Strong penalty for wrong worker selection
+
             adjustment = -0.03
             self.worker_reward_adjustments[worker] += adjustment
             adjustments[f"worker_{worker}_penalty"] = adjustment
             
             logger.info(f"REWARD ADJUSTMENT: Worker {worker} penalized by {adjustment:.3f}")
             
-            # If human suggests correct worker, boost that worker
             if feedback.suggested_worker:
                 suggested = feedback.suggested_worker
                 boost = 0.05
@@ -263,10 +233,8 @@ class HumanFeedbackEngine:
                 adjustments[f"worker_{suggested}_boost"] = boost
                 logger.info(f"REWARD ADJUSTMENT: Worker {suggested} boosted by {boost:.3f}")
         
-        # 2. ANSWER QUALITY ADJUSTMENT
-        # Adjust final answer rewards based on correctness and quality
         if not feedback.answer_correct:
-            # Wrong answer means final rewards should be lower
+
             worker = feedback.worker_selected
             adjustment = -0.05
             self.worker_reward_adjustments[worker] += adjustment
@@ -275,7 +243,7 @@ class HumanFeedbackEngine:
             logger.info(f"REWARD ADJUSTMENT: {worker} answer quality penalized by {adjustment:.3f}")
         
         elif feedback.answer_rating >= 4:
-            # High-quality answer, boost final rewards
+
             worker = feedback.worker_selected
             boost = 0.02
             self.worker_reward_adjustments[worker] += boost
@@ -283,12 +251,9 @@ class HumanFeedbackEngine:
             
             logger.info(f"REWARD ADJUSTMENT: {worker} answer quality boosted by {boost:.3f}")
         
-        # 3. REASONING STEP ADJUSTMENT
-        # Adjust intermediate step rewards based on per-step feedback
         if feedback.steps_rating:
             avg_step_rating = np.mean(feedback.steps_rating)
             
-            # Steps rated highly -> boost partial rewards
             if avg_step_rating >= 4.0:
                 old_mult = self.step_quality_multiplier
                 self.step_quality_multiplier = min(1.2, self.step_quality_multiplier + 0.02)
@@ -296,7 +261,6 @@ class HumanFeedbackEngine:
                 
                 logger.info(f"REWARD ADJUSTMENT: Step quality multiplier boosted to {self.step_quality_multiplier:.3f}")
             
-            # Steps rated poorly -> reduce partial rewards
             elif avg_step_rating <= 2.0:
                 old_mult = self.step_quality_multiplier
                 self.step_quality_multiplier = max(0.8, self.step_quality_multiplier - 0.02)
@@ -304,13 +268,11 @@ class HumanFeedbackEngine:
                 
                 logger.info(f"REWARD ADJUSTMENT: Step quality multiplier reduced to {self.step_quality_multiplier:.3f}")
         
-        # 4. CLAMP ADJUSTMENTS
-        # Prevent adjustments from going too extreme
         for worker in self.worker_reward_adjustments:
             self.worker_reward_adjustments[worker] = np.clip(
                 self.worker_reward_adjustments[worker],
-                -0.15,  # Max penalty
-                0.15    # Max boost
+                -0.15,
+                0.15
             )
         
         self.step_quality_multiplier = np.clip(self.step_quality_multiplier, 0.7, 1.3)
@@ -321,15 +283,13 @@ class HumanFeedbackEngine:
                            is_partial: bool = False) -> float:
         """Get reward adjusted by human feedback."""
         
-        # Apply worker-specific adjustment
         adjustment = self.worker_reward_adjustments.get(worker_type, 0.0)
         adjusted = base_reward + adjustment
         
-        # Apply step quality multiplier for partial rewards
         if is_partial:
             adjusted *= self.step_quality_multiplier
         
-        return max(0.0, min(1.0, adjusted))  # Clamp to [0, 1]
+        return max(0.0, min(1.0, adjusted))
     
     def get_worker_performance(self, worker: str) -> Dict[str, Any]:
         """Get performance metrics for a specific worker."""
@@ -396,7 +356,6 @@ class HumanFeedbackEngine:
     def _load_data(self):
         """Load existing feedback data."""
         
-        # Load feedback history
         if self.feedback_file.exists():
             with open(self.feedback_file, "r") as f:
                 for line in f:
@@ -405,13 +364,11 @@ class HumanFeedbackEngine:
                         feedback = HumanFeedback(**data)
                         self.feedback_history.append(feedback)
         
-        # Load statistics
         if self.stats_file.exists():
             with open(self.stats_file, "r") as f:
                 data = json.load(f)
                 self.statistics = FeedbackStatistics(**data)
         
-        # Load adjustments
         if self.adjustments_file.exists():
             with open(self.adjustments_file, "r") as f:
                 data = json.load(f)

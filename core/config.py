@@ -2,14 +2,12 @@ from typing import Optional
 from pydantic import BaseModel, Field
 import os
 
-
 class LLMConfig(BaseModel):
     base_url: str = Field(default="http://localhost:8000/v1")
     model: str = Field(default="Qwen/Qwen2.5-3B-Instruct")
     api_key: Optional[str] = Field(default=None)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1, le=128000)
-
 
 class WorkerPrompts(BaseModel):
     math: str = Field(default="""You are a mathematical reasoning expert specializing in:
@@ -81,7 +79,6 @@ Use vivid language and explore multiple perspectives.""")
 Provide thorough, structured analysis with clear reasoning.
 Support conclusions with evidence and logical arguments.""")
 
-
 class KaelumConfig(BaseModel):
     reasoning_llm: LLMConfig = Field(default_factory=LLMConfig)
     worker_prompts: WorkerPrompts = Field(default_factory=WorkerPrompts)
@@ -116,5 +113,3 @@ class KaelumConfig(BaseModel):
             use_symbolic_verification=os.getenv('USE_SYMBOLIC_VERIFICATION', 'true').lower() == 'true',
             debug_verification=os.getenv('DEBUG_VERIFICATION', 'false').lower() == 'true'
         )
-
-

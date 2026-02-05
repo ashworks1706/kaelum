@@ -1,14 +1,11 @@
-
-
 from __future__ import annotations
 
 import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr
 from typing import Sequence, List, Tuple, Union, Optional
 
-
 class SympyEngine:
-    debug = False  # Class-level debug flag
+    debug = False
     
     @classmethod
     def set_debug(cls, enabled: bool):
@@ -19,7 +16,6 @@ class SympyEngine:
         if cls.debug:
             print(f"    [SYMPY ENGINE] {message}")
 
-    # -------------------- Parsing Helpers --------------------
     @staticmethod
     def _normalize_equation(equation: str) -> Tuple[str, str]:
         if '==' in equation:
@@ -34,7 +30,6 @@ class SympyEngine:
     def _sympify(expr: str):
         return parse_expr(expr, evaluate=True)
 
-    # -------------------- Core Operations --------------------
     @classmethod
     def check_equivalence(cls, expression: str) -> bool:
         cls._log_debug(f"→ check_equivalence('{expression}')")
@@ -60,10 +55,9 @@ class SympyEngine:
         if solve_for:
             vars_to_solve = [sp.Symbol(v) for v in solve_for]
         else:
-            vars_to_solve = symbols[:1]  # default: first symbol for backward compatibility
+            vars_to_solve = symbols[:1]
         return sp.solve(eq, *vars_to_solve, dict=True)
 
-    # -------------------- Calculus --------------------
     @classmethod
     def differentiate(
         cls,
@@ -78,7 +72,7 @@ class SympyEngine:
             cls._log_debug(f"  Computing d/d{variables}")
             result = sp.diff(expr, sp.Symbol(variables))
         else:
-            # Sequence
+
             diff_args = []
             for item in variables:
                 if isinstance(item, tuple):
@@ -122,26 +116,23 @@ class SympyEngine:
         sym_expr = sp.sympify(expression)
         if isinstance(sym_expr, (sp.Derivative, sp.Integral)):
             return sym_expr.doit()
-        # If it's a normal expression that still contains Derivative/Integral nodes, attempt doit()
+
         return sp.simplify(sym_expr.doit()) if hasattr(sym_expr, 'doit') else sym_expr
 
-    # Backwards compatibility for previous method name
     @classmethod
-    def calculus_operation(cls, operation: str):  # pragma: no cover - kept for legacy calls
+    def calculus_operation(cls, operation: str):
         return cls.evaluate_calculus(operation)
 
-    # -------------------- Validation Helpers --------------------
     @classmethod
     def verify_derivative(cls, lhs: str, rhs: str) -> bool:
         cls._log_debug(f"→ verify_derivative(lhs='{lhs}', rhs='{rhs}')")
         lhs = lhs.strip()
         rhs = rhs.strip()
         
-        # Patterns: d/dx(...)
         if lhs.startswith('d/d'):
-            # extract variable and inner expression
+
             try:
-                after = lhs[3:]  # skip 'd/d'
+                after = lhs[3:]
                 var = after.split('(')[0].strip()
                 inner = lhs.split('(', 1)[1].rsplit(')', 1)[0]
                 cls._log_debug(f"  Detected d/d{var} pattern")
@@ -153,10 +144,10 @@ class SympyEngine:
                 cls._log_debug(f"  Computed derivative: {computed}")
             except Exception as e:
                 cls._log_debug(f"  ⚠ Parse error (non-fatal): {e}")
-                return True  # Non fatal parsing; skip
+                return True
         elif lhs.startswith('diff'):
             try:
-                inner = lhs[len('diff('):-1]  # remove diff( ... )
+                inner = lhs[len('diff('):-1]
                 parts = [p.strip() for p in inner.split(',')]
                 cls._log_debug(f"  Detected diff(...) pattern")
                 cls._log_debug(f"  Parts: {parts}")
@@ -172,7 +163,7 @@ class SympyEngine:
                 return True
         else:
             cls._log_debug(f"  Not a recognized derivative form, skipping")
-            return True  # not a derivative form we handle here
+            return True
         
         try:
             rhs_expr = cls._sympify(rhs)
@@ -247,6 +238,3 @@ class SympyEngine:
         except Exception as e:
             cls._log_debug(f"  ⚠ Comparison error (non-fatal): {e}")
             return True
-
-        
-    

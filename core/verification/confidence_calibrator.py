@@ -2,7 +2,6 @@ from typing import Dict, List, Tuple
 import numpy as np
 from collections import defaultdict, deque
 
-
 class ConfidenceCalibrator:
     def __init__(self, history_size: int = 100):
         self.history_size = history_size

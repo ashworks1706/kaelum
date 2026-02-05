@@ -6,7 +6,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import time
 from .threshold_calibrator import ThresholdCalibrator
 
-
 class RelevanceValidator:
     
     BASE_THRESHOLDS = {

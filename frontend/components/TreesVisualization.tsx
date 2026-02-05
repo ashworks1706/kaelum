@@ -57,20 +57,17 @@ export function TreesVisualization() {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const nodePositionsRef = useRef<Map<string, { x: number, y: number, radius: number, node: TreeNode }>>(new Map())
 
-  // Fetch trees and cache stats
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true)
-        
-        // Fetch reasoning trees
+
         const treesResponse = await fetch(`${API_BASE}/api/trees`)
         if (treesResponse.ok) {
           const treesData = await treesResponse.json()
           setTrees(treesData.trees || [])
         }
 
-        // Fetch cache statistics
         const cacheResponse = await fetch(`${API_BASE}/api/stats/cache`)
         if (cacheResponse.ok) {
           const cacheData = await cacheResponse.json()
@@ -85,14 +82,12 @@ export function TreesVisualization() {
 
     fetchData()
 
-    // Auto-refresh every 5 seconds if enabled
     if (autoRefresh) {
       const interval = setInterval(fetchData, 5000)
       return () => clearInterval(interval)
     }
   }, [API_BASE, autoRefresh])
 
-  // Filter trees
   const filteredTrees = trees.filter(tree => {
     if (filterWorker !== 'all' && tree.worker !== filterWorker) return false
     if (filterQuality !== 'all') {
@@ -103,35 +98,31 @@ export function TreesVisualization() {
     return true
   })
 
-  // Worker colors
   const getWorkerColor = (worker: string) => {
     const colors: Record<string, string> = {
-      'math': '#ef4444', // red
-      'logic': '#a855f7', // purple
-      'code': '#3b82f6', // blue
-      'factual': '#22c55e', // green
-      'creative': '#ec4899', // pink
-      'analysis': '#f97316', // orange
+      'math': '#ef4444',
+      'logic': '#a855f7',
+      'code': '#3b82f6',
+      'factual': '#22c55e',
+      'creative': '#ec4899',
+      'analysis': '#f97316',
     }
     return colors[worker.toLowerCase()] || '#6366f1'
   }
 
-  // Get node color based on state
   const getNodeColor = (node: TreeNode, isSelected: boolean) => {
-    if (node.is_pruned) return '#7f1d1d' // dark red for pruned
-    if (node.is_best_path) return '#fbbf24' // gold for best path
-    if (isSelected) return '#06b6d4' // cyan for selected
-    
-    // Color based on reward (gradient from red to green)
+    if (node.is_pruned) return '#7f1d1d'
+    if (node.is_best_path) return '#fbbf24'
+    if (isSelected) return '#06b6d4'
+
     const reward = node.avg_reward
-    if (reward < 0.3) return '#991b1b' // dark red
-    if (reward < 0.5) return '#ea580c' // orange
-    if (reward < 0.7) return '#eab308' // yellow
-    if (reward < 0.85) return '#84cc16' // lime
-    return '#16a34a' // green
+    if (reward < 0.3) return '#991b1b'
+    if (reward < 0.5) return '#ea580c'
+    if (reward < 0.7) return '#eab308'
+    if (reward < 0.85) return '#84cc16'
+    return '#16a34a'
   }
 
-  // Draw tree on canvas
   const drawTree = useCallback((tree: ReasoningTree) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -139,26 +130,21 @@ export function TreesVisualization() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Set canvas size
     canvas.width = canvas.offsetWidth
     canvas.height = canvas.offsetHeight
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    
-    // Clear node positions
+
     nodePositionsRef.current.clear()
 
-    // Calculate layout
     const nodeRadius = 20
     const levelHeight = 80
     const horizontalSpacing = 60
 
     const drawNode = (node: TreeNode, x: number, y: number, parentX?: number, parentY?: number) => {
-      // Store node position for hover detection
+
       nodePositionsRef.current.set(node.id, { x, y, radius: nodeRadius, node })
-      
-      // Draw connection to parent
+
       if (parentX !== undefined && parentY !== undefined) {
         ctx.beginPath()
         ctx.moveTo(parentX, parentY)
@@ -168,7 +154,6 @@ export function TreesVisualization() {
         ctx.stroke()
       }
 
-      // Draw node circle
       ctx.beginPath()
       ctx.arc(x, y, nodeRadius, 0, 2 * Math.PI)
       ctx.fillStyle = getNodeColor(node, false)
@@ -177,33 +162,28 @@ export function TreesVisualization() {
       ctx.lineWidth = node.is_best_path ? 3 : 2
       ctx.stroke()
 
-      // Draw visit count
       ctx.fillStyle = '#ffffff'
       ctx.font = 'bold 12px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillText(node.visits.toString(), x, y)
 
-      // Draw reward below node
       ctx.fillStyle = '#94a3b8'
       ctx.font = '10px sans-serif'
       ctx.fillText(node.avg_reward.toFixed(2), x, y + nodeRadius + 12)
 
-      // Draw pruned indicator
       if (node.is_pruned) {
         ctx.fillStyle = '#ef4444'
         ctx.font = 'bold 16px sans-serif'
         ctx.fillText('✗', x + nodeRadius + 5, y - nodeRadius - 5)
       }
 
-      // Draw best path indicator
       if (node.is_best_path) {
         ctx.fillStyle = '#fbbf24'
         ctx.font = 'bold 16px sans-serif'
         ctx.fillText('★', x - nodeRadius - 5, y - nodeRadius - 5)
       }
 
-      // Recursively draw children
       if (node.children && node.children.length > 0) {
         const totalWidth = (node.children.length - 1) * horizontalSpacing
         const startX = x - totalWidth / 2
@@ -216,7 +196,6 @@ export function TreesVisualization() {
       }
     }
 
-    // Start drawing from root
     if (tree.root) {
       const startX = canvas.width / 2
       const startY = 50
@@ -224,14 +203,12 @@ export function TreesVisualization() {
     }
   }, [])
 
-  // Animate tree drawing when selected
   useEffect(() => {
     if (selectedTree) {
       drawTree(selectedTree)
     }
   }, [selectedTree, drawTree])
 
-  // Handle mouse move on canvas for hover detection
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -240,7 +217,6 @@ export function TreesVisualization() {
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
 
-    // Check if hovering over any node
     let foundNode: TreeNode | null = null
     for (const [, pos] of nodePositionsRef.current) {
       const distance = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2))
@@ -261,7 +237,7 @@ export function TreesVisualization() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header */}
+      {}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -276,7 +252,7 @@ export function TreesVisualization() {
         </p>
       </motion.div>
 
-      {/* Cache Statistics */}
+      {}
       {cacheStats && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -306,13 +282,13 @@ export function TreesVisualization() {
         </motion.div>
       )}
 
-      {/* Controls */}
+      {}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-xl p-4 mb-6 flex flex-wrap gap-4 items-center"
       >
-        {/* Worker Filter */}
+        {}
         <div className="flex items-center gap-2">
           <label className="text-slate-400 text-sm">Worker:</label>
           <select
@@ -330,7 +306,7 @@ export function TreesVisualization() {
           </select>
         </div>
 
-        {/* Quality Filter */}
+        {}
         <div className="flex items-center gap-2">
           <label className="text-slate-400 text-sm">Quality:</label>
           <select
@@ -345,7 +321,7 @@ export function TreesVisualization() {
           </select>
         </div>
 
-        {/* Auto-refresh Toggle */}
+        {}
         <div className="flex items-center gap-2 ml-auto">
           <label className="text-slate-400 text-sm">Auto-refresh:</label>
           <button
@@ -361,14 +337,14 @@ export function TreesVisualization() {
         </div>
       </motion.div>
 
-      {/* Trees Grid */}
+      {}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tree List */}
+        {}
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-white mb-4">
             Tree History ({filteredTrees.length})
           </h2>
-          
+
           {isLoading ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin text-5xl mb-4">🌳</div>
@@ -399,7 +375,7 @@ export function TreesVisualization() {
                     borderLeftColor: getWorkerColor(tree.worker)
                   }}
                 >
-                  {/* Header */}
+                  {}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
@@ -434,7 +410,7 @@ export function TreesVisualization() {
                     </div>
                   </div>
 
-                  {/* Stats */}
+                  {}
                   <div className="grid grid-cols-4 gap-2 text-xs">
                     <div>
                       <div className="text-slate-500">Nodes</div>
@@ -454,7 +430,7 @@ export function TreesVisualization() {
                     </div>
                   </div>
 
-                  {/* Execution Time */}
+                  {}
                   <div className="mt-2 text-xs text-slate-500">
                     ⏱️ {tree.execution_time.toFixed(2)}s
                   </div>
@@ -464,19 +440,19 @@ export function TreesVisualization() {
           )}
         </div>
 
-        {/* Tree Visualization Canvas */}
+        {}
         <div className="sticky top-4">
           <h2 className="text-2xl font-bold text-white mb-4">
             Tree Visualization
           </h2>
-          
+
           {selectedTree ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="bg-slate-900/80 backdrop-blur border border-slate-700 rounded-xl overflow-hidden"
             >
-              {/* Tree Info */}
+              {}
               <div className="p-4 border-b border-slate-700">
                 <div className="flex items-center gap-2 mb-2">
                   <span
@@ -495,7 +471,7 @@ export function TreesVisualization() {
                 <p className="text-white text-sm">{selectedTree.query}</p>
               </div>
 
-              {/* Legend */}
+              {}
               <div className="p-4 bg-slate-800/50 border-b border-slate-700 text-xs">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <div className="flex items-center gap-2">
@@ -525,7 +501,7 @@ export function TreesVisualization() {
                 </div>
               </div>
 
-              {/* Canvas */}
+              {}
               <div className="relative bg-slate-950/50" style={{ height: '600px' }}>
                 <canvas
                   ref={canvasRef}
@@ -534,8 +510,8 @@ export function TreesVisualization() {
                   onMouseMove={handleCanvasMouseMove}
                   onMouseLeave={handleCanvasMouseLeave}
                 />
-                
-                {/* Hover Tooltip */}
+
+                {}
                 <AnimatePresence>
                   {hoveredNode && (
                     <motion.div
@@ -551,10 +527,10 @@ export function TreesVisualization() {
                       }}
                     >
                       <div className="bg-slate-900 border-2 border-indigo-500 rounded-xl shadow-2xl shadow-indigo-500/30 p-4">
-                        {/* Node Header */}
+                        {}
                         <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-700">
                           <div className="flex items-center gap-2">
-                            <div 
+                            <div
                               className="w-3 h-3 rounded-full"
                               style={{ backgroundColor: getNodeColor(hoveredNode, false) }}
                             />
@@ -569,8 +545,8 @@ export function TreesVisualization() {
                             <span className="text-red-400 text-lg">✗</span>
                           )}
                         </div>
-                        
-                        {/* Reasoning Step */}
+
+                        {}
                         <div className="mb-3">
                           <div className="text-indigo-400 text-xs font-semibold mb-1 uppercase tracking-wide">
                             💭 Reasoning Step
@@ -580,7 +556,7 @@ export function TreesVisualization() {
                           </div>
                         </div>
 
-                        {/* Statistics */}
+                        {}
                         <div className="grid grid-cols-2 gap-3 mb-2">
                           <div className="bg-slate-800/50 rounded-lg p-2">
                             <div className="text-slate-400 text-xs mb-1">Visits</div>
@@ -603,7 +579,7 @@ export function TreesVisualization() {
                           </div>
                         </div>
 
-                        {/* Node Type Badges */}
+                        {}
                         <div className="flex flex-wrap gap-2 mt-3">
                           {hoveredNode.is_best_path && (
                             <span className="px-2 py-1 bg-yellow-900/30 text-yellow-400 text-xs rounded-full border border-yellow-600">
@@ -632,7 +608,7 @@ export function TreesVisualization() {
                 </AnimatePresence>
               </div>
 
-              {/* Tree Stats */}
+              {}
               <div className="p-4 bg-slate-800/50 border-t border-slate-700">
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
