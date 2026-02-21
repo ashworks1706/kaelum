@@ -69,8 +69,6 @@ You can rate the answer after the fact. Those ratings adjust per-worker reward d
 
 ## Quick Start
 
-### Backend Setup
-
 ```bash
 # Install dependencies
 pip install -r requirements.txt
@@ -81,41 +79,63 @@ python -m vllm.entrypoints.openai.api_server \
     --port 8000 \
     --gpu-memory-utilization 0.7
 
-# Or smaller model for testing
+# Or a smaller model for testing
 python -m vllm.entrypoints.openai.api_server \
     --model HuggingFaceTB/SmolLM2-1.7B-Instruct \
     --port 8000
-
-# Start backend
-cd backend && python app.py
 ```
 
-### Frontend Setup
+Then run queries directly from the CLI:
 
 ```bash
-cd frontend
-npm install
-npm run dev
-```
+# Basic query
+python kaelum.py "What is the integral of x^2?"
 
-Open http://localhost:3000
+# Stream output token by token
+python kaelum.py "Write a binary search in Python" --stream
+
+# Hide reasoning trace, show answer only
+python kaelum.py "Explain relativity" --no-trace
+
+# Use a specific model or custom vLLM endpoint
+python kaelum.py "Solve x^2 - 4 = 0" --model Qwen/Qwen2.5-7B-Instruct --base-url http://localhost:8000/v1
+
+# Control search depth and simulations
+python kaelum.py "Prove the Pythagorean theorem" --depth 5 --sims 20
+
+# Output raw JSON
+python kaelum.py "What is entropy?" --json
+
+# Print session metrics
+python kaelum.py --metrics
+
+# Submit feedback for a past query
+python kaelum.py --feedback "2+2?" --answer "4" --score 1.0
+```
 
 ## Configuration
 
-Copy `.env.example` to `.env`:
+All options can be passed as CLI flags. The main ones:
 
-```bash
-BACKEND_PORT=5000
-LLM_BASE_URL=http://localhost:8000/v1
-NEXT_PUBLIC_API_URL=http://localhost:5000
-```
+| Flag | Default | Description |
+|---|---|---|
+| `--base-url` | `http://localhost:8000/v1` | vLLM / OpenAI-compatible endpoint |
+| `--model` | `Qwen/Qwen2.5-1.5B-Instruct` | Model name |
+| `--api-key` | — | API key if required |
+| `--temperature` | `0.7` | Sampling temperature |
+| `--max-tokens` | `1024` | Max tokens per generation |
+| `--depth` | per-worker default | Max LATS tree depth |
+| `--sims` | per-worker default | Number of MCTS simulations |
+| `--no-routing` | — | Disable neural router, use default worker |
+| `--stream` | — | Stream tokens as they are generated |
+| `--no-trace` | — | Hide reasoning trace |
+| `--json` | — | Output raw JSON result |
 
 ## Project Structure
 
 ```
 Kaelum/
-├── backend/           # Flask API
-├── frontend/          # Next.js dashboard
+├── kaelum.py          # CLI entry-point and library API
 ├── core/
 │   ├── detectors/     # Query classification
 │   ├── learning/      # Feedback and metrics

@@ -109,6 +109,36 @@ class KaelumOrchestrator:
         logger.info(f"  Parallel LATS: {'Enabled' if parallel else 'Disabled'} (max {max_workers} workers)")
         logger.info("=" * 70)
 
+    def _infer_stream(self, query: str):
+        """Run the full reasoning pipeline then stream the final answer token-by-token."""
+        from core.reasoning import Message
+
+        # Run the full pipeline synchronously first (routing, LATS, verification)
+        result = self.infer(query, stream=False)
+
+        # Re-stream the final answer via the LLM using the verified reasoning as context
+        reasoning_context = "\n".join(
+            f"{i+1}. {step}" for i, step in enumerate(result.get("reasoning_trace", []))
+        )
+        messages = [
+            Message(
+                role="system",
+                content=(
+                    "You are a precise, helpful assistant. "
+                    "Using the verified reasoning steps provided, give the final answer concisely and clearly."
+                ),
+            ),
+            Message(
+                role="user",
+                content=(
+                    f"Query: {query}\n\n"
+                    + (f"Reasoning:\n{reasoning_context}\n\n" if reasoning_context else "")
+                    + "Final answer:"
+                ),
+            ),
+        ]
+        yield from self.llm.generate(messages, stream=True)
+
     def _get_worker(self, specialty: str):
         if specialty not in self._workers:
             try:
@@ -123,8 +153,7 @@ class KaelumOrchestrator:
     def infer(self, query: str, stream: bool = False):
         """Run complete reasoning pipeline with verification and reflection."""
         if stream:
-            logger.warning("Streaming not yet supported, using sync mode")
-            stream = False
+            return self._infer_stream(query)
         
         logger.info("=" * 70)
         logger.info(f"QUERY: {query}")
@@ -149,7 +178,7 @@ class KaelumOrchestrator:
         if self.router:
             routing_decision = self.router.route(query)
             worker_specialty = routing_decision.worker_specialty
-            use_cache = False
+            use_cache = True
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
             router_confidence = routing_decision.confidence
@@ -162,7 +191,7 @@ class KaelumOrchestrator:
                 logger.info(f"ROUTING: ⚠ Low confidence ({router_confidence:.3f} < 0.6) - using ensemble voting")
         else:
             worker_specialty = "logic"
-            use_cache = False
+            use_cache = True
             max_depth = 5
             num_sims = 10
             router_confidence = 1.0
@@ -225,13 +254,15 @@ class KaelumOrchestrator:
                         logger.info(f"ENSEMBLE: Submitting {worker_type.upper()} worker")
                         worker_obj = self._get_worker(worker_type)
                         
+                        # Use reduced simulations per worker in ensemble mode to avoid N×latency
+                        ensemble_sims = max(3, num_sims // 2)
                         future = executor.submit(
                             worker_obj.solve,
                             query,
                             None,
-                            False,
+                            use_cache,
                             max_depth,
-                            num_sims,
+                            ensemble_sims,
                             self.parallel,
                             self.max_workers
                         )
@@ -251,7 +282,7 @@ class KaelumOrchestrator:
                     worker_result = worker.solve(
                         query,
                         context=None,
-                        use_cache=False,
+                        use_cache=use_cache,
                         max_tree_depth=max_depth,
                         num_simulations=num_sims,
                         parallel=self.parallel,
@@ -281,7 +312,7 @@ class KaelumOrchestrator:
                 result = worker.solve(
                     query,
                     context=None,
-                    use_cache=False,
+                    use_cache=use_cache,
                     max_tree_depth=max_depth,
                     num_simulations=num_sims,
                     parallel=self.parallel,

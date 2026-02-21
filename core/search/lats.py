@@ -234,13 +234,19 @@ class LATS:
         self.backpropagate(child, reward)
     
     def _run_parallel_simulations(self, num_simulations: int, max_depth: int, max_workers: int):
+        import logging
+        logger = logging.getLogger("kaelum.lats")
+        failed = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(self._run_single_simulation, max_depth) for _ in range(num_simulations)]
             for future in as_completed(futures):
                 try:
                     future.result()
                 except Exception as e:
-                    pass
+                    failed += 1
+                    logger.warning(f"LATS: Simulation failed ({failed} total failures): {e}")
+        if failed:
+            logger.warning(f"LATS: {failed}/{num_simulations} parallel simulations failed")
 
     def to_json(self) -> str:
         return json.dumps(self.root.to_dict(), indent=2)
