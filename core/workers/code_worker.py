@@ -11,8 +11,6 @@ from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
 from ..detectors import TaskClassifier
-from ..learning import AdaptivePenalty
-from ..verification import ConfidenceCalibrator
 
 logger = logging.getLogger("kaelum.code_worker")
 
@@ -21,7 +19,6 @@ class CodeWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
         self.task_classifier = TaskClassifier(embedding_model=self.config.embedding_model)
-        self.confidence_calibrator = ConfidenceCalibrator()
         self.supported_languages = {
             'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
             'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'
@@ -302,10 +299,4 @@ class CodeWorker(WorkerAgent):
             'task_complex': task_type in ['debugging', 'optimization']
         }
         
-        calibrated = self.confidence_calibrator.calibrate_confidence(
-            'code',
-            base_confidence,
-            task_features
-        )
-        
-        return calibrated
+        return base_confidence

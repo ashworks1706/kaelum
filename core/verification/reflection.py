@@ -1,6 +1,5 @@
 import re
 from typing import List, Optional
-from transformers import pipeline
 
 from ..reasoning import LLMClient, Message
 
@@ -79,28 +78,15 @@ class ReflectionEngine:
             Message(role="user", content=f"Query: {query}\n\nReasoning:\n{trace_text}\n\nList issues (or 'None'):"),
         ]
         
-        response = self.llm_client.generate(messages).strip()
+        response = self.llm.generate(messages).strip()
         
-        if not response or not response.strip():
+        if not response:
             return None
         
-        try:
-            nli = pipeline("text-classification", model="facebook/bart-large-mnli")
-            no_improvement_labels = [
-                "No improvements are needed",
-                "The answer is correct as is",
-                "Everything looks good"
-            ]
-            
-            for label in no_improvement_labels:
-                result = nli(f"{response}", f"hypothesis: {label}")
-                if result and result[0]['label'] == 'ENTAILMENT' and result[0]['score'] > 0.75:
-                    return None
-        except:
-            if "none" in response.lower() or "no improvement" in response.lower():
-                words_before = response.lower().split("none")[0] if "none" in response.lower() else ""
-                if not any(neg in words_before for neg in ["not", "no", "isn't", "aren't"]):
-                    return None
+        if "none" in response.lower() or "no improvement" in response.lower():
+            words_before = response.lower().split("none")[0] if "none" in response.lower() else ""
+            if not any(neg in words_before for neg in ["not", "no", "isn't", "aren't"]):
+                return None
         
         improvements = self._parse_structured_list(response)
         

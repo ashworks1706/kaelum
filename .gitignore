@@ -58,3 +58,4 @@ mcp_runtime/
 # Temporary files
 tmp/
 temp/
+.kaelum/

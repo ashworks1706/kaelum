@@ -359,43 +359,4 @@ class TreeCache:
         logger.info(f"CACHE: ✓ HIT (LLM validated)")
         return cached_data
     
-    def get_stats(self) -> Dict[str, Any]:
-        if not self.cached_trees:
-            return {
-                'total_trees': 0,
-                'by_specialty': {},
-                'avg_confidence': 0.0,
-                'success_rate': 0.0,
-                'validation_stats': {}
-            }
-        
-        by_specialty = {}
-        for tree in self.cached_trees:
-            spec = tree.worker_specialty
-            if spec not in by_specialty:
-                by_specialty[spec] = {'count': 0, 'success': 0}
-            by_specialty[spec]['count'] += 1
-            if tree.success:
-                by_specialty[spec]['success'] += 1
-        
-        avg_confidence = sum(t.confidence for t in self.cached_trees) / len(self.cached_trees)
-        success_rate = sum(1 for t in self.cached_trees if t.success) / len(self.cached_trees)
-        
-        validation_stats = self.validator.get_validation_stats()
-        
-        return {
-            'total_trees': len(self.cached_trees),
-            'by_specialty': by_specialty,
-            'avg_confidence': avg_confidence,
-            'success_rate': success_rate,
-            'validation_stats': validation_stats
-        }
-    
-    def clear(self, worker_specialty: Optional[str] = None):
-        if worker_specialty:
-            self.cached_trees = [t for t in self.cached_trees 
-                                if t.worker_specialty != worker_specialty]
-        else:
-            self.cached_trees = []
-        
-        self._save_metadata()
+

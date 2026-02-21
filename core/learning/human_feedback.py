@@ -108,7 +108,41 @@ class HumanFeedbackEngine:
         logger.info(f"Human Feedback Engine initialized")
         logger.info(f"  - Feedback history: {len(self.feedback_history)} entries")
         logger.info(f"  - Data directory: {self.data_dir}")
-    
+
+    def record_feedback(self, query: str, answer: str, score: float,
+                        notes: str = "", worker: str = "unknown") -> Dict[str, Any]:
+        """Convenience method for simple score-based feedback from the CLI.
+
+        Args:
+            query:  The original query.
+            answer: The answer that was returned.
+            score:  Quality score in [0, 1].
+            notes:  Optional free-text comment.
+            worker: Worker that handled the query (if known).
+        """
+        import hashlib
+        query_hash = hashlib.md5(query.encode()).hexdigest()[:8]
+        rating = max(1, min(5, round(score * 5)))
+        liked = score >= 0.5
+        feedback = HumanFeedback(
+            query=query,
+            query_hash=query_hash,
+            timestamp=time.time(),
+            overall_liked=liked,
+            overall_rating=rating,
+            worker_selected=worker,
+            worker_correct=liked,
+            answer_correct=liked,
+            answer_helpful=liked,
+            answer_complete=liked,
+            answer_rating=rating,
+            confidence_shown=0.0,
+            verification_passed=False,
+            execution_time=0.0,
+            comment=notes or None,
+        )
+        return self.submit_feedback(feedback)
+
     def submit_feedback(self, feedback: HumanFeedback) -> Dict[str, Any]:
         """Submit human feedback and update reward models."""
         

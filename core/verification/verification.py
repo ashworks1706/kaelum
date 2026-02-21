@@ -131,7 +131,6 @@ from sentence_transformers import SentenceTransformer, util
 
 from ..reasoning import LLMClient, Message
 from .sympy_engine import SympyEngine
-from .syntax_validator import SyntaxValidator
 from ..detectors.conclusion_detector import ConclusionDetector
 from ..detectors.worker_type_classifier import WorkerTypeClassifier
 from ..detectors.domain_classifier import DomainClassifier
@@ -146,7 +145,6 @@ class VerificationEngine:
         self.debug = debug
         
         self.semantic_encoder = get_shared_encoder(embedding_model, device='cpu')
-        self.syntax_validator = SyntaxValidator()
         self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
         self.worker_classifier = WorkerTypeClassifier(embedding_model=embedding_model)
         self.domain_classifier = DomainClassifier(embedding_model=embedding_model)

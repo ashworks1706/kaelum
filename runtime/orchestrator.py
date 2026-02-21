@@ -84,7 +84,13 @@ class KaelumOrchestrator:
         
         self._workers = {}
         self._encoder = None
-        
+
+        # Expose a single shared feedback engine; reuse the router's if available
+        from core.learning.human_feedback import HumanFeedbackEngine
+        self.feedback_engine: HumanFeedbackEngine = (
+            self.router.feedback_engine if self.router else HumanFeedbackEngine()
+        )
+
         self.parallel = parallel
         self.max_workers = max_workers
         self.override_max_tree_depth = max_tree_depth
