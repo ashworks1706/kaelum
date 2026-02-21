@@ -3,17 +3,24 @@ from typing import Dict, Any, Optional
 from ..learning import AdaptivePenalty
 
 _feedback_engine = None
+_prm = None
 
 def get_feedback_engine():
     """Lazy load feedback engine to avoid circular imports."""
     global _feedback_engine
     if _feedback_engine is None:
-        try:
-            from ..learning.human_feedback import HumanFeedbackEngine
-            _feedback_engine = HumanFeedbackEngine()
-        except:
-            _feedback_engine = None
+        from ..learning.human_feedback import HumanFeedbackEngine
+        _feedback_engine = HumanFeedbackEngine()
     return _feedback_engine
+
+
+def _get_prm():
+    """Lazy load the learned PRM singleton."""
+    global _prm
+    if _prm is None:
+        from ..verification.process_reward_model import get_prm
+        _prm = get_prm()
+    return _prm
 
 class RewardModel:
     CONFIGS = {
@@ -95,6 +102,30 @@ class RewardModel:
             base_reward = max(0.1, config["base"] - depth * adaptive_penalty)
             logger.debug(f"REWARD [{worker_type}]: {base_reward:.3f} (base={config['base']:.2f}, depth_penalty={adaptive_penalty:.3f}, depth={depth})")
         
+        # ── Learned PRM augmentation ──────────────────────────────────────────
+        # Once the PRM has MIN_SAMPLES training examples it blends its score with
+        # the heuristic above. blend_alpha scales 0→1 as data accumulates so the
+        # system starts fully heuristic and transitions to learned rewards.
+        prm = _get_prm()
+        if prm and prm.is_active:
+            step_text = state.get("step", "")
+            query_text = state.get("query", "")
+            if step_text and query_text:
+                prm_score = prm.predict_step_quality(
+                    query=query_text,
+                    step=step_text,
+                    worker_type=worker_type,
+                )
+                if prm_score is not None:
+                    blended = prm.blend(base_reward, prm_score)
+                    logger.debug(
+                        f"REWARD [{worker_type}]: PRM blend "
+                        f"{base_reward:.3f} + {prm_score:.3f} → {blended:.3f} "
+                        f"(α={prm.blend_alpha:.2f})"
+                    )
+                    base_reward = blended
+
+        # ── Human feedback adjustment ─────────────────────────────────────────
         feedback_engine = get_feedback_engine()
         if feedback_engine:
             adjusted_reward = feedback_engine.get_adjusted_reward(

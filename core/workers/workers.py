@@ -1,9 +1,12 @@
 import asyncio
+import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from enum import Enum
+
+logger = logging.getLogger("kaelum.worker")
 
 from ..config import KaelumConfig
 from ..reasoning import LLMClient, Message
@@ -48,12 +51,7 @@ class WorkerResult:
         }
         
         if self.lats_tree is not None:
-            try:
-                result["lats_tree"] = self.lats_tree.root.to_dict()
-            except Exception as e:
-                import logging
-                logger = logging.getLogger("kaelum.worker")
-                logger.warning(f"Failed to serialize LATS tree: {e}")
+            result["lats_tree"] = self.lats_tree.root.to_dict()
         
         return result
 
@@ -176,6 +174,39 @@ class WorkerAgent(ABC):
             None, self.solve, query, context, use_cache, max_tree_depth, num_simulations
         )
 
+    def _penalize_failed_path(
+        self,
+        tree,
+        issues: List[str],
+        penalty: float = 0.5,
+    ) -> None:
+        """Penalise the current best path so MCTS explores alternatives next.
+
+        Called when verification failed on the previous iteration.  We subtract
+        ``penalty`` from every node on the best-child chain so the UCT scores
+        push subsequent simulations toward unexplored branches.  Nodes that
+        were pruned but have few visits are also un-pruned so they remain
+        candidates for expansion.
+        """
+        penalised = 0
+        node = tree.best_child()
+        while node and node.parent is not None:
+            node.value = max(-1.0, node.value - penalty)
+            node.pruned = False      # ensure parent can still reach this node
+            penalised += 1
+            node = node.parent
+
+        # Un-prune lightly-explored nodes outside the failed path so MCTS can
+        # still visit them in subsequent simulations.
+        for n in tree.nodes.values():
+            if n.pruned and n.visits <= 1:
+                n.pruned = False
+
+        logger.info(
+            f"TREE-REUSE: Penalised {penalised} nodes on failed path; "
+            f"{len(tree.nodes)} total nodes available for continued search"
+        )
+
 class MathWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
@@ -191,7 +222,10 @@ class MathWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues: Optional[List[str]] = None) -> WorkerResult:
         start_time = time.time()
         
         if use_cache:
@@ -211,15 +245,10 @@ class MathWorker(WorkerAgent):
             depth = state.get("depth", 0)
             
             if "answer" in state:
-                try:
-                    answer = state["answer"]
-                    has_answer = answer and len(str(answer)) > 0
-                    query_complexity = AdaptivePenalty.compute_complexity(query)
-                    return RewardModel.get_reward("math", state, depth, has_answer=has_answer, query_complexity=query_complexity)
-                except Exception as e:
-                    logger.debug(f"Failed to extract answer from state: {e}")
-                    query_complexity = AdaptivePenalty.compute_complexity(query)
-                    return RewardModel.get_reward("math", state, depth, query_complexity=query_complexity)
+                answer = state["answer"]
+                has_answer = answer and len(str(answer)) > 0
+                query_complexity = AdaptivePenalty.compute_complexity(query)
+                return RewardModel.get_reward("math", state, depth, has_answer=has_answer, query_complexity=query_complexity)
             
             has_partial = bool(state.get("partial_solution"))
             query_complexity = AdaptivePenalty.compute_complexity(query)
@@ -243,36 +272,37 @@ class MathWorker(WorkerAgent):
             else:
                 prompt += "Provide ONLY the first step to solve this. Keep it concise (1-3 sentences)."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()), 
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                conclusion_result = self.conclusion_detector.detect(next_step, history)
-                is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "partial_solution": next_step if not is_final else None,
-                    "answer": next_step if is_final else None
-                }
-            except Exception as e:
-                logger.warning(f"Expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Continue solving step {depth + 1}",
-                    "depth": depth + 1
-                }
+            messages = [
+                Message(role="system", content=self.get_system_prompt()), 
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            conclusion_result = self.conclusion_detector.detect(next_step, history)
+            is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "partial_solution": next_step if not is_final else None,
+                "answer": next_step if is_final else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_math_step
+            tree.expand_fn = expand_math_step
+            tree.coherence_checker = self._lightweight_coherence_check
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing math search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step,
+                        coherence_checker=self._lightweight_coherence_check)
+            sims = num_simulations
         
-        tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step,
-                    coherence_checker=self._lightweight_coherence_check)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -310,6 +340,7 @@ class MathWorker(WorkerAgent):
             verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
+            lats_tree=tree,
             metadata={
                 "num_simulations": num_simulations,
                 "tree_depth": best_node.state.get("depth", 0) if best_node else 0,
@@ -330,10 +361,13 @@ class LogicWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues: Optional[List[str]] = None) -> WorkerResult:
         start_time = time.time()
         
-        if use_cache:
+        if use_cache and existing_tree is None:
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
@@ -380,37 +414,37 @@ class LogicWorker(WorkerAgent):
             else:
                 prompt += "Apply logical reasoning. Provide ONLY the first step (1-3 sentences)."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()),
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                conclusion_result = self.conclusion_detector.detect(next_step, history)
-                is_conclusion = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "premises": parent_state.get("premises", []),
-                    "conclusion": next_step if is_conclusion else None
-                }
-            except Exception as e:
-                logger.warning(f"Logic expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Logical step {depth + 1}",
-                    "depth": depth + 1,
-                    "premises": parent_state.get("premises", [])
-                }
-        
-        tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step,
-                    coherence_checker=self._lightweight_coherence_check)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+            messages = [
+                Message(role="system", content=self.get_system_prompt()),
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            conclusion_result = self.conclusion_detector.detect(next_step, history)
+            is_conclusion = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "premises": parent_state.get("premises", []),
+                "conclusion": next_step if is_conclusion else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_logic_step
+            tree.expand_fn = expand_logic_step
+            tree.coherence_checker = self._lightweight_coherence_check
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing logic search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_logic_step, expand_fn=expand_logic_step,
+                        coherence_checker=self._lightweight_coherence_check)
+            sims = num_simulations
+
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -441,6 +475,7 @@ class LogicWorker(WorkerAgent):
             verification_passed=verification_passed,
             specialty=self.get_specialty(),
             execution_time=execution_time,
+            lats_tree=tree,
             metadata={
                 "num_simulations": num_simulations,
                 "tree_depth": best_node.state.get("depth", 0),

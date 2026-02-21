@@ -141,12 +141,8 @@ class KaelumOrchestrator:
 
     def _get_worker(self, specialty: str):
         if specialty not in self._workers:
-            try:
-                specialty_enum = WorkerSpecialty(specialty)
-                self._workers[specialty] = create_worker(specialty_enum, self.config, tree_cache=self.tree_cache)
-            except Exception as e:
-                logger.error(f"Failed to create {specialty} worker: {e}")
-                self._workers[specialty] = create_worker(WorkerSpecialty.LOGIC, self.config, tree_cache=self.tree_cache)
+            specialty_enum = WorkerSpecialty(specialty)
+            self._workers[specialty] = create_worker(specialty_enum, self.config, tree_cache=self.tree_cache)
         
         return self._workers[specialty]
     
@@ -231,6 +227,10 @@ class KaelumOrchestrator:
         iteration = 0
         verification_passed = False
         final_result = None
+        # Tree reuse state — carry the LATS tree between reflection iterations so
+        # MCTS can continue from where it left off instead of restarting cold.
+        previous_tree = None
+        prev_issues: list = []
         
         while iteration < max_iterations and not verification_passed:
             iteration += 1
@@ -278,17 +278,7 @@ class KaelumOrchestrator:
                             logger.error(f"ENSEMBLE: {worker_type.upper()} failed: {e}")
                 
                 if not results:
-                    logger.error("ENSEMBLE: All workers failed, falling back to primary worker")
-                    worker_result = worker.solve(
-                        query,
-                        context=None,
-                        use_cache=use_cache,
-                        max_tree_depth=max_depth,
-                        num_simulations=num_sims,
-                        parallel=self.parallel,
-                        max_workers=self.max_workers
-                    )
-                    results = [(worker_specialty, worker_result)]
+                    raise RuntimeError("ENSEMBLE: All workers failed — no results to select from")
                 
                 results.sort(key=lambda x: x[1].confidence, reverse=True)
                 
@@ -316,7 +306,10 @@ class KaelumOrchestrator:
                     max_tree_depth=max_depth,
                     num_simulations=num_sims,
                     parallel=self.parallel,
-                    max_workers=self.max_workers
+                    max_workers=self.max_workers,
+                    existing_tree=previous_tree,
+                    extra_sims=max(3, num_sims // 3),
+                    verification_issues=prev_issues,
                 )
                 worker_time = time.time() - worker_start_time
                 
@@ -350,6 +343,18 @@ class KaelumOrchestrator:
             
             logger.info(f"VERIFICATION: Completed in {verification_time:.2f}s")
             
+            # Record step-level training signal to ProcessRewardModel
+            from core.verification.process_reward_model import get_prm
+            _prm = get_prm(self.config.embedding_model)
+            for i, step in enumerate(result.reasoning_steps):
+                _prm.record(
+                    query=query,
+                    step=step,
+                    context_steps=result.reasoning_steps[:i],
+                    worker_type=worker_specialty,
+                    verification_passed=verification_passed,
+                )
+            
             if verification_passed:
                 logger.info(f"VERIFICATION: ✓ PASSED")
                 logger.info(f"  - Confidence: {confidence:.3f}")
@@ -367,6 +372,10 @@ class KaelumOrchestrator:
                         logger.info(f"    {i}. {issue}")
                 
                 if iteration < max_iterations:
+                    # Stash tree and issues for next iteration (tree reuse)
+                    previous_tree = getattr(result, 'lats_tree', None)
+                    prev_issues = issues
+
                     logger.info("\n" + "=" * 70)
                     logger.info("STEP 5: REFLECTION")
                     logger.info("=" * 70)
@@ -426,16 +435,13 @@ class KaelumOrchestrator:
         }
         
         if hasattr(final_result, 'lats_tree') and final_result.lats_tree is not None:
-            try:
-                cache_data["lats_tree"] = final_result.lats_tree.root.to_dict()
-                cache_data["tree_stats"] = {
-                    "total_nodes": len(final_result.lats_tree.nodes),
-                    "avg_reward": final_result.lats_tree.get_avg_reward(),
-                    "max_depth": final_result.metadata.get("tree_depth", 0)
-                }
-                logger.info(f"CACHE: Including full LATS tree with {len(final_result.lats_tree.nodes)} nodes")
-            except Exception as e:
-                logger.warning(f"CACHE: Failed to serialize LATS tree: {e}")
+            cache_data["lats_tree"] = final_result.lats_tree.root.to_dict()
+            cache_data["tree_stats"] = {
+                "total_nodes": len(final_result.lats_tree.nodes),
+                "avg_reward": final_result.lats_tree.get_avg_reward(),
+                "max_depth": final_result.metadata.get("tree_depth", 0)
+            }
+            logger.info(f"CACHE: Including full LATS tree with {len(final_result.lats_tree.nodes)} nodes")
         
         self.tree_cache.store(query_embedding, cache_data)
         logger.info(f"CACHE: Stored result with quality={cache_data['quality']}")

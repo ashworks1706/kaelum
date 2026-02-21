@@ -33,10 +33,13 @@ class CodeWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues: Optional[List[str]] = None) -> WorkerResult:
         start_time = time.time()
         
-        if use_cache:
+        if use_cache and existing_tree is None:
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
@@ -87,41 +90,39 @@ class CodeWorker(WorkerAgent):
                 prompt += "\n\nPrevious steps:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
                 prompt += "\n\nProvide ONLY the next implementation step. Keep it concise (describe the step or provide a small code snippet). Do not generate the entire solution."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()),
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                code = self._extract_code(next_step)
-                has_code = code is not None and len(code) > 10
-                is_final = depth >= max_tree_depth - 1 or has_code
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "language": language,
-                    "task_type": task_type,
-                    "code_parts": parent_state.get("code_parts", []) + ([next_step] if not is_final else []),
-                    "code": code if is_final else None
-                }
-            except Exception as e:
-                logger.warning(f"Code expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Implementation step {depth + 1}",
-                    "depth": depth + 1,
-                    "language": language,
-                    "task_type": task_type,
-                    "code_parts": parent_state.get("code_parts", [])
-                }
+            messages = [
+                Message(role="system", content=self.get_system_prompt()),
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            code = self._extract_code(next_step)
+            has_code = code is not None and len(code) > 10
+            is_final = depth >= max_tree_depth - 1 or has_code
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "language": language,
+                "task_type": task_type,
+                "code_parts": parent_state.get("code_parts", []) + ([next_step] if not is_final else []),
+                "code": code if is_final else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_code_step
+            tree.expand_fn = expand_code_step
+            tree.coherence_checker = self._lightweight_coherence_check
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing code search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_code_step, expand_fn=expand_code_step)
+            sims = num_simulations
         
-        tree = LATS(root_state, simulator=simulate_code_step, expand_fn=expand_code_step)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -162,8 +163,7 @@ class CodeWorker(WorkerAgent):
             reasoning_steps=reasoning_steps,
             verification_passed=False,
             specialty=self.get_specialty(),
-            execution_time=execution_time,
-            metadata={
+            execution_time=execution_time,            lats_tree=tree,            metadata={
                 'language': language,
                 'task_type': task_type,
                 'syntax_valid': syntax_valid,

@@ -34,10 +34,13 @@ class FactualWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues=None) -> WorkerResult:
         start_time = time.time()
         
-        if use_cache:
+        if use_cache and existing_tree is None:
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
@@ -80,51 +83,49 @@ class FactualWorker(WorkerAgent):
                 prompt += "\n\nFacts gathered so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
                 prompt += "\n\nProvide ONLY the next relevant fact or information piece. Keep it concise (1-3 sentences). Do not provide the complete answer yet."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()),
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                history = []
-                node = parent_node
-                while node.parent is not None:
-                    if "step" in node.state:
-                        history.insert(0, node.state["step"])
-                    node = node.parent
-                
-                conclusion_result = self.conclusion_detector.detect(next_step, '\n'.join(history))
-                has_conclusion = conclusion_result['is_conclusion'] and conclusion_result['confidence'] > 0.7
-                
-                completeness_result = self.completeness_detector.is_complete(query, next_step, history)
-                is_complete = completeness_result['is_complete'] and completeness_result['confidence'] > 0.65
-                
-                is_final = depth >= max_tree_depth - 1 or has_conclusion or is_complete
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "query_type": query_type,
-                    "facts_gathered": parent_state.get("facts_gathered", []) + ([next_step] if not is_final else []),
-                    "answer": next_step if is_final else None
-                }
-            except Exception as e:
-
-                logger.warning(f"Factual expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Gathering fact {depth + 1}",
-                    "depth": depth + 1,
-                    "query_type": query_type,
-                    "facts_gathered": parent_state.get("facts_gathered", [])
-                }
+            messages = [
+                Message(role="system", content=self.get_system_prompt()),
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            history = []
+            node = parent_node
+            while node.parent is not None:
+                if "step" in node.state:
+                    history.insert(0, node.state["step"])
+                node = node.parent
+            
+            conclusion_result = self.conclusion_detector.detect(next_step, '\n'.join(history))
+            has_conclusion = conclusion_result['is_conclusion'] and conclusion_result['confidence'] > 0.7
+            
+            completeness_result = self.completeness_detector.is_complete(query, next_step, history)
+            is_complete = completeness_result['is_complete'] and completeness_result['confidence'] > 0.65
+            
+            is_final = depth >= max_tree_depth - 1 or has_conclusion or is_complete
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "query_type": query_type,
+                "facts_gathered": parent_state.get("facts_gathered", []) + ([next_step] if not is_final else []),
+                "answer": next_step if is_final else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_factual_step
+            tree.expand_fn = expand_factual_step
+            tree.coherence_checker = self._lightweight_coherence_check
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing factual search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_factual_step, expand_fn=expand_factual_step)
+            sims = num_simulations
         
-        tree = LATS(root_state, simulator=simulate_factual_step, expand_fn=expand_factual_step)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:
@@ -155,6 +156,7 @@ class FactualWorker(WorkerAgent):
             verification_passed=False,
             specialty=self.get_specialty(),
             execution_time=execution_time,
+            lats_tree=tree,
             metadata={
                 'query_type': query_type,
                 'num_simulations': num_simulations,

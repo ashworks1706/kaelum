@@ -29,10 +29,13 @@ class AnalysisWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues=None) -> WorkerResult:
         start_time = time.time()
         
-        if use_cache:
+        if use_cache and existing_tree is None:
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
@@ -74,36 +77,36 @@ class AnalysisWorker(WorkerAgent):
             else:
                 prompt += "\n\nProvide ONLY the first analytical observation. Keep it concise (1-3 sentences)."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()),
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                conclusion_result = self.conclusion_detector.detect(next_step, history)
-                is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion'] or len(next_step) > 200
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "analysis_points": parent_state.get("analysis_points", []) + ([next_step] if not is_final else []),
-                    "conclusion": next_step if is_final else None
-                }
-            except Exception as e:
-                logger.warning(f"Analysis expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Analysis point {depth + 1}",
-                    "depth": depth + 1,
-                    "analysis_points": parent_state.get("analysis_points", [])
-                }
+            messages = [
+                Message(role="system", content=self.get_system_prompt()),
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            conclusion_result = self.conclusion_detector.detect(next_step, history)
+            is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion'] or len(next_step) > 200
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "analysis_points": parent_state.get("analysis_points", []) + ([next_step] if not is_final else []),
+                "conclusion": next_step if is_final else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_analysis_step
+            tree.expand_fn = expand_analysis_step
+            tree.coherence_checker = self._lightweight_coherence_check
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing analysis search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_analysis_step, expand_fn=expand_analysis_step)
+            sims = num_simulations
         
-        tree = LATS(root_state, simulator=simulate_analysis_step, expand_fn=expand_analysis_step)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:

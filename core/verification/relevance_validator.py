@@ -20,11 +20,7 @@ class RelevanceValidator:
     
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2'):
         self.model = SentenceTransformer(embedding_model)
-        try:
-            self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-        except:
-            self.cross_encoder = None
-        
+        self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
         self.tfidf = TfidfVectorizer(max_features=100, stop_words=None)
         self._performance_cache = {}
         self.threshold_calibrator = ThresholdCalibrator()
@@ -42,12 +38,9 @@ class RelevanceValidator:
         dynamic_threshold = optimal_threshold + complexity_adjustment
         dynamic_threshold = max(0.25, min(0.70, dynamic_threshold))
         
-        if self.cross_encoder:
-            cross_score = self._cross_encoder_score(query, response)
-            semantic_similarity = self._bi_encoder_similarity(query, response)
-            combined_semantic = 0.7 * cross_score + 0.3 * semantic_similarity
-        else:
-            combined_semantic = self._bi_encoder_similarity(query, response)
+        cross_score = self._cross_encoder_score(query, response)
+        semantic_similarity = self._bi_encoder_similarity(query, response)
+        combined_semantic = 0.7 * cross_score + 0.3 * semantic_similarity
         
         token_overlap = self._advanced_token_overlap(query, response)
         
@@ -76,11 +69,8 @@ class RelevanceValidator:
         }
     
     def _cross_encoder_score(self, query: str, response: str) -> float:
-        try:
-            score = self.cross_encoder.predict([(query, response)])[0]
-            return float(np.clip(score, 0.0, 1.0))
-        except:
-            return 0.5
+        score = self.cross_encoder.predict([(query, response)])[0]
+        return float(np.clip(score, 0.0, 1.0))
     
     def _bi_encoder_similarity(self, query: str, response: str) -> float:
         query_embedding = self.model.encode(query, convert_to_tensor=False)
@@ -154,45 +144,15 @@ class RelevanceValidator:
         return adjustments.get(complexity, 0.0)
     
     def _advanced_token_overlap(self, query: str, response: str) -> float:
-        try:
-            corpus = [query, response]
-            self.tfidf.fit(corpus)
-            query_vec = self.tfidf.transform([query]).toarray()[0]
-            response_vec = self.tfidf.transform([response]).toarray()[0]
-            
-            overlap = np.dot(query_vec, response_vec) / (
-                np.linalg.norm(query_vec) * np.linalg.norm(response_vec) + 1e-9
-            )
-            return float(overlap)
-        except:
-            pass
+        corpus = [query, response]
+        self.tfidf.fit(corpus)
+        query_vec = self.tfidf.transform([query]).toarray()[0]
+        response_vec = self.tfidf.transform([response]).toarray()[0]
         
-        query_tokens = set(re.findall(r'\b\w{3,}\b', query.lower()))
-        response_tokens = set(re.findall(r'\b\w{3,}\b', response.lower()))
-        
-        if not query_tokens:
-            return 0.0
-        
-        exact_overlap = len(query_tokens & response_tokens) / len(query_tokens)
-        
-        query_bigrams = set()
-        response_bigrams = set()
-        
-        query_words = list(query_tokens)
-        response_words = list(response_tokens)
-        
-        for i in range(len(query_words) - 1):
-            query_bigrams.add(f"{query_words[i]}_{query_words[i+1]}")
-        
-        for i in range(len(response_words) - 1):
-            response_bigrams.add(f"{response_words[i]}_{response_words[i+1]}")
-        
-        if query_bigrams:
-            bigram_overlap = len(query_bigrams & response_bigrams) / len(query_bigrams)
-        else:
-            bigram_overlap = 0.0
-        
-        return 0.7 * exact_overlap + 0.3 * bigram_overlap
+        overlap = np.dot(query_vec, response_vec) / (
+            np.linalg.norm(query_vec) * np.linalg.norm(response_vec) + 1e-9
+        )
+        return float(overlap)
     
     def record_outcome(self, worker_type: str, score: float, threshold: float, was_correct: bool):
         self.threshold_calibrator.record_decision(

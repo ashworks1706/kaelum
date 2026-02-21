@@ -13,6 +13,8 @@ from ..learning import AdaptivePenalty
 from ..verification import ConfidenceCalibrator
 from ..detectors import CoherenceDetector
 
+logger = logging.getLogger("kaelum.creative_worker")
+
 class CreativeWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
@@ -32,10 +34,13 @@ class CreativeWorker(WorkerAgent):
     def solve(self, query: str, context: Optional[Dict] = None,
               use_cache: bool = True, max_tree_depth: int = 5,
               num_simulations: int = 10, parallel: bool = False,
-              max_workers: int = 4) -> WorkerResult:
+              max_workers: int = 4,
+              existing_tree=None,
+              extra_sims: int = 0,
+              verification_issues=None) -> WorkerResult:
         start_time = time.time()
         
-        if use_cache:
+        if use_cache and existing_tree is None:
             cached_result = self._check_cache(query)
             if cached_result:
                 return cached_result
@@ -78,39 +83,36 @@ class CreativeWorker(WorkerAgent):
                 prompt += "\n\nContent created so far:\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(history))
                 prompt += "\n\nProvide ONLY the next creative element or section. Keep it focused and concise (2-5 sentences). Build upon previous content."
             
-            try:
-                messages = [
-                    Message(role="system", content=self.get_system_prompt()),
-                    Message(role="user", content=prompt)
-                ]
-                response = self.llm_client.generate(messages)
-                next_step = response.strip()
-                
-                is_substantial = len(next_step) > 150
-                is_final = depth >= max_tree_depth - 1 or is_substantial
-                
-                return {
-                    "query": query,
-                    "step": next_step,
-                    "depth": depth + 1,
-                    "task_type": task_type,
-                    "content_parts": parent_state.get("content_parts", []) + ([next_step] if not is_final else []),
-                    "content": next_step if is_final else None
-                }
-            except Exception as e:
-
-                logger.warning(f"Creative expansion failed at depth {depth}: {e}")
-                return {
-                    "query": query,
-                    "step": f"Creative iteration {depth + 1}",
-                    "depth": depth + 1,
-                    "task_type": task_type,
-                    "content_parts": parent_state.get("content_parts", [])
-                }
+            messages = [
+                Message(role="system", content=self.get_system_prompt()),
+                Message(role="user", content=prompt)
+            ]
+            response = self.llm_client.generate(messages)
+            next_step = response.strip()
+            
+            is_substantial = len(next_step) > 150
+            is_final = depth >= max_tree_depth - 1 or is_substantial
+            
+            return {
+                "query": query,
+                "step": next_step,
+                "depth": depth + 1,
+                "task_type": task_type,
+                "content_parts": parent_state.get("content_parts", []) + ([next_step] if not is_final else []),
+                "content": next_step if is_final else None
+            }
+        if existing_tree is not None:
+            tree = existing_tree
+            tree.simulator = simulate_creative_step
+            tree.expand_fn = expand_creative_step
+            self._penalize_failed_path(tree, verification_issues or [])
+            sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
+            logger.info(f"TREE-REUSE: Continuing creative search ({sims} additional simulations)")
+        else:
+            tree = LATS(root_state, simulator=simulate_creative_step, expand_fn=expand_creative_step)
+            sims = num_simulations
         
-        tree = LATS(root_state, simulator=simulate_creative_step, expand_fn=expand_creative_step)
-        
-        tree.run_simulations(num_simulations, max_tree_depth, parallel=parallel, max_workers=max_workers)
+        tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
         
         best_node = tree.best_child()
         if best_node is None:

@@ -88,20 +88,14 @@ class TreeCache:
             return []
         
         cached_trees = []
-        try:
-            with open(self.metadata_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        item = json.loads(line)
-                        cached_trees.append(CachedTree.from_dict(item))
-                    except json.JSONDecodeError:
-                        continue
-            return cached_trees
-        except Exception:
-            return []
+        with open(self.metadata_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                item = json.loads(line)
+                cached_trees.append(CachedTree.from_dict(item))
+        return cached_trees
     
     def _save_metadata(self):
         with open(self.metadata_path, 'w') as f:
@@ -231,43 +225,34 @@ class TreeCache:
         if worker != "math":
             return False
         
-        try:
-            from sympy import sympify, simplify
-            from sympy.parsing.sympy_parser import parse_expr
-            import re
+        from sympy import sympify, simplify
+        import re
+        
+        def extract_expression(text):
+            expr_patterns = [
+                r'derivative\s+of\s+([^?\.]+)',
+                r'solve\s+([^?\.]+)',
+                r'integrate\s+([^?\.]+)',
+                r'simplify\s+([^?\.]+)',
+                r'([x\+\-\*\/\^\d\(\)]+)\s*[=\?]?'
+            ]
             
-            def extract_expression(text):
-                expr_patterns = [
-                    r'derivative\s+of\s+([^?\.]+)',
-                    r'solve\s+([^?\.]+)',
-                    r'integrate\s+([^?\.]+)',
-                    r'simplify\s+([^?\.]+)',
-                    r'([x\+\-\*\/\^\d\(\)]+)\s*[=\?]?'
-                ]
-                
-                for pattern in expr_patterns:
-                    match = re.search(pattern, text.lower())
-                    if match:
-                        return match.group(1).strip()
-                return None
-            
-            expr1 = extract_expression(query1)
-            expr2 = extract_expression(query2)
-            
-            if not expr1 or not expr2:
-                return False
-            
-            try:
-                sym_expr1 = sympify(expr1)
-                sym_expr2 = sympify(expr2)
-                
-                diff = simplify(sym_expr1 - sym_expr2)
-                return diff == 0
-            except:
-                return False
-                
-        except Exception:
+            for pattern in expr_patterns:
+                match = re.search(pattern, text.lower())
+                if match:
+                    return match.group(1).strip()
+            return None
+        
+        expr1 = extract_expression(query1)
+        expr2 = extract_expression(query2)
+        
+        if not expr1 or not expr2:
             return False
+        
+        sym_expr1 = sympify(expr1)
+        sym_expr2 = sympify(expr2)
+        diff = simplify(sym_expr1 - sym_expr2)
+        return diff == 0
     
     def get(self, query: str, query_embedding: np.ndarray, similarity_threshold: float = 0.85) -> Optional[Dict[str, Any]]:
         import logging
