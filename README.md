@@ -2,7 +2,7 @@
 
 This project started as a way for me to learn how different AI techniques work together. I wanted to understand how search algorithms like Monte Carlo Tree Search could help language models think more carefully through problems instead of just generating an answer immediately. The idea is to explore multiple reasoning paths before committing to a solution, kind of like how you might sketch out different approaches to a math problem before deciding which one works best.
 
-The system routes queries to specialized workers depending on the question type. There's a math worker that uses symbolic verification with SymPy, a code worker that parses syntax trees, and workers for logic, factual questions, creative tasks, and analysis. Each one has different reward functions tuned for their domain. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use based on past performance.
+The system routes queries to specialized workers depending on the question type. There's a math worker that uses symbolic verification with SymPy, a code worker that parses syntax trees, and workers for logic, factual questions, creative tasks, and analysis. Each worker has domain-specific heuristic reward functions, and those are augmented by a learned Process Reward Model (PRM) — a small MLP trained on verification outcomes that scores individual reasoning steps and progressively replaces the heuristics as training data accumulates. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use based on past performance.
 
 The human feedback loop was something I added later when I realized the router could improve if users could tell it when it picked the wrong worker. Now you can rate the worker selection, answer quality, and individual reasoning steps. Those adjustments persist across sessions and actually influence future routing decisions and reward calculations.
 
@@ -46,14 +46,14 @@ On a cache miss the detectors run — task classifier, domain classifier, cohere
 **4. Routing — [`core/search/router.py`](core/search/router.py)**  
 The feature vector goes into a `PolicyNetwork` (398 → 256 → 128) that outputs softmax probabilities over the six workers plus a cache-use logit. The network was trained on past outcomes, and human feedback adjustments get added on top of the raw probabilities at inference time — so if you've told it the factual worker keeps getting picked wrong, that signal actually shifts the distribution before the argmax. There's also an epsilon-greedy exploration term so it doesn't fully lock in on one worker too early.
 
-**5. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py)**  
-The chosen worker runs MCTS over reasoning steps. Each node is a partial reasoning chain; the UCT formula balances exploitation (following good paths) with exploration (trying new branches). The reward model scores each node — math penalizes symbolic errors hard, code checks AST validity, logic checks consistency. Nodes whose average reward falls below the pruning threshold get cut so later simulations don't waste time there.
+**5. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py) + [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py)**  
+The chosen worker runs MCTS over reasoning steps. Each node is a partial reasoning chain; the UCT formula balances exploitation (following good paths) with exploration (trying new branches). Node rewards come from two sources blended together: hand-coded heuristics (math penalizes symbolic errors hard, code checks AST validity, logic checks consistency) and a learned Process Reward Model. The PRM is a 1158-dim → 256 → 64 → 1 MLP trained on (query embedding, step embedding, context embedding, worker one-hot) features, with the blend weight scaling 0 → 1 as training examples accumulate — so the system starts fully heuristic and gradually shifts toward the learned signal. Nodes whose average reward falls below the pruning threshold get cut so later simulations don't waste time there.
 
 **6. Worker execution — [`core/workers/`](core/workers/)**  
 Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM and applies its domain-specific post-processing. The math worker passes results to [`core/verification/sympy_engine.py`](core/verification/sympy_engine.py) for symbolic checking. The code worker runs an AST parse. Others check coherence and completeness scores.
 
 **7. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)**  
-The answer goes through a verification pass (format, completeness, relevance via [`core/verification/relevance_validator.py`](core/verification/relevance_validator.py)) and then a self-critique loop where the LLM reviews its own output and either signs off or triggers a revision. The reflection loop runs up to N iterations — that's why verification pass rate jumps from ~72% on first attempt to ~88% after reflection.
+The answer goes through a verification pass (format, completeness, relevance via [`core/verification/relevance_validator.py`](core/verification/relevance_validator.py)) and then a self-critique loop where the LLM reviews its own output and either signs off or triggers a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized (reward subtracted along the best-child chain) and lightly-explored branches are un-pruned, so the next iteration can continue MCTS from the same tree with fresh simulations rather than restarting cold. The reflection loop runs up to N iterations — that's why verification pass rate jumps from ~72% on first attempt to ~88% after reflection. After each iteration, each reasoning step is recorded as a training example for the PRM.
 
 **8. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
 If the answer passed verification, the reasoning tree gets stored in the cache for future hits. The router logs the outcome against its routing decision so it can update its weights over time.
@@ -136,12 +136,13 @@ All options can be passed as CLI flags. The main ones:
 ```
 Kaelum/
 ├── kaelum.py          # CLI entry-point and library API
+├── benchmark.py       # GSM8K ablation runner (baseline / CoT / no-router / full)
 ├── core/
 │   ├── detectors/     # Query classification
 │   ├── learning/      # Feedback and metrics
-│   ├── search/        # LATS, router, cache
-│   ├── verification/  # SymPy, syntax validation
-│   └── workers/       # Domain workers
+│   ├── search/        # LATS, router, reward model, tree cache
+│   ├── verification/  # SymPy engine, PRM, relevance validator
+│   └── workers/       # Domain workers (math, code, logic, factual, creative, analysis)
 └── runtime/           # Orchestrator
 ```
 
@@ -162,5 +163,6 @@ The hardest parts were getting the MCTS pruning right (too aggressive and you mi
 - [Shazeer et al. (2017): &#34;Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer&#34;](https://arxiv.org/abs/1701.06538)
 - [Fedus et al. (2021): &#34;Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity&#34;](https://arxiv.org/abs/2101.03961)
 - [Welleck et al. (2022): &#34;Symbolic Knowledge Distillation: from General Language Models to Commonsense Models&#34;](https://arxiv.org/abs/2110.07178)
+- [Lightman et al. (2023): &#34;Let's Verify Step by Step&#34; (Process Reward Models)](https://arxiv.org/abs/2305.20050)
 - [Settles (2009): &#34;Active Learning Literature Survey&#34;](https://minds.wisconsin.edu/handle/1793/60660)
 - [Reimers &amp; Gurevych (2019): &#34;Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks&#34;](https://arxiv.org/abs/1908.10084)
