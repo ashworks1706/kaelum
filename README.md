@@ -127,5 +127,3 @@ The hardest parts were getting the MCTS pruning right (too aggressive and you mi
 - [Welleck et al. (2022): &#34;Symbolic Knowledge Distillation: from General Language Models to Commonsense Models&#34;](https://arxiv.org/abs/2110.07178)
 - [Settles (2009): &#34;Active Learning Literature Survey&#34;](https://minds.wisconsin.edu/handle/1793/60660)
 - [Reimers &amp; Gurevych (2019): &#34;Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks&#34;](https://arxiv.org/abs/1908.10084)
-
-Reading these papers helped me understand the techniques, but implementing them taught me where the tricky parts are. A lot of the details that matter for making things work aren't in the papers - they come from experimentation and debugging.
