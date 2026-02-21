@@ -32,17 +32,34 @@ Cold latency is higher because LATS runs multiple simulations. The cache makes u
 
 ## How It Works
 
-When you send a query, the neural router picks which worker should handle it. That worker then uses LATS (Language Agent Tree Search) to build a reasoning tree where each node represents a reasoning step. The MCTS algorithm balances trying new approaches with following promising paths. Nodes that consistently give bad results get pruned to save compute. When the search finishes, the best path becomes the answer.
+Here's the full path a query takes from your terminal to an answer.
 
-Workers have domain-specific reward functions - math heavily penalizes wrong answers, code checks syntax validity, creative writing looks for coherence and diversity. The cache stores good reasoning trees and reuses them for similar queries based on embedding similarity.
+**1. Entry — [`kaelum.py`](kaelum.py)**  
+The CLI parses your query, sets up the config, and hands everything to the orchestrator. It's also where streaming, metrics, and feedback submission come in.
 
-## Architecture
+**2. Cache check — [`core/search/tree_cache.py`](core/search/tree_cache.py)**  
+Before doing anything expensive, the orchestrator embeds the query with the shared encoder and compares it against cached trees using cosine similarity. Per-domain thresholds decide what counts as a hit (math needs a tighter match than creative). A cache hit skips steps 3–6 entirely and returns in ~0.4 s instead of ~7 s.
 
-- **LATS**: MCTS with UCT formula for exploring reasoning paths
-- **Neural Router**: Learns worker selection from outcomes and feedback
-- **Workers**: Math (SymPy), Code (AST), Logic, Factual, Creative, Analysis
-- **Semantic Cache**: Cosine similarity on embeddings with domain thresholds
-- **Human Feedback**: Adjusts routing and rewards based on corrections
+**3. Feature extraction — [`core/detectors/`](core/detectors/)**  
+On a cache miss the detectors run — task classifier, domain classifier, coherence and completeness detectors, worker type and conclusion detectors. Each one scores the query on a different axis. Those scores get bundled with the embedding into a 398-dim feature vector.
+
+**4. Routing — [`core/search/router.py`](core/search/router.py)**  
+The feature vector goes into a `PolicyNetwork` (398 → 256 → 128) that outputs softmax probabilities over the six workers plus a cache-use logit. The network was trained on past outcomes, and human feedback adjustments get added on top of the raw probabilities at inference time — so if you've told it the factual worker keeps getting picked wrong, that signal actually shifts the distribution before the argmax. There's also an epsilon-greedy exploration term so it doesn't fully lock in on one worker too early.
+
+**5. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py)**  
+The chosen worker runs MCTS over reasoning steps. Each node is a partial reasoning chain; the UCT formula balances exploitation (following good paths) with exploration (trying new branches). The reward model scores each node — math penalizes symbolic errors hard, code checks AST validity, logic checks consistency. Nodes whose average reward falls below the pruning threshold get cut so later simulations don't waste time there.
+
+**6. Worker execution — [`core/workers/`](core/workers/)**  
+Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM and applies its domain-specific post-processing. The math worker passes results to [`core/verification/sympy_engine.py`](core/verification/sympy_engine.py) for symbolic checking. The code worker runs an AST parse. Others check coherence and completeness scores.
+
+**7. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)**  
+The answer goes through a verification pass (format, completeness, relevance via [`core/verification/relevance_validator.py`](core/verification/relevance_validator.py)) and then a self-critique loop where the LLM reviews its own output and either signs off or triggers a revision. The reflection loop runs up to N iterations — that's why verification pass rate jumps from ~72% on first attempt to ~88% after reflection.
+
+**8. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
+If the answer passed verification, the reasoning tree gets stored in the cache for future hits. The router logs the outcome against its routing decision so it can update its weights over time.
+
+**9. Human feedback — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)**  
+You can rate the answer after the fact. Those ratings adjust per-worker reward deltas and router probability weights that persist to disk and influence step 4 on the next query. This is the main way the system improves on your specific usage patterns rather than just the training distribution.
 
 
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
