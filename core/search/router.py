@@ -15,8 +15,6 @@ from core.shared_encoder import get_shared_encoder
 from core.paths import DEFAULT_ROUTER_DIR
 from core.learning.human_feedback import HumanFeedbackEngine
 
-from ..detectors import DomainClassifier
-
 logger = logging.getLogger("kaelum.router")
 logger.setLevel(logging.INFO)
 
@@ -175,7 +173,6 @@ class Router:
         self.policy_network = PolicyNetwork().to(device)
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
         self.training_buffer = []
-        self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
         
         self.feedback_engine = HumanFeedbackEngine()
         logger.info(f"ROUTER: Human feedback engine initialized")
@@ -413,10 +410,9 @@ class Router:
         
         has_math_symbols = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', query)) or \
                           any(sym in query for sym in ['√', '∫', '∂', '∑', '∏', 'derivative', 'integral'])
-        
-        domain_features = self.domain_classifier.get_domain_features(query)
-        has_code_keywords = domain_features['has_code_domain'] > 0.5
-        has_logic_keywords = domain_features['has_logic_domain'] > 0.5
+
+        has_code_keywords = False
+        has_logic_keywords = False
         
         structural_complexity = (
             (word_count / 100.0) * 0.3 +
