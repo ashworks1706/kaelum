@@ -54,6 +54,8 @@ $$\text{UCT}(s) = \underbrace{\frac{V(s)}{N(s)}}_{\text{exploit}} + C \cdot \und
 
 $V(s)$ is the accumulated reward for node $s$, $N(s)$ is its visit count, and $C = \sqrt{2} \approx 1.414$. If $N(s) = 0$ the score is $\infty$, so every unvisited node is explored before any node is revisited.
 
+On simulation 1 the root has no children at all, so select terminates immediately at root — root is the leaf. There is nothing to compare yet. Branching develops naturally over subsequent simulations: once a node has been visited, any unvisited sibling slot scores $\infty$ and gets tried before the visited node is extended further. This means the early simulations tend to spawn multiple direct children of root (different "step 1" candidates), and later simulations go deeper on whichever branches scored highest.
+
 - **Expand:** send the path from root to this leaf as context to the LLM and ask it to generate the next reasoning step. Attach the response as a new child node.
 
 - **Score:** pass the new node through the Process Reward Model (PRM) — a 1158→256→64→1 MLP with sigmoid output. Its input is:
@@ -95,6 +97,8 @@ $y_{\text{worker}}$ is the worker that was selected, $\bar{r}$ is the mean PRM r
 After each query, every step on the winning path is recorded as a training example. The label is the step's own LATS node reward $V(s)/N(s)$ — a continuous value in $[0, 1]$ reflecting how well that specific branch scored during search. If a human score is available it takes priority. The PRM retrains every 25 new examples using BCE loss:
 
 $$\mathcal{L}_{\text{PRM}} = -\bigl[y \log \hat{y} + (1-y)\log(1-\hat{y})\bigr]$$
+
+The PRM is also the primary mechanism for transferring knowledge across queries. The trees themselves can't be reused — their nodes are literal text specific to one question. But the PRM weights accumulate patterns from every tree ever built: steps that define terms before using them, steps that introduce a formula with justification, steps that correctly decompose a problem all start scoring higher over time. When a new tree is built, the PRM already knows what good intermediate reasoning looks like from past queries and steers UCT toward those patterns from the first simulation. This is weaker than explicit template reuse but requires no additional infrastructure.
 
 **Human feedback — reward deltas** ([`core/learning/human_feedback.py`](core/learning/human_feedback.py))
 You can rate the answer after the fact. Ratings adjust a per-worker scalar $\delta_{\text{worker}}$ that is added to every PRM score at inference time:
