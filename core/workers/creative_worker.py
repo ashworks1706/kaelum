@@ -109,7 +109,7 @@ class CreativeWorker(WorkerAgent):
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing creative search ({sims} additional simulations)")
         else:
-            tree = LATS(root_state, simulator=simulate_creative_step, expand_fn=expand_creative_step)
+            tree = self._build_lats(root_state, simulate_creative_step, expand_creative_step)
             sims = num_simulations
         
         tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
