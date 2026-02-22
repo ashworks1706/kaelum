@@ -179,6 +179,8 @@ class Router:
         
         self.feedback_engine = HumanFeedbackEngine()
         logger.info(f"ROUTER: Human feedback engine initialized")
+        self.depth_range = depth_range
+        self.sims_range = sims_range
         
         if model_path and Path(model_path).exists():
             self._load_model(model_path)
