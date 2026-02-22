@@ -2,7 +2,7 @@
 
 This project started as a way for me to learn how different AI techniques work together. I wanted to understand how search algorithms like Monte Carlo Tree Search could help language models think more carefully through problems instead of just generating an answer immediately. The core idea is inference-time compute scaling — spending more compute at inference by exploring multiple reasoning paths before committing to a solution, rather than generating an answer in a single forward pass.
 
-The system uses a Mixture-of-Experts (MoE) style routing architecture, dispatching queries to specialized workers depending on the question type. There's a math worker that uses symbolic verification with SymPy, a code worker that parses syntax trees, and workers for logic, factual questions, creative tasks, and analysis. Rewards come from a learned Process Reward Model (PRM) — a small MLP trained on verification outcomes that scores individual reasoning steps. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use based on past performance.
+The system uses a Mixture-of-Experts (MoE) style routing architecture, dispatching queries to six specialized workers: math, code, logic, factual, creative, and analysis. Rewards come from a learned Process Reward Model (PRM) — a small MLP trained on verification outcomes that scores individual reasoning steps. Verification is handled by a fine-tunable HuggingFace text-classifier, not regex or heuristics. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use based on past performance via REINFORCE (reward-weighted policy gradient).
 
 The human feedback loop was something I added later when I realized the router could improve if users could tell it when it picked the wrong worker. Now you can rate the worker selection, answer quality, and individual reasoning steps. Those adjustments persist across sessions and actually influence future routing decisions and reward calculations.
 
@@ -34,26 +34,44 @@ Cold latency is higher because LATS runs multiple simulations. The cache makes u
 
 Here's the full path a query takes from your terminal to an answer.
 
-**1. Entry — [`kaelum.py`](kaelum.py)**  
+1. Entry — [`kaelum.py`](kaelum.py)
 The CLI parses your query, sets up the config, and hands everything to the orchestrator. It's also where streaming, metrics, and feedback submission come in.
 
-**2. Routing — [`core/search/router.py`](core/search/router.py)**  
-The orchestrator embeds the query and feeds a neural router (PolicyNetwork) with the embedding plus simple length/keyword features (no detectors). It outputs worker choice, tree depth, and number of simulations; epsilon-greedy exploration occasionally tries alternatives. If confidence is low, an ensemble of workers can run in parallel and the highest-confidence result is chosen.
+2. Routing — [`core/search/router.py`](core/search/router.py)
+The orchestrator embeds the query with `all-MiniLM-L6-v2` and feeds a PolicyNetwork (398→256 residual MLP with skip connection) the embedding plus length/keyword features. It outputs a softmax distribution over 6 workers, tree depth, and number of simulations. Epsilon-greedy exploration ($\varepsilon$-greedy: with probability $\varepsilon$ pick a random worker instead of the argmax) occasionally tries alternatives to avoid getting stuck. After the query resolves, the router trains one step via REINFORCE:
 
-**3. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py) + [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py)**  
-The chosen worker runs MCTS (Monte Carlo Tree Search — a planning algorithm that builds a tree of possible next steps and simulates many paths to figure out which direction looks most promising) over reasoning steps. Each node is a partial reasoning chain; the UCT formula (a score that balances sticking with good paths vs. trying ones you haven't explored much yet) balances exploitation with exploration. Node rewards come from a learned Process Reward Model that scores individual reasoning steps — not just whether the final answer was right, but whether each intermediate step was heading in the right direction. Nodes whose average reward falls below the pruning threshold get cut so later simulations don't waste time there.
+$$\mathcal{L}_{\text{router}} = \text{CrossEntropy}(\text{logits},\, y_{\text{worker}}) \cdot \bar{r}$$
 
-**4. Worker execution — [`core/workers/`](core/workers/)**  
+where $y_{\text{worker}}$ is the correct worker index and $\bar{r}$ is the mean reward from the LATS simulation — so high-reward rollouts reinforce the routing choice more strongly. If confidence is low, an ensemble of workers can run in parallel and the highest-confidence result is chosen.
+
+3. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py) + [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py)  
+The chosen worker runs MCTS (Monte Carlo Tree Search — a planning algorithm that builds a tree of possible next steps and simulates many paths to figure out which direction looks most promising) over reasoning steps. Each node is a partial reasoning chain. At each step, the UCT formula picks which node to expand next:
+
+$$\text{UCT}(s) = \underbrace{\frac{V(s)}{N(s)}}_{\text{exploit}} + C \cdot \underbrace{\sqrt{\frac{\ln N(\text{parent})}{N(s)}}}_{\text{explore}}$$
+
+where $V(s)$ is the accumulated reward, $N(s)$ is how many times node $s$ has been visited, and $C = \sqrt{2} \approx 1.414$ is the exploration constant. If $N(s) = 0$ the score is $\infty$, so unvisited nodes are always tried first. The exploit term pushes the search toward branches that have scored well; the explore term pushes it toward branches that haven't been tried much yet.
+
+Node rewards come from a learned Process Reward Model (1158→256→64→1 MLP, sigmoid output) that scores individual reasoning steps — not just whether the final answer was right, but whether each intermediate step was heading in the right direction. Its input is a concatenation of sentence embeddings:
+
+$$\mathbf{f} = [\mathbf{q}_{384} \;\|\; \mathbf{s}_{384} \;\|\; \mathbf{c}_{384} \;\|\; \mathbf{w}_{6}] \in \mathbb{R}^{1158}$$
+
+where $\mathbf{q}$, $\mathbf{s}$, $\mathbf{c}$ are the query, current step, and context embeddings, and $\mathbf{w}$ is a one-hot worker type vector. The PRM is trained online with MSE loss, activating after ≥50 samples and retraining every 25 new samples. After each simulation, `backpropagate()` walks up the tree adding the reward arithmetically: $V(s) \mathrel{+}= r$, $N(s) \mathrel{+}= 1$. Nodes whose average reward $V(s)/N(s)$ falls below the pruning threshold after enough visits get cut so later simulations don't waste time there.
+
+4. Worker execution — [`core/workers/`](core/workers/)
 Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM. Stopping is depth-based; rewards come from the PRM.
 
-**5. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)**  
-The answer goes through a learned-only verifier (HF text-classifier; default pass label “POSITIVE”) and then a self-reflection loop where the LLM reviews its own output and either signs off or triggers a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized and lightly-explored branches are un-pruned, so the next iteration can continue MCTS from the same tree with fresh simulations rather than restarting cold. Each reasoning step is recorded as a training example for the PRM.
+5. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)
+The answer goes through a learned-only verifier — a HuggingFace `pipeline("text-classification")` adapter (`LearnedVerifier`) whose pass/fail label is configurable. It maps the classifier's raw label to pass/fail by checking whether `"PASS"` (or your configured substring) appears in the label name. No regex, no heuristics, entirely data-driven — but that means it needs fine-tuning on your domain to be reliable out of the box. After that, a self-reflection loop has the LLM review its own output and either sign off or trigger a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized and lightly-explored branches are un-pruned, so the next iteration continues MCTS from the same tree rather than restarting cold. Each reasoning step is recorded as a training example for the PRM.
 
-**6. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
+6. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)
 Results are stored, but retrieval is disabled (no heuristic gates). The router logs the outcome against its routing decision so it can update its weights over time.
 
-**7. Human feedback (RLHF) — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)**  
-You can rate the answer after the fact. Those ratings adjust per-worker reward deltas and router probability weights that persist to disk and influence step 4 on the next query. This is the main way the system improves on your specific usage patterns rather than just the training distribution.
+7. Human feedback (RLHF) — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)
+You can rate the answer after the fact. `HumanFeedbackEngine` maintains a per-worker adjustment dict that is added to every PRM reward at inference time:
+
+$$r_{\text{final}} = r_{\text{PRM}} + \delta_{\text{worker}}$$
+
+When you mark a routing choice wrong, `_adjust_reward_models()` applies: $\delta_{\text{wrong}} \mathrel{-}= 0.03$ and $\delta_{\text{suggested}} \mathrel{+}= 0.05$. A wrong answer adds another $\delta_{\text{worker}} \mathrel{-}= 0.05$; a highly-rated answer ($\geq 4/5$) adds $\delta_{\text{worker}} \mathrel{+}= 0.02$. These persist to `reward_adjustments.json`, are loaded on startup, and directly lower or raise the reward signal LATS uses — so workers that have performed poorly on your queries get explored less by UCT. No gradient updates; just arithmetic deltas on the shared reward signal.
 
 ##### Legacy (No longer valid but left for reference):
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
@@ -134,7 +152,7 @@ Kaelum/
 ├── core/
 │   ├── learning/      # Feedback and metrics
 │   ├── search/        # LATS, router, reward model, tree cache
-│   ├── verification/  # SymPy engine, PRM, relevance validator
+│   ├── verification/  # Learned verifier, PRM, reflection, confidence calibration
 │   └── workers/       # Domain workers (math, code, logic, factual, creative, analysis)
 └── runtime/           # Orchestrator
 ```
