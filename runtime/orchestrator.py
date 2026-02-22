@@ -66,7 +66,9 @@ class KaelumOrchestrator:
             embedding_model=config.embedding_model,
             buffer_size=router_buffer_size,
             learning_rate=router_learning_rate,
-            exploration_rate=router_exploration_rate
+            exploration_rate=router_exploration_rate,
+            depth_range=(router_depth_min, router_depth_max),
+            sims_range=(router_sims_min, router_sims_max)
         ) if enable_routing else None
         if self.router:
             logger.info(f"Router enabled: Embedding-based intelligent routing ({config.embedding_model})")
@@ -77,7 +79,10 @@ class KaelumOrchestrator:
             use_symbolic=config.use_symbolic_verification,
             use_factual=config.use_factual_verification,
             debug=config.debug_verification,
-            embedding_model=config.embedding_model
+            embedding_model=config.embedding_model,
+            learned_model_path=config.verification_model_path,
+            use_learned_only=config.verification_use_learned_only,
+            fail_closed=config.verification_fail_closed
         )
         self.reflection_engine = ReflectionEngine(
             self.llm,
