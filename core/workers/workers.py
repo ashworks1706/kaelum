@@ -14,7 +14,6 @@ from ..verification import SympyEngine
 from ..search import LATS, LATSNode
 from ..search import TreeCache
 from ..search import RewardModel
-from ..detectors import ConclusionDetector
 from ..learning import AdaptivePenalty
 
 class WorkerSpecialty(Enum):
@@ -176,7 +175,7 @@ class WorkerAgent(ABC):
             root_state,
             simulator=simulator,
             expand_fn=expand_fn,
-            coherence_checker=coherence_checker or self._lightweight_coherence_check,
+            coherence_checker=None,
             exploration_constant=self.lats_params["exploration_constant"],
             prune_visit_threshold=self.lats_params["prune_visit_threshold"],
             prune_reward_threshold=self.lats_params["prune_reward_threshold"],
