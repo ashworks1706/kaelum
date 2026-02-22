@@ -314,8 +314,7 @@ class MathWorker(WorkerAgent):
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing math search ({sims} additional simulations)")
         else:
-            tree = LATS(root_state, simulator=simulate_math_step, expand_fn=expand_math_step,
-                        coherence_checker=self._lightweight_coherence_check)
+            tree = self._build_lats(root_state, simulate_math_step, expand_math_step)
             sims = num_simulations
         
         tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
