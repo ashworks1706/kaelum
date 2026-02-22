@@ -432,8 +432,7 @@ class LogicWorker(WorkerAgent):
             response = self.llm_client.generate(messages)
             next_step = response.strip()
             
-            conclusion_result = self.conclusion_detector.detect(next_step, history)
-            is_conclusion = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion']
+        is_conclusion = depth >= max_tree_depth - 1
             
             return {
                 "query": query,
