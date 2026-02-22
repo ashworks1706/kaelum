@@ -233,6 +233,24 @@ class VerificationEngine:
         logger.info(f"VERIFICATION: Starting verification for {worker_type.upper()} worker")
         logger.info(f"  Query: {query[:100]}...")
         logger.info(f"  Steps: {len(reasoning_steps)} reasoning steps")
+
+        # Learned verifier path
+        if self.use_learned_only:
+            if not self.learned_verifier:
+                if self.fail_closed:
+                    raise RuntimeError("Learned verifier is required but not configured.")
+                else:
+                    logger.warning("Learned verifier not configured; skipping verification.")
+                    return {"passed": False, "confidence": 0.0, "issues": ["Verifier unavailable"], "details": {}}
+            learned_result = self.learned_verifier.score(query, answer, reasoning_steps, worker_type)
+            passed = learned_result.get("passed", False)
+            confidence = learned_result.get("confidence", 0.0)
+            return {
+                "passed": passed,
+                "confidence": confidence,
+                "issues": [] if passed else ["Learned verifier rejected output"],
+                "details": {"label": learned_result.get("label", "")}
+            }
         
         if worker_type == "math":
             result = self._verify_math(reasoning_steps)
