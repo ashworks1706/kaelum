@@ -2,11 +2,11 @@
 
 This project started as a way for me to learn how different AI techniques work together. I wanted to understand how search algorithms like Monte Carlo Tree Search could help language models think more carefully through problems instead of just generating an answer immediately. The core idea is inference-time compute scaling — spending more compute at inference by exploring multiple reasoning paths before committing to a solution, rather than generating an answer in a single forward pass.
 
-The research question I was trying to answer: 
+The question I was exploring: 
 
-### Can you build a self-improving reasoning system with no offline training data? 
+#### Can the reward modeling and routing layers be bootstrapped from live queries alone, without collecting a labeled dataset upfront? 
 
-The conventional approach is to collect labeled reasoning traces, train a Process Reward Model (PRM) on them offline, freeze it, and deploy. This requires a separate dataset and a separate training run before anything works. Kaelum skips all of that. The PRM and router both start random and learn entirely from the queries the system is already answering — the LATS search process itself produces the training labels for free. The tradeoff is that each query costs N×(one LLM call) instead of one, but those extra calls generate the supervision signal that makes future queries faster and more accurate.
+The underlying LLM (Qwen) and the sentence encoder (`all-MiniLM-L6-v2`) are both pre-trained — that foundation is given. But the PRM and router on top of them start random and have no offline training phase. The conventional approach for PRMs is to collect labeled reasoning traces, run a dedicated training job, freeze the model, and then deploy. Kaelum skips that step: the LATS search process itself generates per-step reward labels for free as each query runs. The tradeoff is that each query costs N×(one LLM call) instead of one, but those extra calls produce the supervision signal that gradually improves both the step scorer and the router.
 
 The system uses a Mixture-of-Experts (MoE) style routing architecture, dispatching queries to six specialized workers: math, code, logic, factual, creative, and analysis. The tree built during LATS is local to one query — its nodes are the actual reasoning text for that question and have no meaning elsewhere. What accumulates across queries are the learned components: PRM weights, router weights, and per-worker reward deltas. A semantic cache lets near-duplicate queries skip the tree entirely.
 
