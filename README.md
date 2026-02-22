@@ -18,7 +18,7 @@ The human feedback loop was something I added later when I realized the router c
 
 Measured on `Qwen2.5-7B-Instruct`, 200 mixed queries across all worker types.
 
-![Kaelum metrics chart](metrics.png)
+![Kaelum metrics chart](/docs/metrics.png)
 
 | Metric                                      | Baseline | Math | Code | Logic | Factual | Creative | Overall |
 | ------------------------------------------- | -------- | ---- | ---- | ----- | ------- | -------- | ------- |
