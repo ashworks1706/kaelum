@@ -226,8 +226,6 @@ class MathWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self.conclusion_detector = ConclusionDetector(embedding_model=self.config.embedding_model)
-        
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.MATH
     
