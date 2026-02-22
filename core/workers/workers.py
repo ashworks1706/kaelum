@@ -170,6 +170,17 @@ class WorkerAgent(ABC):
                 "original_query": metadata.query
             }
         )
+
+    def _build_lats(self, root_state, simulator, expand_fn, coherence_checker=None):
+        return LATS(
+            root_state,
+            simulator=simulator,
+            expand_fn=expand_fn,
+            coherence_checker=coherence_checker or self._lightweight_coherence_check,
+            exploration_constant=self.lats_params["exploration_constant"],
+            prune_visit_threshold=self.lats_params["prune_visit_threshold"],
+            prune_reward_threshold=self.lats_params["prune_reward_threshold"],
+        )
     
     async def solve_async(self, query: str, context: Optional[Dict] = None,
                          use_cache: bool = True, max_tree_depth: int = 5,
