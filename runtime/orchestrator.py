@@ -81,6 +81,7 @@ class KaelumOrchestrator:
             debug=config.debug_verification,
             embedding_model=config.embedding_model,
             learned_model_path=config.verification_model_path,
+            pass_label_substring=config.verification_pass_label_substring,
             use_learned_only=config.verification_use_learned_only,
             fail_closed=config.verification_fail_closed
         )
