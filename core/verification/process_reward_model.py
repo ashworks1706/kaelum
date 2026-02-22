@@ -275,8 +275,8 @@ class ProcessRewardModel:
 
     @property
     def is_active(self) -> bool:
-        """True when the PRM has been trained and is influencing rewards."""
-        return self._model is not None and len(self._training_data) >= MIN_SAMPLES
+        """True when the PRM is available."""
+        return self._model is not None
 
     @property
     def n_samples(self) -> int:
