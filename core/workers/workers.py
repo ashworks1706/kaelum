@@ -62,6 +62,11 @@ class WorkerAgent(ABC):
         self.config = config or KaelumConfig()
         self.llm_client = LLMClient(self.config.reasoning_llm)
         self.tree_cache = tree_cache
+        self.lats_params = {
+            "exploration_constant": getattr(self.config, "lats_exploration_constant", 1.414),
+            "prune_visit_threshold": getattr(self.config, "lats_prune_visit_threshold", 3),
+            "prune_reward_threshold": getattr(self.config, "lats_prune_reward_threshold", 0.3),
+        }
     
     def _lightweight_coherence_check(self, node: LATSNode) -> bool:
         state = node.state
