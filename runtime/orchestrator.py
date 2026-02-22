@@ -107,6 +107,11 @@ class KaelumOrchestrator:
         self.max_workers = max_workers
         self.override_max_tree_depth = max_tree_depth
         self.override_num_simulations = num_simulations
+        self.lats_params = {
+            "exploration_constant": lats_exploration_constant,
+            "prune_visit_threshold": lats_prune_visit_threshold,
+            "prune_reward_threshold": lats_prune_reward_threshold
+        }
         
         logger.info("=" * 70)
         logger.info("Kaelum Orchestrator Initialized")
