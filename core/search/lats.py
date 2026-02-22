@@ -176,10 +176,11 @@ class LATS:
             avg_reward = cur.value / cur.visits
             
             # Early pruning: Stop exploring branches that show poor performance
-            # - visits >= 3: Need minimum samples for statistical confidence
-            # - avg_reward < 0.3: Empirically, paths below this rarely recover to become good solutions
-            # This prevents wasting simulations on unpromising branches (similar to alpha-beta pruning)
-            if cur.visits >= 3 and avg_reward < 0.3:
+            # Thresholds are configurable; higher visit threshold yields more confidence before pruning.
+            if (self.prune_visit_threshold is not None and
+                cur.visits >= self.prune_visit_threshold and
+                self.prune_reward_threshold is not None and
+                avg_reward < self.prune_reward_threshold):
                 if not cur.pruned:
                     cur.pruned = True
                     logger.info(f"LATS-PRUNE: Node {cur.id} pruned at depth {depth} "
