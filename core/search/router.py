@@ -210,77 +210,40 @@ class Router:
         logger.info(f"  - Has logic keywords: {features.has_logic_keywords}")
         logger.info(f"  - Question words: {features.question_words}")
         logger.info(f"  - Complexity score: {features.complexity_score:.3f}")
+        logger.info("ROUTER: Running neural network classification")
+        self.policy_network.eval()
+        with torch.no_grad():
+            feature_tensor = features.to_tensor().unsqueeze(0).to(self.device)
+            outputs = self.policy_network(feature_tensor)
+            
+            worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
+            adjusted_probs = worker_probs
+
+            if self.learning_enabled and np.random.random() < self.exploration_rate:
+                worker_idx = np.random.randint(0, len(self.idx_to_worker))
+                confidence = adjusted_probs[0, worker_idx].item()
+                logger.info(f"ROUTER: EXPLORATION MODE - Random worker selected")
+            else:
+                worker_idx = torch.argmax(adjusted_probs, dim=-1).item()
+                confidence = adjusted_probs[0, worker_idx].item()
+            
+            logger.info("ROUTER: Worker probabilities:")
+            for idx, prob in enumerate(adjusted_probs[0]):
+                worker_name = self.idx_to_worker[idx]
+                orig_prob = worker_probs[0, idx].item()
+                logger.info(f"  - {worker_name}: {prob.item():.3f} (original: {orig_prob:.3f})")
+            
+            # Constrain predictions to reasonable ranges based on empirical observations:
+            # Depth 3-10: Shallower wastes MCTS potential, deeper hits diminishing returns
+            # Simulations 5-25: Fewer misses good paths, more wastes time for marginal gain
+            max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
+            num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
+            use_cache = torch.sigmoid(outputs['cache_logits']).item() > 0.5
         
-        import re
-        simple_math_pattern = r'(?:what\s+(?:is|are|does)?\s*)?(\d+)\s*([+\-*/×÷^])\s*(\d+)'
-        math_match = re.search(simple_math_pattern, query.lower())
+        worker_specialty = self.idx_to_worker[worker_idx]
+        query_type = self._classify_query_type(query)
         
-        if math_match:
-            logger.info("ROUTER: HEURISTIC MATCH - Simple arithmetic detected")
-            logger.info(f"  - Pattern: {math_match.group(0)}")
-            logger.info(f"  - Numbers: {math_match.group(1)}, {math_match.group(3)}")
-            logger.info(f"  - Operation: {math_match.group(2)}")
-            worker_specialty = "math"
-            confidence = 0.99
-            max_tree_depth = 3
-            num_simulations = 5
-            use_cache = True
-            query_type = QueryType.MATH
-            reasoning = f"Heuristic override: Simple arithmetic detected ({math_match.group(0)})"
-            
-        else:
-            logger.info("ROUTER: Running neural network classification")
-            self.policy_network.eval()
-            with torch.no_grad():
-                feature_tensor = features.to_tensor().unsqueeze(0).to(self.device)
-                outputs = self.policy_network(feature_tensor)
-                
-                worker_probs = torch.softmax(outputs['worker_logits'], dim=-1)
-                
-                feedback_adjustments = []
-                for idx in range(len(self.idx_to_worker)):
-                    worker_name = self.idx_to_worker[idx]
-                    adjustment = self.feedback_engine.worker_reward_adjustments.get(worker_name, 0.0)
-                    feedback_adjustments.append(adjustment)
-                
-                feedback_tensor = torch.tensor(feedback_adjustments, device=self.device).unsqueeze(0)
-                # Apply human feedback adjustments to worker probabilities
-                # Multiplier 0.3 balances neural network predictions with user corrections
-                # Too high (>0.5) and it overreacts to single feedback instances
-                adjusted_probs = worker_probs + feedback_tensor * 0.3
-                adjusted_probs = torch.softmax(adjusted_probs, dim=-1)
-                
-                logger.info("ROUTER: Human feedback adjustments applied:")
-                for idx, adj in enumerate(feedback_adjustments):
-                    if adj != 0:
-                        worker_name = self.idx_to_worker[idx]
-                        logger.info(f"  - {worker_name}: {adj:+.3f} adjustment")
-                
-                if self.learning_enabled and np.random.random() < self.exploration_rate:
-                    worker_idx = np.random.randint(0, len(self.idx_to_worker))
-                    confidence = adjusted_probs[0, worker_idx].item()
-                    logger.info(f"ROUTER: EXPLORATION MODE - Random worker selected")
-                else:
-                    worker_idx = torch.argmax(adjusted_probs, dim=-1).item()
-                    confidence = adjusted_probs[0, worker_idx].item()
-                
-                logger.info("ROUTER: Worker probabilities (feedback-adjusted):")
-                for idx, prob in enumerate(adjusted_probs[0]):
-                    worker_name = self.idx_to_worker[idx]
-                    orig_prob = worker_probs[0, idx].item()
-                    logger.info(f"  - {worker_name}: {prob.item():.3f} (original: {orig_prob:.3f})")
-                
-                # Constrain predictions to reasonable ranges based on empirical observations:
-                # Depth 3-10: Shallower wastes MCTS potential, deeper hits diminishing returns
-                # Simulations 5-25: Fewer misses good paths, more wastes time for marginal gain
-                max_tree_depth = int(torch.clamp(outputs['depth_logits'], 3, 10).item())
-                num_simulations = int(torch.clamp(outputs['sims_logits'], 5, 25).item())
-                use_cache = torch.sigmoid(outputs['cache_logits']).item() > 0.5
-            
-            worker_specialty = self.idx_to_worker[worker_idx]
-            query_type = self._classify_query_type(query)
-            
-            reasoning = f"Neural router: {worker_specialty} (conf={confidence:.2f}, comp={features.complexity_score:.2f})"
+        reasoning = f"Neural router: {worker_specialty} (conf={confidence:.2f}, comp={features.complexity_score:.2f})"
         
         routing_time = (time.time() - start_time) * 1000
         

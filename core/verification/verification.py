@@ -254,25 +254,11 @@ class VerificationEngine:
         return result
     
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
-        combined_text = query + " " + " ".join(reasoning_steps[:3])
-        
         classification = self.worker_classifier.classify_worker(query)
-        
-        if classification['confidence'] > 0.5:
-            return classification['worker']
-        
-        math_pattern = bool(re.search(r'\d+\s*[+\-*/^=]\s*\d+', combined_text))
-        code_pattern = bool(re.search(r'\b(def|class|function|import|return)\b', combined_text.lower()))
-        logic_pattern = bool(re.search(r'\b(therefore|thus|premise|conclusion|implies)\b', combined_text.lower()))
-        
-        if math_pattern:
-            return "math"
-        elif code_pattern:
-            return "code"
-        elif logic_pattern:
-            return "logic"
-        else:
-            return classification['worker']
+        worker = classification.get("worker")
+        if not worker:
+            raise RuntimeError("Worker type inference failed: classifier did not return a worker.")
+        return worker
     
     def _verify_math(self, reasoning_steps: List[str]) -> dict:
         errors, details = self.verify_trace(reasoning_steps)

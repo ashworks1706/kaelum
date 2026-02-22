@@ -43,7 +43,14 @@ class KaelumOrchestrator:
                  num_simulations: Optional[int] = None,
                  router_learning_rate: float = 0.001,
                  router_buffer_size: int = 32,
-                 router_exploration_rate: float = 0.1):
+                 router_exploration_rate: float = 0.1,
+                 router_depth_min: int = 3,
+                 router_depth_max: int = 10,
+                 router_sims_min: int = 5,
+                 router_sims_max: int = 25,
+                 lats_exploration_constant: float = 1.414,
+                 lats_prune_visit_threshold: int = 3,
+                 lats_prune_reward_threshold: float = 0.3):
         self.config = config
         self.llm = LLMClient(config.reasoning_llm)
         self.metrics = CostTracker()

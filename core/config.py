@@ -87,6 +87,16 @@ class KaelumConfig(BaseModel):
     use_symbolic_verification: bool = Field(default=True)
     use_factual_verification: bool = Field(default=False)
     debug_verification: bool = Field(default=False)
+    verification_model_path: Optional[str] = Field(default=None)
+    verification_use_learned_only: bool = Field(default=False)
+    verification_fail_closed: bool = Field(default=False)
+    router_depth_min: int = Field(default=3)
+    router_depth_max: int = Field(default=10)
+    router_sims_min: int = Field(default=5)
+    router_sims_max: int = Field(default=25)
+    lats_exploration_constant: float = Field(default=1.414)
+    lats_prune_visit_threshold: int = Field(default=3)
+    lats_prune_reward_threshold: float = Field(default=0.3)
     
     class Config:
         arbitrary_types_allowed = True

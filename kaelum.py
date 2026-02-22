@@ -50,6 +50,16 @@ def set_reasoning_model(
     router_learning_rate: float = 0.001,
     router_buffer_size: int = 32,
     router_exploration_rate: float = 0.1,
+    verification_model_path: Optional[str] = None,
+    verification_use_learned_only: bool = False,
+    verification_fail_closed: bool = False,
+    router_depth_min: int = 3,
+    router_depth_max: int = 10,
+    router_sims_min: int = 5,
+    router_sims_max: int = 25,
+    lats_exploration_constant: float = 1.414,
+    lats_prune_visit_threshold: int = 3,
+    lats_prune_reward_threshold: float = 0.3,
 ) -> None:
     """Initialize (or re-initialize) the reasoning orchestrator."""
     global _orchestrator, _embedding_model
@@ -69,6 +79,16 @@ def set_reasoning_model(
         use_symbolic_verification=use_symbolic_verification,
         use_factual_verification=use_factual_verification,
         debug_verification=debug_verification,
+        verification_model_path=verification_model_path,
+        verification_use_learned_only=verification_use_learned_only,
+        verification_fail_closed=verification_fail_closed,
+        router_depth_min=router_depth_min,
+        router_depth_max=router_depth_max,
+        router_sims_min=router_sims_min,
+        router_sims_max=router_sims_max,
+        lats_exploration_constant=lats_exploration_constant,
+        lats_prune_visit_threshold=lats_prune_visit_threshold,
+        lats_prune_reward_threshold=lats_prune_reward_threshold,
     )
 
     _orchestrator = KaelumOrchestrator(
@@ -83,6 +103,13 @@ def set_reasoning_model(
         router_learning_rate=router_learning_rate,
         router_buffer_size=router_buffer_size,
         router_exploration_rate=router_exploration_rate,
+        router_depth_min=router_depth_min,
+        router_depth_max=router_depth_max,
+        router_sims_min=router_sims_min,
+        router_sims_max=router_sims_max,
+        lats_exploration_constant=lats_exploration_constant,
+        lats_prune_visit_threshold=lats_prune_visit_threshold,
+        lats_prune_reward_threshold=lats_prune_reward_threshold,
     )
 
 
