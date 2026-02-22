@@ -252,11 +252,7 @@ class VerificationEngine:
         # If needed, a future learned ensemble could be added here.
     
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
-        classification = self.worker_classifier.classify_worker(query)
-        worker = classification.get("worker")
-        if not worker:
-            raise RuntimeError("Worker type inference failed: classifier did not return a worker.")
-        return worker
+        raise RuntimeError("Worker type inference requires an explicit worker_type; no classifier configured.")
     
     def _verify_math(self, reasoning_steps: List[str]) -> dict:
         errors, details = self.verify_trace(reasoning_steps)
