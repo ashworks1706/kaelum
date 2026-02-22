@@ -46,7 +46,7 @@ class ReflectionEngine:
                     )
                     
                     if result["passed"]:
-                        logger.info(f"REFLECTION: ✓ Verification passed on iteration {iteration + 1}")
+                        logger.info(f"REFLECTION: Verification passed on iteration {iteration + 1}")
                         break
                     
                     issues = result.get("issues", [])
@@ -58,7 +58,7 @@ class ReflectionEngine:
                     issues = self._verify_trace(query, current_trace)
                     
                     if not issues:
-                        logger.info(f"REFLECTION: ✓ No issues found on iteration {iteration + 1}")
+                        logger.info(f"REFLECTION: No issues found on iteration {iteration + 1}")
                         break
                     
                     if iteration < self.max_iterations - 1:

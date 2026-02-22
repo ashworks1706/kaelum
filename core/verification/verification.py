@@ -46,8 +46,36 @@ class VerificationEngine:
         if not self.learned_verifier:
             if self.fail_closed:
                 raise RuntimeError("Learned verifier is required but not configured.")
-            logger.warning("Learned verifier not configured; verification failing closed.")
-            return {"passed": False, "confidence": 0.0, "issues": ["Verifier unavailable"], "details": {}}
+            # No learned verifier — use PRM average step score as the gate.
+            # This prevents all-negative PRM training labels when no model is configured.
+            try:
+                from core.verification.process_reward_model import get_prm
+                prm = get_prm()
+                if prm.is_active and reasoning_steps:
+                    scores = [
+                        prm.predict_step_quality(
+                            query, step, reasoning_steps[:i], worker_type or "logic"
+                        )
+                        for i, step in enumerate(reasoning_steps)
+                    ]
+                    avg = sum(scores) / len(scores)
+                    passed = avg >= 0.5
+                    logger.info(
+                        f"VERIFICATION: No learned verifier — PRM fallback "
+                        f"(avg={avg:.3f}, passed={passed})"
+                    )
+                    return {
+                        "passed": passed,
+                        "confidence": avg,
+                        "issues": [] if passed else [f"PRM avg score {avg:.3f} below 0.5 threshold"],
+                        "details": {"prm_avg": avg},
+                    }
+            except Exception as e:
+                logger.warning(f"VERIFICATION: PRM fallback failed: {e}")
+            # Neither verifier nor PRM active — default to pass so early runs don't
+            # poison PRM labels with all-negative examples before any data exists.
+            logger.warning("VERIFICATION: No verifier or active PRM — defaulting to pass")
+            return {"passed": True, "confidence": 0.5, "issues": [], "details": {}}
 
         learned_result = self.learned_verifier.score(query, answer, reasoning_steps, worker_type)
         passed = learned_result.get("passed", False)

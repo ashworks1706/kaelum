@@ -98,7 +98,7 @@ Respond in JSON format:
                     'reason': 'Parsed from non-JSON response'
                 }
             
-            status = "✓ VALID" if result['valid'] else "✗ REJECTED"
+            status = "VALID" if result['valid'] else "✗ REJECTED"
             logger.info(f"CACHE VALIDATION: {status}")
             logger.info(f"  Confidence: {result['confidence']:.3f}")
             logger.info(f"  Reason: {result['reason'][:100]}...")

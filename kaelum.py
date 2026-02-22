@@ -193,7 +193,7 @@ def _print_result(result: Dict[str, Any], *, show_trace: bool = True) -> None:
     cache_hit = result.get("cache_hit", False)
 
     # ── header bar ──
-    ver_str  = f"{_GREEN}✓ verified{_RESET}" if verified else f"{_RED}✗ unverified{_RESET}"
+    ver_str  = f"{_GREEN}verified{_RESET}" if verified else f"{_RED}✗ unverified{_RESET}"
     conf_str = f"{_YELLOW}{conf:.0%}{_RESET}"
     iter_str = f"{_DIM}×{iters}{_RESET}" if iters > 1 else ""
     cache_str = f" {_CYAN}⚡ cached{_RESET}" if cache_hit else ""
@@ -301,7 +301,7 @@ def main() -> None:
         if args.answer is None or args.score is None:
             parser.error("--feedback requires --answer and --score")
         submit_feedback(args.feedback, args.answer, args.score, args.notes)
-        print(f"{_GREEN}✓ Feedback recorded (score={args.score}){_RESET}")
+        print(f"{_GREEN}Feedback recorded (score={args.score}){_RESET}")
         return
 
     # ── query ──

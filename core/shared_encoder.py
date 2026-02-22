@@ -27,7 +27,7 @@ def get_shared_encoder(model_name: str = "all-MiniLM-L6-v2", device: str = 'cpu'
     if _shared_encoder is None:
         logger.info(f"Initializing shared encoder: {model_name} on {device}")
         _shared_encoder = SentenceTransformer(model_name, device=device)
-        logger.info(f"✓ Shared encoder loaded (will be reused by all components)")
+        logger.info(f"Shared encoder loaded (will be reused by all components)")
     
     return _shared_encoder
 

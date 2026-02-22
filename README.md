@@ -55,7 +55,7 @@ Node rewards come from a learned Process Reward Model (1158→256→64→1 MLP, 
 
 $$\mathbf{f} = [\mathbf{q}_{384} \;\|\; \mathbf{s}_{384} \;\|\; \mathbf{c}_{384} \;\|\; \mathbf{w}_{6}] \in \mathbb{R}^{1158}$$
 
-where $\mathbf{q}$, $\mathbf{s}$, $\mathbf{c}$ are the query, current step, and context embeddings, and $\mathbf{w}$ is a one-hot worker type vector. The PRM is trained online with MSE loss, activating after ≥50 samples and retraining every 25 new samples. After each simulation, `backpropagate()` walks up the tree adding the reward arithmetically: $V(s) \mathrel{+}= r$, $N(s) \mathrel{+}= 1$. Nodes whose average reward $V(s)/N(s)$ falls below the pruning threshold after enough visits get cut so later simulations don't waste time there.
+where $\mathbf{q}$, $\mathbf{s}$, $\mathbf{c}$ are the query, current step, and context embeddings, and $\mathbf{w}$ is a one-hot worker type vector. The PRM is trained online with BCE loss (binary cross-entropy, since labels are 0/1), activating immediately and retraining every 25 new samples. After each simulation, `backpropagate()` walks up the tree adding the reward arithmetically: $V(s) \mathrel{+}= r$, $N(s) \mathrel{+}= 1$. Nodes whose average reward $V(s)/N(s)$ falls below the pruning threshold after enough visits get cut so later simulations don't waste time there.
 
 4. Worker execution — [`core/workers/`](core/workers/)
 Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM. Stopping is depth-based; rewards come from the PRM.

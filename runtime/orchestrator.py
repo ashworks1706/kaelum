@@ -180,7 +180,7 @@ class KaelumOrchestrator:
         
         cached_tree = self.tree_cache.get(query, query_embedding, similarity_threshold=0.85)
         if cached_tree and cached_tree.get("quality") == "high":
-            logger.info("CACHE: ✓ HIT (high quality) - returning cached result")
+            logger.info("CACHE: HIT (high quality) - returning cached result")
             cache_result = cached_tree["result"]
             cache_result["cache_hit"] = True
             cache_result["metrics"]["total_time_ms"] = 1
@@ -196,7 +196,7 @@ class KaelumOrchestrator:
             max_depth = routing_decision.max_tree_depth
             num_sims = routing_decision.num_simulations
             router_confidence = routing_decision.confidence
-            logger.info(f"ROUTING: ✓ Selected {worker_specialty.upper()} worker")
+            logger.info(f"ROUTING: Selected {worker_specialty.upper()} worker")
             logger.info(f"ROUTING: Confidence = {routing_decision.confidence:.3f}")
             logger.info(f"ROUTING: Complexity = {routing_decision.complexity_score:.3f}")
             
@@ -305,7 +305,7 @@ class KaelumOrchestrator:
                     logger.info(f"  - {worker_type.upper()}: confidence={res.confidence:.3f}")
                 
                 best_worker, result = results[0]
-                logger.info(f"ENSEMBLE: ✓ Selected {best_worker.upper()} result (highest confidence)")
+                logger.info(f"ENSEMBLE: Selected {best_worker.upper()} result (highest confidence)")
                 worker_specialty = best_worker
             else:
                 logger.info(f"WORKER: Executing {worker_specialty.upper()} worker with LATS tree search")
@@ -331,7 +331,7 @@ class KaelumOrchestrator:
                 )
                 worker_time = time.time() - worker_start_time
                 
-                logger.info(f"WORKER: ✓ Execution complete in {worker_time:.2f}s")
+                logger.info(f"WORKER: Execution complete in {worker_time:.2f}s")
             logger.info(f"WORKER: Generated answer with {len(result.reasoning_steps)} reasoning steps")
             logger.info(f"WORKER: Confidence = {result.confidence:.3f}")
             
@@ -361,20 +361,33 @@ class KaelumOrchestrator:
             
             logger.info(f"VERIFICATION: Completed in {verification_time:.2f}s")
             
-            # Record step-level training signal to ProcessRewardModel
+            # Record step-level training signal to ProcessRewardModel.
+            # Use each step's own LATS node reward (value/visits) as a soft label
+            # rather than stamping every step with the same binary verification outcome.
+            # A run may have had 9 good steps and 1 bad final step; using per-node
+            # rewards preserves that granularity. Falls back to verification_passed
+            # when the step can't be matched to a tree node.
             from core.verification.process_reward_model import get_prm
             _prm = get_prm(self.config.embedding_model)
+            step_rewards: dict = {}
+            if result.lats_tree is not None:
+                for node in result.lats_tree.nodes.values():
+                    step_text = node.state.get("step", "")
+                    if step_text and node.visits > 0:
+                        step_rewards[step_text] = node.value / node.visits
             for i, step in enumerate(result.reasoning_steps):
+                node_reward = step_rewards.get(step)  # float or None
                 _prm.record(
                     query=query,
                     step=step,
                     context_steps=result.reasoning_steps[:i],
                     worker_type=worker_specialty,
                     verification_passed=verification_passed,
+                    human_score=node_reward,  # takes priority when not None
                 )
             
             if verification_passed:
-                logger.info(f"VERIFICATION: ✓ PASSED")
+                logger.info(f"VERIFICATION: PASSED")
                 logger.info(f"  - Confidence: {confidence:.3f}")
                 logger.info(f"  - Symbolic check: {verification_result.get('symbolic_passed', 'N/A')}")
                 logger.info(f"  - Factual check: {verification_result.get('factual_passed', 'N/A')}")
@@ -409,7 +422,7 @@ class KaelumOrchestrator:
                     )
                     reflection_time = time.time() - reflection_start_time
                     
-                    logger.info(f"REFLECTION: ✓ Completed in {reflection_time:.2f}s")
+                    logger.info(f"REFLECTION: Completed in {reflection_time:.2f}s")
                     logger.info(f"REFLECTION: Generated {len(improved_steps)} improved reasoning steps")
                     logger.info(f"REFLECTION: Will retry with iteration {iteration + 1}/{max_iterations}")
                 else:

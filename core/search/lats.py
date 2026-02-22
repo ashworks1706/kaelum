@@ -225,7 +225,7 @@ class LATS:
         elapsed = time.time() - start_time
         avg_reward = self.get_avg_reward()
         total_nodes = len(self.nodes)
-        logger.info(f"LATS: ✓ Simulations complete in {elapsed:.2f}s")
+        logger.info(f"LATS: Simulations complete in {elapsed:.2f}s")
         logger.info(f"LATS: Total nodes explored: {total_nodes}")
         logger.info(f"LATS: Average reward: {avg_reward:.3f}")
     
