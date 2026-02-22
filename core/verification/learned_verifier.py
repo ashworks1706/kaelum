@@ -1,10 +1,14 @@
-"""Pluggable learned verifier using a Hugging Face text-classification pipeline.
+"""LearnedVerifier — removed.
 
-This is a lightweight adapter so verification can rely on a model instead of
-rule-based thresholds. The model is expected to output a label indicating pass
-vs fail (default: label containing 'PASS' or 'OK'). Confidence is taken from
-the classifier score.
+A HuggingFace text-classification pipeline is not a reliable verifier for
+reasoning quality without domain-specific fine-tuning data. Verification is
+now handled by the PRM gate (average step score vs threshold) which is
+already trained on the system's own reasoning traces.
+
+See: runtime/orchestrator.py — STEP 4: PRM GATE
+     core/verification/process_reward_model.py
 """
+
 
 from typing import List, Optional
 import logging

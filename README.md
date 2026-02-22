@@ -60,8 +60,12 @@ where $\mathbf{q}$, $\mathbf{s}$, $\mathbf{c}$ are the query, current step, and 
 4. Worker execution — [`core/workers/`](core/workers/)
 Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM. Stopping is depth-based; rewards come from the PRM.
 
-5. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)
-The answer goes through a learned-only verifier — a HuggingFace `pipeline("text-classification")` adapter (`LearnedVerifier`) whose pass/fail label is configurable. It maps the classifier's raw label to pass/fail by checking whether `"PASS"` (or your configured substring) appears in the label name. No regex, no heuristics, entirely data-driven — but that means it needs fine-tuning on your domain to be reliable out of the box. After that, a self-reflection loop has the LLM review its own output and either sign off or trigger a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized and lightly-explored branches are un-pruned, so the next iteration continues MCTS from the same tree rather than restarting cold. Each reasoning step is recorded as a training example for the PRM.
+5. PRM gate + reflection — [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py) + [`core/verification/reflection.py`](core/verification/reflection.py)
+After the worker finishes, the orchestrator scores every reasoning step through the PRM and computes the mean:
+
+$$\bar{r}_{\text{pass}} = \frac{1}{|S|}\sum_{s \in S} \text{PRM}(s) \geq \tau$$
+
+where $\tau$ is `prm_pass_threshold` (default 0.5, configurable). If the mean is above the threshold the answer is accepted. If not, the LLM reviews its own reasoning trace (`ReflectionEngine`), the failed path's nodes are penalized in the LATS tree, and MCTS continues from the same tree rather than restarting cold. This loop runs up to `max_reflection_iterations` times. Because the gate uses the same PRM that guided the search, there is no separate verifier model to configure or fine-tune — the system is self-contained.
 
 6. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)
 Results are stored, but retrieval is disabled (no heuristic gates). The router logs the outcome against its routing decision so it can update its weights over time.
@@ -138,6 +142,7 @@ All options can be passed as CLI flags. The main ones:
 | `--max-tokens` | `1024` | Max tokens per generation |
 | `--depth` | per-worker default | Max LATS tree depth |
 | `--sims` | per-worker default | Number of MCTS simulations |
+| `--prm-threshold` | `0.5` | PRM avg score gate for pass/fail |
 | `--no-routing` | — | Disable neural router, use default worker |
 | `--stream` | — | Stream tokens as they are generated |
 | `--no-trace` | — | Hide reasoning trace |

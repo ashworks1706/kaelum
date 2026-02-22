@@ -1,13 +1,13 @@
-import logging
-from typing import List, Dict, Optional
+"""VerificationEngine — removed.
 
-from ..reasoning import LLMClient, Message
-from .learned_verifier import LearnedVerifier
+Verification is now handled directly by the PRM gate in the orchestrator.
+The average PRM step score is compared against `config.prm_pass_threshold`
+(default 0.5) to decide pass/fail. No separate verifier object is needed.
 
-logger = logging.getLogger("kaelum.verification")
+See: runtime/orchestrator.py — STEP 4: PRM GATE
+     core/verification/process_reward_model.py
+"""
 
-
-class VerificationEngine:
 
     def __init__(
         self,

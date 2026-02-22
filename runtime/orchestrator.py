@@ -20,7 +20,6 @@ from core.learning import CostTracker
 from core.search import Router
 from core.workers import WorkerSpecialty, create_worker
 from core.search import TreeCache
-from core.verification import VerificationEngine
 from core.verification import ReflectionEngine
 from core.learning import AdaptivePenalty
 from core.learning import ActiveLearningEngine
@@ -74,20 +73,9 @@ class KaelumOrchestrator:
             logger.info(f"Router enabled: Embedding-based intelligent routing ({config.embedding_model})")
             logger.info(f"  - Online learning: buffer_size={router_buffer_size}, lr={router_learning_rate}, exploration={router_exploration_rate}")
         
-        self.verification_engine = VerificationEngine(
-            self.llm,
-            use_symbolic=config.use_symbolic_verification,
-            use_factual=config.use_factual_verification,
-            debug=config.debug_verification,
-            embedding_model=config.embedding_model,
-            learned_model_path=config.verification_model_path,
-            pass_label_substring=config.verification_pass_label_substring,
-            use_learned_only=config.verification_use_learned_only,
-            fail_closed=config.verification_fail_closed
-        )
         self.reflection_engine = ReflectionEngine(
             self.llm,
-            verification_engine=self.verification_engine,
+            verification_engine=None,
             max_iterations=config.max_reflection_iterations
         )
         
@@ -122,7 +110,7 @@ class KaelumOrchestrator:
             logger.info(f"    - Router data dir: {router_data_dir}")
         logger.info(f"  Tree Cache: Enabled")
         logger.info(f"    - Cache dir: {cache_dir}")
-        logger.info(f"  Verification: Symbolic={config.use_symbolic_verification}, Factual={config.use_factual_verification}")
+        logger.info(f"  PRM gate threshold: {config.prm_pass_threshold}")
         logger.info(f"  Reflection: Max {config.max_reflection_iterations} iterations")
         logger.info(f"  Parallel LATS: {'Enabled' if parallel else 'Disabled'} (max {max_workers} workers)")
         logger.info("=" * 70)
@@ -342,24 +330,25 @@ class KaelumOrchestrator:
                 logger.warning(f"WORKER: No answer generated (answer is None or empty)")
             
             logger.info("\n" + "=" * 70)
-            logger.info("STEP 4: VERIFICATION")
+            logger.info("STEP 4: PRM GATE")
             logger.info("=" * 70)
-            logger.info(f"VERIFICATION: Checking reasoning correctness for {worker_specialty.upper()} worker output")
-            
-            verification_start_time = time.time()
-            verification_result = self.verification_engine.verify(
-                query=query,
-                reasoning_steps=result.reasoning_steps,
-                answer=result.answer,
-                worker_type=worker_specialty
-            )
-            verification_time = time.time() - verification_start_time
-            
-            verification_passed = verification_result["passed"]
-            confidence = verification_result["confidence"]
-            issues = verification_result.get("issues", [])
-            
-            logger.info(f"VERIFICATION: Completed in {verification_time:.2f}s")
+            logger.info(f"PRM GATE: Scoring {len(result.reasoning_steps)} steps for {worker_specialty.upper()} worker")
+
+            from core.verification.process_reward_model import get_prm as _get_prm_gate
+            _prm_gate = _get_prm_gate(self.config.embedding_model)
+            prm_scores = [
+                _prm_gate.predict_step_quality(
+                    query, step, result.reasoning_steps[:i], worker_specialty
+                )
+                for i, step in enumerate(result.reasoning_steps)
+            ] if result.reasoning_steps else []
+            avg_prm = sum(prm_scores) / len(prm_scores) if prm_scores else 0.5
+            verification_passed = avg_prm >= self.config.prm_pass_threshold
+            confidence = avg_prm
+            issues = [] if verification_passed else [
+                f"PRM avg score {avg_prm:.3f} below threshold {self.config.prm_pass_threshold}"
+            ]
+            logger.info(f"PRM GATE: avg={avg_prm:.3f}, threshold={self.config.prm_pass_threshold}, passed={verification_passed}")
             
             # Record step-level training signal to ProcessRewardModel.
             # Use each step's own LATS node reward (value/visits) as a soft label
@@ -387,15 +376,13 @@ class KaelumOrchestrator:
                 )
             
             if verification_passed:
-                logger.info(f"VERIFICATION: PASSED")
+                logger.info(f"PRM GATE: ✓ PASSED (avg={avg_prm:.3f})")
                 logger.info(f"  - Confidence: {confidence:.3f}")
-                logger.info(f"  - Symbolic check: {verification_result.get('symbolic_passed', 'N/A')}")
-                logger.info(f"  - Factual check: {verification_result.get('factual_passed', 'N/A')}")
                 final_result = result
                 final_result.verification_passed = True
                 final_result.confidence = confidence
             else:
-                logger.info(f"VERIFICATION: ✗ FAILED")
+                logger.info(f"PRM GATE: ✗ FAILED (avg={avg_prm:.3f})")
                 logger.info(f"  - Confidence: {confidence:.3f}")
                 if issues:
                     logger.info(f"  - Issues found ({len(issues)}):")
@@ -410,7 +397,7 @@ class KaelumOrchestrator:
                     logger.info("\n" + "=" * 70)
                     logger.info("STEP 5: REFLECTION")
                     logger.info("=" * 70)
-                    logger.info(f"REFLECTION: Improving reasoning based on verification failures")
+                    logger.info(f"REFLECTION: Improving reasoning based on PRM gate failure")
                     logger.info(f"REFLECTION: Issues to address: {len(issues)}")
                     
                     reflection_start_time = time.time()

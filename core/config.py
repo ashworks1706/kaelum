@@ -84,13 +84,7 @@ class KaelumConfig(BaseModel):
     worker_prompts: WorkerPrompts = Field(default_factory=WorkerPrompts)
     embedding_model: str = Field(default="all-MiniLM-L6-v2")
     max_reflection_iterations: int = Field(default=2, ge=0, le=5)
-    use_symbolic_verification: bool = Field(default=True)
-    use_factual_verification: bool = Field(default=False)
-    debug_verification: bool = Field(default=False)
-    verification_model_path: Optional[str] = Field(default="distilbert-base-uncased-finetuned-sst-2-english")
-    verification_pass_label_substring: str = Field(default="POSITIVE")
-    verification_use_learned_only: bool = Field(default=True)
-    verification_fail_closed: bool = Field(default=True)
+    prm_pass_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     router_depth_min: int = Field(default=3)
     router_depth_max: int = Field(default=10)
     router_sims_min: int = Field(default=5)
@@ -121,6 +115,5 @@ class KaelumConfig(BaseModel):
                 analysis=os.getenv('WORKER_PROMPT_ANALYSIS', WorkerPrompts().analysis)
             ),
             max_reflection_iterations=int(os.getenv('MAX_REFLECTION_ITERATIONS', '2')),
-            use_symbolic_verification=os.getenv('USE_SYMBOLIC_VERIFICATION', 'true').lower() == 'true',
-            debug_verification=os.getenv('DEBUG_VERIFICATION', 'false').lower() == 'true'
+            prm_pass_threshold=float(os.getenv('PRM_PASS_THRESHOLD', '0.5'))
         )
