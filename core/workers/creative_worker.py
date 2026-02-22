@@ -18,8 +18,6 @@ class CreativeWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
-        base_temp = self.config.reasoning_llm.temperature
-        self.creative_temperature = min(base_temp + 0.3, 1.0)
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CREATIVE

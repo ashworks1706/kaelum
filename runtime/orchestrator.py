@@ -21,7 +21,6 @@ from core.search import Router
 from core.workers import WorkerSpecialty, create_worker
 from core.search import TreeCache
 from core.verification import ReflectionEngine
-from core.learning import AdaptivePenalty
 from core.learning import ActiveLearningEngine
 from core.shared_encoder import get_shared_encoder
 from core.paths import DEFAULT_CACHE_DIR, DEFAULT_ROUTER_DIR
