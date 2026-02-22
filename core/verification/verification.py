@@ -234,49 +234,25 @@ class VerificationEngine:
         logger.info(f"  Query: {query[:100]}...")
         logger.info(f"  Steps: {len(reasoning_steps)} reasoning steps")
 
-        # Learned verifier path
-        if self.use_learned_only:
-            if not self.learned_verifier:
-                if self.fail_closed:
-                    raise RuntimeError("Learned verifier is required but not configured.")
-                else:
-                    logger.warning("Learned verifier not configured; skipping verification.")
-                    return {"passed": False, "confidence": 0.0, "issues": ["Verifier unavailable"], "details": {}}
-            learned_result = self.learned_verifier.score(query, answer, reasoning_steps, worker_type)
-            passed = learned_result.get("passed", False)
-            confidence = learned_result.get("confidence", 0.0)
-            return {
-                "passed": passed,
-                "confidence": confidence,
-                "issues": [] if passed else ["Learned verifier rejected output"],
-                "details": {"label": learned_result.get("label", "")}
-            }
+        # Learned verifier only
+        if not self.learned_verifier:
+            if self.fail_closed or self.use_learned_only:
+                raise RuntimeError("Learned verifier is required but not configured.")
+            logger.warning("Learned verifier not configured; verification failing closed.")
+            return {"passed": False, "confidence": 0.0, "issues": ["Verifier unavailable"], "details": {}}
+
+        learned_result = self.learned_verifier.score(query, answer, reasoning_steps, worker_type)
+        passed = learned_result.get("passed", False)
+        confidence = learned_result.get("confidence", 0.0)
+        return {
+            "passed": passed,
+            "confidence": confidence,
+            "issues": [] if passed else ["Learned verifier rejected output"],
+            "details": {"label": learned_result.get("label", "")}
+        }
         
-        if worker_type == "math":
-            result = self._verify_math(reasoning_steps)
-        elif worker_type == "code":
-            result = self._verify_code(query, answer, reasoning_steps)
-        elif worker_type == "logic":
-            result = self._verify_logic(query, reasoning_steps, answer)
-        elif worker_type == "factual":
-            result = self._verify_factual(query, answer, reasoning_steps)
-        elif worker_type == "creative":
-            result = self._verify_creative(answer, reasoning_steps)
-        else:
-            result = self._verify_analysis(query, answer, reasoning_steps)
-        
-        status = "✓ PASSED" if result["passed"] else "✗ FAILED"
-        logger.info(f"\nVERIFICATION: {status}")
-        logger.info(f"  Confidence: {result['confidence']:.3f}")
-        if not result["passed"] and result.get("issues"):
-            logger.info(f"  Issues found: {len(result['issues'])}")
-            for i, issue in enumerate(result["issues"][:3], 1):
-                logger.info(f"    {i}. {issue}")
-            if len(result['issues']) > 3:
-                logger.info(f"    ... and {len(result['issues']) - 3} more")
-        logger.info(f"{'═' * 80}\n")
-        
-        return result
+        # The learned verifier path is authoritative; legacy heuristics are not used.
+        # If needed, a future learned ensemble could be added here.
     
     def _infer_worker_type(self, query: str, reasoning_steps: List[str]) -> str:
         classification = self.worker_classifier.classify_worker(query)
