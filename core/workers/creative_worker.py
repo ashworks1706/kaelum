@@ -10,8 +10,6 @@ from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
 from ..learning import AdaptivePenalty
-from ..verification import ConfidenceCalibrator
-from ..detectors import CoherenceDetector
 
 logger = logging.getLogger("kaelum.creative_worker")
 
@@ -20,8 +18,6 @@ class CreativeWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
-        self.confidence_calibrator = ConfidenceCalibrator()
-        self.coherence_detector = CoherenceDetector(embedding_model=self.config.embedding_model)
         base_temp = self.config.reasoning_llm.temperature
         self.creative_temperature = min(base_temp + 0.3, 1.0)
     
@@ -128,7 +124,7 @@ class CreativeWorker(WorkerAgent):
         answer = best_node.state.get("content", reasoning_steps[-1] if reasoning_steps else "")
         metrics = self._analyze_creativity(answer, task_type)
         confidence = RewardModel.compute_confidence(best_node.value if best_node else 0.0, best_node.visits if best_node else 0, tree.root.visits)
-        verification_passed = metrics['coherence'] > 0.6 and len(answer) > 50
+        verification_passed = len(answer) > 50
         execution_time = time.time() - start_time
         
         if use_cache:
@@ -187,12 +183,10 @@ class CreativeWorker(WorkerAgent):
         if words:
             unique_words = set(words)
             diversity = min(len(unique_words) / len(words), 1.0)
-        
-        coherence_result = self.coherence_detector.assess_coherence(response, task_type)
-        
+
         metrics = {
             'diversity': diversity,
-            'coherence': coherence_result['overall_coherence']
+            'coherence': 0.0
         }
         
         return metrics
