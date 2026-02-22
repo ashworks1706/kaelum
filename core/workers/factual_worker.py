@@ -157,10 +157,6 @@ class FactualWorker(WorkerAgent):
             }
         )
     
-    def _classify_factual_query(self, query: str) -> str:
-        result = self.task_classifier.classify_single(query, 'factual')
-        return result['task']
-    
     def _build_prompt(
         self,
         query: str,
