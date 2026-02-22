@@ -135,7 +135,6 @@ Kaelum/
 ├── kaelum.py          # CLI entry-point and library API
 ├── benchmark.py       # GSM8K ablation runner (baseline / CoT / no-router / full)
 ├── core/
-│   ├── detectors/     # Query classification
 │   ├── learning/      # Feedback and metrics
 │   ├── search/        # LATS, router, reward model, tree cache
 │   ├── verification/  # SymPy engine, PRM, relevance validator
