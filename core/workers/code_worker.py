@@ -17,11 +17,7 @@ class CodeWorker(WorkerAgent):
     
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self.task_classifier = TaskClassifier(embedding_model=self.config.embedding_model)
-        self.supported_languages = {
-            'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
-            'go', 'rust', 'ruby', 'php', 'swift', 'kotlin'
-        }
+        self.supported_languages = set()
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.CODE
