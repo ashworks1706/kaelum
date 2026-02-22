@@ -39,6 +39,8 @@ Cold latency is higher because LATS runs multiple simulations. The cache makes u
 
 Here's the full path a query takes from your terminal to an answer.
 
+![Kaelum architecture diagram](./docs/diagram.excalidraw.png)
+
 1. Entry — [`kaelum.py`](kaelum.py)
    The CLI parses your query, sets up the config, and hands everything to the orchestrator. It's also where streaming, metrics, and feedback submission come in.
 
@@ -107,11 +109,7 @@ $$r_{\text{final}} = r_{\text{PRM}} + \delta_{\text{worker}}$$
 
 Wrong worker: $\delta_{\text{wrong}} \mathrel{-}= 0.03$, $\delta_{\text{suggested}} \mathrel{+}= 0.05$. Wrong answer: $\delta_{\text{worker}} \mathrel{-}= 0.05$. High rating ($\geq 4/5$): $\delta_{\text{worker}} \mathrel{+}= 0.02$. These persist to `reward_adjustments.json` and load on startup. No gradient updates — just arithmetic deltas on the shared reward signal that flow back into UCT on the next query.
 
-##### Legacy (No longer valid but left for reference):
 
-<img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
-<img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
-<img width="1983" height="844" alt="image" src="https://github.com/user-attachments/assets/6b000d29-d8bc-4219-8157-de5bf966f229" />
 
 ## Quick Start
 
