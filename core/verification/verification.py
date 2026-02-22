@@ -149,9 +149,9 @@ class VerificationEngine:
             self.learned_verifier = LearnedVerifier(learned_model_path, label_pass_substring=pass_label_substring)
         
         self.semantic_encoder = get_shared_encoder(embedding_model, device='cpu')
-        self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
-        self.worker_classifier = WorkerTypeClassifier(embedding_model=embedding_model)
-        self.domain_classifier = DomainClassifier(embedding_model=embedding_model)
+        self.conclusion_detector = None
+        self.worker_classifier = None
+        self.domain_classifier = None
     
     def _log_debug(self, message: str):
         if self.debug:
