@@ -39,8 +39,8 @@ class CodeWorker(WorkerAgent):
             if cached_result:
                 return cached_result
         
-        language = self._detect_language(query)
-        task_type = self._classify_task(query)
+        language = None
+        task_type = "generation"
         
         root_state = {
             "query": query,
@@ -109,12 +109,12 @@ class CodeWorker(WorkerAgent):
             tree = existing_tree
             tree.simulator = simulate_code_step
             tree.expand_fn = expand_code_step
-            tree.coherence_checker = self._lightweight_coherence_check
+            tree.coherence_checker = None
             self._penalize_failed_path(tree, verification_issues or [])
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing code search ({sims} additional simulations)")
         else:
-            tree = self._build_lats(root_state, simulate_code_step, expand_code_step)
+            tree = self._build_lats(root_state, simulate_code_step, expand_code_step, coherence_checker=None)
             sims = num_simulations
         
         tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
