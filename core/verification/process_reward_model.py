@@ -259,13 +259,10 @@ class ProcessRewardModel:
         context_steps: Optional[List[str]] = None,
         worker_type: str = "logic",
     ) -> Optional[float]:
-        """Predict step quality ∈ [0, 1].
-
-        Returns None when the model is not yet ready (< MIN_SAMPLES training
-        examples), so callers can fall back to heuristics.
-        """
-        if self._model is None or len(self._training_data) < MIN_SAMPLES:
-            return None
+        """Predict step quality ∈ [0, 1]. Always uses the PRM model."""
+        if self._model is None:
+            self._model = self._build_model()
+            self._model.eval()
         import torch
         feat = self._featurize(query, step, context_steps or [], worker_type)
         x = torch.tensor(feat, dtype=torch.float32).unsqueeze(0)
