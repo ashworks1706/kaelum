@@ -81,9 +81,7 @@ Respond in JSON format:
             ]
             
             response = self.llm_client.generate(messages, stream=False)
-            
-            response = self.llm_client.generate(messages, stream=False)
-            
+
             try:
                 result = json.loads(response)
                 if 'valid' not in result:

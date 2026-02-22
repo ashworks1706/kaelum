@@ -10,7 +10,6 @@ logger = logging.getLogger("kaelum.worker")
 
 from ..config import KaelumConfig
 from ..reasoning import LLMClient, Message
-from ..verification import SympyEngine
 from ..search import LATS, LATSNode
 from ..search import TreeCache
 from ..search import RewardModel
@@ -24,7 +23,6 @@ class WorkerSpecialty(Enum):
     CREATIVE = "creative"
     ANALYSIS = "analysis"
 
-@dataclass
 @dataclass
 class WorkerResult:
     answer: str
@@ -431,9 +429,9 @@ class LogicWorker(WorkerAgent):
             ]
             response = self.llm_client.generate(messages)
             next_step = response.strip()
-            
-        is_conclusion = depth >= max_tree_depth - 1
-            
+
+            is_conclusion = depth >= max_tree_depth - 1
+
             return {
                 "query": query,
                 "step": next_step,

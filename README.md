@@ -52,10 +52,10 @@ The answer goes through a learned-only verifier (HF text-classifier; default pas
 **6. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
 Results are stored, but retrieval is disabled (no heuristic gates). The router logs the outcome against its routing decision so it can update its weights over time.
 
-**9. Human feedback (RLHF) — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)**  
+**7. Human feedback (RLHF) — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)**  
 You can rate the answer after the fact. Those ratings adjust per-worker reward deltas and router probability weights that persist to disk and influence step 4 on the next query. This is the main way the system improves on your specific usage patterns rather than just the training distribution.
 
-
+##### Legacy (No longer valid but left for reference):
 <img width="1983" height="1098" alt="image" src="https://github.com/user-attachments/assets/97f5601e-e660-44b1-9338-80308e0d80d4" />
 <img width="1983" height="915" alt="image" src="https://github.com/user-attachments/assets/1d810ebb-496f-494b-9f4a-cb3022dd22fe" />
 <img width="1983" height="844" alt="image" src="https://github.com/user-attachments/assets/6b000d29-d8bc-4219-8157-de5bf966f229" />
