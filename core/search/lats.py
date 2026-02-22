@@ -85,14 +85,21 @@ class LATS:
     def __init__(self, root_state: Dict[str, Any], root_id: str = "root", *,
                  simulator: Optional[callable] = None,
                  expand_fn: Optional[callable] = None,
-                 coherence_checker: Optional[callable] = None):
+                 coherence_checker: Optional[callable] = None,
+                 exploration_constant: float = 1.414,
+                 prune_visit_threshold: int = 3,
+                 prune_reward_threshold: float = 0.3):
         self.root = LATSNode(id=root_id, state=root_state)
         self.nodes: Dict[str, LATSNode] = {self.root.id: self.root}
         self.simulator = simulator
         self.expand_fn = expand_fn
         self.coherence_checker = coherence_checker
+        self.exploration_constant = exploration_constant
+        self.prune_visit_threshold = prune_visit_threshold
+        self.prune_reward_threshold = prune_reward_threshold
 
     def uct_score(self, parent: LATSNode, child: LATSNode, c: float = 1.414) -> float:
+        c = self.exploration_constant if c is None else c
         if child.visits == 0:
             return float('inf')
         exploit = child.value / child.visits
