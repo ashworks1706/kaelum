@@ -139,7 +139,7 @@ from .learned_verifier import LearnedVerifier
 class VerificationEngine:
 
     def __init__(self, llm_client, use_symbolic: bool = True, use_factual: bool = False, debug: bool = False, embedding_model: str = "all-MiniLM-L6-v2",
-                 learned_model_path: Optional[str] = None, use_learned_only: bool = False, fail_closed: bool = False):
+                 learned_model_path: Optional[str] = None, pass_label_substring: str = "POSITIVE", use_learned_only: bool = False, fail_closed: bool = False):
         self.llm_client = llm_client
         self.symbolic_verifier = SymbolicVerifier(debug=debug) if use_symbolic else None
         self.use_factual = use_factual
@@ -149,7 +149,7 @@ class VerificationEngine:
         self.fail_closed = fail_closed
         self.learned_verifier = None
         if learned_model_path:
-            self.learned_verifier = LearnedVerifier(learned_model_path)
+            self.learned_verifier = LearnedVerifier(learned_model_path, label_pass_substring=pass_label_substring)
         
         self.semantic_encoder = get_shared_encoder(embedding_model, device='cpu')
         self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
