@@ -88,6 +88,9 @@ class ProcessRewardModel:
 
         self._load_data()
         self._maybe_load_weights()
+        if self._model is None:
+            self._model = self._build_model()
+            self._model.eval()
 
     # ── internal helpers ──────────────────────────────────────────────────────
 
@@ -149,8 +152,6 @@ class ProcessRewardModel:
         logger.info(f"PRM: Loaded {n} training examples (blend_alpha={self.blend_alpha:.2f})")
 
     def _maybe_load_weights(self) -> None:
-        if len(self._training_data) < MIN_SAMPLES:
-            return
         if self.weights_path.exists():
             import torch
             self._model = self._build_model()
@@ -160,7 +161,8 @@ class ProcessRewardModel:
             self._model.eval()
             logger.info("PRM: Loaded pre-trained weights")
         else:
-            self._train()
+            if len(self._training_data) >= MIN_SAMPLES:
+                self._train()
 
     # ── training ──────────────────────────────────────────────────────────────
 
@@ -170,8 +172,6 @@ class ProcessRewardModel:
         from torch.optim import Adam
 
         data = self._training_data
-        if len(data) < MIN_SAMPLES:
-            return
 
         logger.info(f"PRM: Training on {len(data)} examples...")
         t0 = time.time()
@@ -185,7 +185,7 @@ class ProcessRewardModel:
             features.append(feat)
             labels.append(float(ex["label"]))
 
-        if len(features) < MIN_SAMPLES:
+        if len(features) == 0:
             return
 
         X = torch.tensor(np.array(features), dtype=torch.float32)
