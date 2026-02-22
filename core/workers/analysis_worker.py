@@ -8,17 +8,14 @@ from .workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
-from ..detectors import ConclusionDetector
 from ..learning import AdaptivePenalty
-from ..verification import RelevanceValidator
 
 logger = logging.getLogger("kaelum.analysis_worker")
 
 class AnalysisWorker(WorkerAgent):
     def __init__(self, config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
-        self.conclusion_detector = ConclusionDetector(embedding_model=self.config.embedding_model)
-        self.relevance_validator = RelevanceValidator(embedding_model=self.config.embedding_model)
+        self.relevance_validator = None
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.ANALYSIS
@@ -84,8 +81,7 @@ class AnalysisWorker(WorkerAgent):
             response = self.llm_client.generate(messages)
             next_step = response.strip()
             
-            conclusion_result = self.conclusion_detector.detect(next_step, history)
-            is_final = depth >= max_tree_depth - 1 or conclusion_result['is_conclusion'] or len(next_step) > 200
+            is_final = depth >= max_tree_depth - 1 or len(next_step) > 200
             
             return {
                 "query": query,
@@ -98,7 +94,7 @@ class AnalysisWorker(WorkerAgent):
             tree = existing_tree
             tree.simulator = simulate_analysis_step
             tree.expand_fn = expand_analysis_step
-            tree.coherence_checker = self._lightweight_coherence_check
+            tree.coherence_checker = None
             self._penalize_failed_path(tree, verification_issues or [])
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing analysis search ({sims} additional simulations)")
