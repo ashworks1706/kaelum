@@ -10,7 +10,6 @@ from ..config import KaelumConfig
 from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
-from ..detectors import TaskClassifier
 
 logger = logging.getLogger("kaelum.code_worker")
 
