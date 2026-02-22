@@ -154,7 +154,8 @@ class PolicyNetwork(nn.Module):
 class Router:
     def __init__(self, learning_enabled: bool = True, data_dir: str = DEFAULT_ROUTER_DIR,
                  model_path: Optional[str] = None, device: str = "cpu", embedding_model: str = "all-MiniLM-L6-v2",
-                 buffer_size: int = 32, learning_rate: float = 0.001, exploration_rate: float = 0.1):
+                 buffer_size: int = 32, learning_rate: float = 0.001, exploration_rate: float = 0.1,
+                 depth_range: tuple = (3, 10), sims_range: tuple = (5, 25)):
         self.learning_enabled = learning_enabled
         self.device = device
         self.data_dir = Path(data_dir)
