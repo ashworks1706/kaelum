@@ -39,7 +39,7 @@ import numpy as np
 logger = logging.getLogger("kaelum.prm")
 
 # ── hyperparameters ────────────────────────────────────────────────────────────
-MIN_SAMPLES = 50          # must have at least this many examples before PRM activates
+MIN_SAMPLES = 0           # activate immediately (no heuristic fallback)
 TARGET_SAMPLES = 200      # sample count at which blend_alpha reaches 1.0
 RETRAIN_INTERVAL = 25     # retrain every N *new* samples
 EPOCHS = 30
