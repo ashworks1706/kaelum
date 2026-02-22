@@ -9,8 +9,6 @@ from .workers import WorkerAgent, WorkerResult, WorkerSpecialty
 from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
-from ..detectors import TaskClassifier
-from ..detectors import CompletenessDetector
 
 logger = logging.getLogger("kaelum.factual_worker")
 from ..learning import AdaptivePenalty
@@ -20,8 +18,6 @@ class FactualWorker(WorkerAgent):
     def __init__(self, embedding_model: str = 'all-MiniLM-L6-v2', config: Optional[KaelumConfig] = None, tree_cache: Optional[TreeCache] = None):
         super().__init__(config, tree_cache)
         self._encoder = SentenceTransformer(embedding_model)
-        self.task_classifier = TaskClassifier(embedding_model=embedding_model)
-        self.completeness_detector = CompletenessDetector(embedding_model=embedding_model)
     
     def get_specialty(self) -> WorkerSpecialty:
         return WorkerSpecialty.FACTUAL
@@ -43,7 +39,7 @@ class FactualWorker(WorkerAgent):
             if cached_result:
                 return cached_result
         
-        query_type = self._classify_factual_query(query)
+        query_type = "general"
         
         root_state = {
             "query": query,
@@ -98,10 +94,7 @@ class FactualWorker(WorkerAgent):
             conclusion_result = self.conclusion_detector.detect(next_step, '\n'.join(history))
             has_conclusion = conclusion_result['is_conclusion'] and conclusion_result['confidence'] > 0.7
             
-            completeness_result = self.completeness_detector.is_complete(query, next_step, history)
-            is_complete = completeness_result['is_complete'] and completeness_result['confidence'] > 0.65
-            
-            is_final = depth >= max_tree_depth - 1 or has_conclusion or is_complete
+            is_final = depth >= max_tree_depth - 1
             
             return {
                 "query": query,
@@ -115,7 +108,7 @@ class FactualWorker(WorkerAgent):
             tree = existing_tree
             tree.simulator = simulate_factual_step
             tree.expand_fn = expand_factual_step
-            tree.coherence_checker = self._lightweight_coherence_check
+            tree.coherence_checker = None
             self._penalize_failed_path(tree, verification_issues or [])
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing factual search ({sims} additional simulations)")
