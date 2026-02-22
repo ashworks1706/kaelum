@@ -131,9 +131,6 @@ from sentence_transformers import SentenceTransformer, util
 
 from ..reasoning import LLMClient, Message
 from .sympy_engine import SympyEngine
-from ..detectors.conclusion_detector import ConclusionDetector
-from ..detectors.worker_type_classifier import WorkerTypeClassifier
-from ..detectors.domain_classifier import DomainClassifier
 from .learned_verifier import LearnedVerifier
 
 class VerificationEngine:
