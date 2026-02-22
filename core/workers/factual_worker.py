@@ -10,7 +10,6 @@ from ..reasoning import Message
 from ..search import LATS, LATSNode
 from ..search import RewardModel
 from ..detectors import TaskClassifier
-from ..detectors import ConclusionDetector
 from ..detectors import CompletenessDetector
 
 logger = logging.getLogger("kaelum.factual_worker")
@@ -22,7 +21,6 @@ class FactualWorker(WorkerAgent):
         super().__init__(config, tree_cache)
         self._encoder = SentenceTransformer(embedding_model)
         self.task_classifier = TaskClassifier(embedding_model=embedding_model)
-        self.conclusion_detector = ConclusionDetector(embedding_model=embedding_model)
         self.completeness_detector = CompletenessDetector(embedding_model=embedding_model)
     
     def get_specialty(self) -> WorkerSpecialty:
