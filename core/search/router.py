@@ -138,6 +138,7 @@ class PolicyNetwork(nn.Module):
     
     def forward(self, x):
         h = self.embed_proj(x)
+        # Residual connections to help with gradient flow and stability
         h = h + self.res1(h)
         h = h + self.res2(h)
         

@@ -37,23 +37,20 @@ Here's the full path a query takes from your terminal to an answer.
 **1. Entry — [`kaelum.py`](kaelum.py)**  
 The CLI parses your query, sets up the config, and hands everything to the orchestrator. It's also where streaming, metrics, and feedback submission come in.
 
-**2. Cache check — [`core/search/tree_cache.py`](core/search/tree_cache.py)**  
-Before doing anything expensive, the orchestrator embeds the query with the shared encoder (converts text into a vector of numbers that captures meaning) and compares it against cached trees using cosine similarity (a way to measure how similar two vectors are directionally). Per-domain thresholds decide what counts as a hit (math needs a tighter match than creative). A cache hit skips steps 3–6 entirely and returns in ~0.4 s instead of ~7 s.
+**2. Routing — [`core/search/router.py`](core/search/router.py)**  
+The orchestrator embeds the query and feeds a neural router (PolicyNetwork) with the embedding plus simple length/keyword features (no detectors). It outputs worker choice, tree depth, and number of simulations; epsilon-greedy exploration occasionally tries alternatives. If confidence is low, an ensemble of workers can run in parallel and the highest-confidence result is chosen.
 
-**3. Routing — [`core/search/router.py`](core/search/router.py)**  
-The feature vector goes into a PolicyNetwork (a small neural network that learns to make decisions) that outputs softmax probabilities (a probability distribution that sums to 1.0) over the six workers plus a cache-use logit. The network is trained online via REINFORCE (a reinforcement learning algorithm that nudges the network toward decisions that led to good outcomes and away from ones that didn't). An epsilon-greedy exploration term keeps a small chance of picking a non-top worker so the system doesn't get stuck never trying alternatives.
-
-**4. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py) + [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py)**  
+**3. LATS search — [`core/search/lats.py`](core/search/lats.py) + [`core/search/reward_model.py`](core/search/reward_model.py) + [`core/verification/process_reward_model.py`](core/verification/process_reward_model.py)**  
 The chosen worker runs MCTS (Monte Carlo Tree Search — a planning algorithm that builds a tree of possible next steps and simulates many paths to figure out which direction looks most promising) over reasoning steps. Each node is a partial reasoning chain; the UCT formula (a score that balances sticking with good paths vs. trying ones you haven't explored much yet) balances exploitation with exploration. Node rewards come from a learned Process Reward Model that scores individual reasoning steps — not just whether the final answer was right, but whether each intermediate step was heading in the right direction. Nodes whose average reward falls below the pruning threshold get cut so later simulations don't waste time there.
 
-**6. Worker execution — [`core/workers/`](core/workers/)**  
-Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM and applies its domain-specific post-processing. The math worker passes results to [`core/verification/sympy_engine.py`](core/verification/sympy_engine.py) for symbolic checking. The code worker runs an AST parse. Others check coherence and completeness scores.
+**4. Worker execution — [`core/workers/`](core/workers/)**  
+Whichever worker was picked — math, code, logic, factual, creative, or analysis — runs the best LATS path through the LLM. Stopping is depth-based; rewards come from the PRM.
 
-**7. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)**  
-The answer goes through a verification pass (format, completeness, relevance via [`core/verification/relevance_validator.py`](core/verification/relevance_validator.py)) and then a self-reflection loop where the LLM reviews its own output and either signs off or triggers a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized (reward subtracted along the best-child chain) and lightly-explored branches are un-pruned, so the next iteration can continue MCTS from the same tree with fresh simulations rather than restarting cold. The reflection loop runs up to N iterations — that's why verification pass rate jumps from ~72% on first attempt to ~88% after reflection. After each iteration, each reasoning step is recorded as a training example for the PRM.
+**5. Verification + reflection — [`core/verification/verification.py`](core/verification/verification.py) + [`core/verification/reflection.py`](core/verification/reflection.py)**  
+The answer goes through a learned-only verifier (HF text-classifier; default pass label “POSITIVE”) and then a self-reflection loop where the LLM reviews its own output and either signs off or triggers a revision. If it fails, the existing LATS tree is reused rather than discarded — the failed path gets penalized and lightly-explored branches are un-pruned, so the next iteration can continue MCTS from the same tree with fresh simulations rather than restarting cold. Each reasoning step is recorded as a training example for the PRM.
 
-**8. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
-If the answer passed verification, the reasoning tree gets stored in the cache for future hits. The router logs the outcome against its routing decision so it can update its weights over time.
+**6. Cache write-back + router update — [`core/search/tree_cache.py`](core/search/tree_cache.py), [`core/search/router.py`](core/search/router.py)**  
+Results are stored, but retrieval is disabled (no heuristic gates). The router logs the outcome against its routing decision so it can update its weights over time.
 
 **9. Human feedback (RLHF) — [`core/learning/human_feedback.py`](core/learning/human_feedback.py)**  
 You can rate the answer after the fact. Those ratings adjust per-worker reward deltas and router probability weights that persist to disk and influence step 4 on the next query. This is the main way the system improves on your specific usage patterns rather than just the training distribution.
