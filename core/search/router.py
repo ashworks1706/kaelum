@@ -10,7 +10,6 @@ from enum import Enum
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sentence_transformers import SentenceTransformer
 from core.shared_encoder import get_shared_encoder
 from core.paths import DEFAULT_ROUTER_DIR
 from core.learning.human_feedback import HumanFeedbackEngine
