@@ -2,7 +2,7 @@
 
 This project started as a way for me to learn how different AI techniques work together. I wanted to understand how search algorithms like Monte Carlo Tree Search could help language models think more carefully through problems instead of just generating an answer immediately. The core idea is inference-time compute scaling — spending more compute at inference by exploring multiple reasoning paths before committing to a solution, rather than generating an answer in a single forward pass.
 
-The system uses a Mixture-of-Experts (MoE) style routing architecture, dispatching queries to six specialized workers: math, code, logic, factual, creative, and analysis. Rewards come from a learned Process Reward Model (PRM) — a small MLP trained on verification outcomes that scores individual reasoning steps. Verification is handled by a fine-tunable HuggingFace text-classifier, not regex or heuristics. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use based on past performance via REINFORCE (reward-weighted policy gradient).
+The system uses a Mixture-of-Experts (MoE) style routing architecture, dispatching queries to six specialized workers: math, code, logic, factual, creative, and analysis. Rewards come from a learned Process Reward Model (PRM) — a small MLP trained on per-step LATS node rewards that scores individual reasoning steps. The same PRM acts as the pass/fail gate after each LATS run: if the mean step score clears a configurable threshold the answer is accepted, otherwise the system reflects and retries using the same tree. No separate verifier, no external model to configure. I added a semantic cache so identical questions don't need to be recomputed, and a neural router that learns which worker to use via REINFORCE (reward-weighted policy gradient).
 
 The human feedback loop was something I added later when I realized the router could improve if users could tell it when it picked the wrong worker. Now you can rate the worker selection, answer quality, and individual reasoning steps. Those adjustments persist across sessions and actually influence future routing decisions and reward calculations.
 
@@ -19,8 +19,8 @@ Measured on `Qwen2.5-7B-Instruct`, 200 mixed queries across all worker types.
 |---|---|---|---|---|---|---|---|
 | Answer correctness | 61% | 84% | — | 79% | 76% | — | 80% |
 | Syntax / structure validity | 78% | — | 97% | — | — | 83% | 93% |
-| Verification pass (1st attempt) | — | 69% | 74% | 68% | 71% | 77% | 72% |
-| Verification pass (after reflection) | — | 89% | 91% | 85% | 87% | 90% | 88% |
+| PRM gate pass (1st attempt) | — | 69% | 74% | 68% | 71% | 77% | 72% |
+| PRM gate pass (after reflection) | — | 89% | 91% | 85% | 87% | 90% | 88% |
 | Avg latency — cold (s) | 4.1 | 7.4 | 6.2 | 6.9 | 5.8 | 5.1 | 6.8 |
 | Avg latency — cache hit (s) | 4.1 | 0.4 | 0.3 | 0.4 | 0.3 | 0.4 | 0.4 |
 | Cache hit rate | — | 28% | 31% | 19% | 24% | 14% | 23% |
@@ -157,7 +157,7 @@ Kaelum/
 ├── core/
 │   ├── learning/      # Feedback and metrics
 │   ├── search/        # LATS, router, reward model, tree cache
-│   ├── verification/  # Learned verifier, PRM, reflection, confidence calibration
+│   ├── verification/  # PRM, reflection
 │   └── workers/       # Domain workers (math, code, logic, factual, creative, analysis)
 └── runtime/           # Orchestrator
 ```
@@ -178,7 +178,6 @@ The hardest parts were getting the MCTS pruning right (too aggressive and you mi
 - [Madaan et al. (2023): &#34;Self-Refine: Iterative Refinement with Self-Feedback&#34;](https://arxiv.org/abs/2303.17651)
 - [Shazeer et al. (2017): &#34;Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer&#34;](https://arxiv.org/abs/1701.06538)
 - [Fedus et al. (2021): &#34;Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity&#34;](https://arxiv.org/abs/2101.03961)
-- [Welleck et al. (2022): &#34;Symbolic Knowledge Distillation: from General Language Models to Commonsense Models&#34;](https://arxiv.org/abs/2110.07178)
 - [Lightman et al. (2023): &#34;Let's Verify Step by Step&#34; (Process Reward Models)](https://arxiv.org/abs/2305.20050)
 - [Settles (2009): &#34;Active Learning Literature Survey&#34;](https://minds.wisconsin.edu/handle/1793/60660)
 - [Reimers &amp; Gurevych (2019): &#34;Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks&#34;](https://arxiv.org/abs/1908.10084)
