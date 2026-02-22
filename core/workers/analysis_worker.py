@@ -103,7 +103,7 @@ class AnalysisWorker(WorkerAgent):
             sims = extra_sims if extra_sims > 0 else max(3, num_simulations // 2)
             logger.info(f"TREE-REUSE: Continuing analysis search ({sims} additional simulations)")
         else:
-            tree = LATS(root_state, simulator=simulate_analysis_step, expand_fn=expand_analysis_step)
+            tree = self._build_lats(root_state, simulate_analysis_step, expand_analysis_step)
             sims = num_simulations
         
         tree.run_simulations(sims, max_tree_depth, parallel=parallel, max_workers=max_workers)
